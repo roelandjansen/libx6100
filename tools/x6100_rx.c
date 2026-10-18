@@ -437,11 +437,14 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 #define INFO_COL_VOL	138
 #define INFO_COL_RFG	252
 #define INFO_COL_VBAT	378
-#define SBAR_X		12
-#define SBAR_Y		126
-#define SBAR_W		470
-#define SBAR_H		14
-#define SLBL_Y		144
+#define SBAR_X		34
+#define SBAR_W		410
+#define SBAR_LBL_Y	121
+#define SBAR_SCALE_Y	141
+#define SBAR_BAR_Y	144
+#define SBAR_BAR_H	6
+#define SBAR_SWR_Y	153
+#define SBAR_SWR_LBL_Y	158
 #define TOP_H		176
 #define VU_X		500
 #define VU_Y		4
@@ -749,30 +752,80 @@ static void s_reading(double dbm, char *buf, size_t len)
 // Bar S-meter with scale under the frequency
 //
 
-static void draw_sbar(x6100_lcd_t *lcd, double dbm)
+static void draw_sbar(x6100_lcd_t *lcd, double dbm, double peak)
 {
-	static const struct { double frac; const char *lbl; bool red; } marks[] = {
-		{ 1.0 / 9 * 0.6, "1", false }, { 3.0 / 9 * 0.6, "3", false }, { 5.0 / 9 * 0.6, "5", false },
-		{ 7.0 / 9 * 0.6, "7", false }, { 0.6, "9", false },
-		{ 0.6 + 20.0 / 60 * 0.4, "+20", true }, { 0.6 + 40.0 / 60 * 0.4, "+40", true }, { 1.0, "+60", true },
+	static const struct { double frac; const char *lbl; } s_marks[] = {
+		{ 1.0 / 9 * 0.6, "1" }, { 3.0 / 9 * 0.6, "3" }, { 5.0 / 9 * 0.6, "5" },
+		{ 7.0 / 9 * 0.6, "7" }, { 0.6, "9" },
 	};
+	static const struct { double frac; const char *lbl; } db_marks[] = {
+		{ 0.6 + 20.0 / 60 * 0.4, "+20" }, { 0.6 + 40.0 / 60 * 0.4, "+40" }, { 1.0, "+60dB" },
+	};
+	static const struct { double frac; const char *lbl; } swr_marks[] = {
+		{ 0.22, "1.5" }, { 0.38, "2" }, { 0.49, "2.5" }, { 0.6, "3" }, { 0.97, "INF" },
+	};
+	const uint32_t white = 0xF0F0F0, red = 0xE02828, grey = 0x9A9A9A;
+	const int x0 = SBAR_X, x9 = SBAR_X + (int) (0.6 * SBAR_W), x1 = SBAR_X + SBAR_W;
 	int fill = (int) (meter_frac(dbm) * SBAR_W);
-	int s9 = (int) (0.6 * SBAR_W);
+	int pk = SBAR_X + (int) (peak * SBAR_W);
 
-	x6100_lcd_fill(lcd, SBAR_X, SBAR_Y, SBAR_W, SBAR_H, 0x1A2230);
-	x6100_lcd_fill(lcd, SBAR_X, SBAR_Y, fill < s9 ? fill : s9, SBAR_H, 0x40D080);
+	x6100_lcd_fill(lcd, 0, SBAR_LBL_Y - 2, LEFT_W, SBAR_SWR_LBL_Y + 10 - SBAR_LBL_Y, 0x000000);
 
-	if (fill > s9)
-		x6100_lcd_fill(lcd, SBAR_X + s9, SBAR_Y, fill - s9, SBAR_H, SCR_WARN);
+	//
+	// S scale: white to S9, heavy red above; ticks every S unit and every 10 dB
+	//
+	x6100_lcd_text(lcd, 12, SBAR_LBL_Y + 4, 2, "S", white);
+	x6100_lcd_hline(lcd, x0, x9, SBAR_SCALE_Y, white);
+	x6100_lcd_fill(lcd, x9, SBAR_SCALE_Y - 1, x1 - x9 + 1, 3, red);
 
-	for (size_t i = 0; i < sizeof(marks) / sizeof(marks[0]); i++) {
-		int x = SBAR_X + (int) (marks[i].frac * SBAR_W);
-		int tw = x6100_lcd_text_width(marks[i].lbl, 2);
+	for (int su = 1; su <= 9; su++) {
+		int x = x0 + (int) (su / 9.0 * 0.6 * SBAR_W);
 
-		x6100_lcd_vline(lcd, x, SBAR_Y + SBAR_H, SBAR_Y + SBAR_H + 3, SCR_DIM);
-		x = x - tw / 2;
-		x = x + tw > SBAR_X + SBAR_W ? SBAR_X + SBAR_W - tw : x;
-		x6100_lcd_text(lcd, x, SLBL_Y, 2, marks[i].lbl, marks[i].red ? SCR_WARN : SCR_DIM);
+		x6100_lcd_vline(lcd, x, SBAR_SCALE_Y - (su % 2 ? 6 : 3), SBAR_SCALE_Y, white);
+	}
+
+	for (int db = 10; db <= 60; db += 10) {
+		int x = x0 + (int) ((0.6 + db / 60.0 * 0.4) * SBAR_W);
+
+		x6100_lcd_vline(lcd, x, SBAR_SCALE_Y - (db % 20 ? 3 : 6), SBAR_SCALE_Y, red);
+	}
+
+	for (size_t i = 0; i < sizeof(s_marks) / sizeof(s_marks[0]); i++) {
+		int x = x0 + (int) (s_marks[i].frac * SBAR_W);
+
+		x6100_lcd_text(lcd, x - x6100_lcd_text_width(s_marks[i].lbl, 2) / 2, SBAR_LBL_Y, 2, s_marks[i].lbl, white);
+	}
+
+	for (size_t i = 0; i < sizeof(db_marks) / sizeof(db_marks[0]); i++) {
+		int x = x0 + (int) (db_marks[i].frac * SBAR_W);
+		int tw = x6100_lcd_text_width(db_marks[i].lbl, 2);
+
+		x = i + 1 == sizeof(db_marks) / sizeof(db_marks[0]) ? x - 24 : x - tw / 2;
+		x6100_lcd_text(lcd, x, SBAR_LBL_Y, 2, db_marks[i].lbl, red);
+	}
+
+	//
+	// Level bar between the scales, with peak hold marker
+	//
+	x6100_lcd_fill(lcd, x0, SBAR_BAR_Y, fill, SBAR_BAR_H, white);
+	x6100_lcd_fill(lcd, pk - 1, SBAR_BAR_Y - 1, 3, SBAR_BAR_H + 2, 0x58B8F0);
+	x6100_lcd_vline(lcd, x0, SBAR_SCALE_Y - 8, SBAR_SWR_Y + 3, white);
+
+	//
+	// SWR scale below: white to 3, double line above
+	//
+	x6100_lcd_text(lcd, 4, SBAR_SWR_Y - 2, 1, "SWR", grey);
+	x6100_lcd_hline(lcd, x0, x1, SBAR_SWR_Y, white);
+	x6100_lcd_hline(lcd, x0 + (int) (0.6 * SBAR_W), x1, SBAR_SWR_Y + 3, white);
+
+	for (int i = 0; i <= 12; i++)
+		x6100_lcd_vline(lcd, x0 + (int) (i / 12.0 * 0.6 * SBAR_W), SBAR_SWR_Y, SBAR_SWR_Y + (i % 4 ? 2 : 4), white);
+
+	for (size_t i = 0; i < sizeof(swr_marks) / sizeof(swr_marks[0]); i++) {
+		int x = x0 + (int) (swr_marks[i].frac * SBAR_W);
+
+		x6100_lcd_vline(lcd, x, SBAR_SWR_Y, SBAR_SWR_Y + 4, white);
+		x6100_lcd_text(lcd, x - x6100_lcd_text_width(swr_marks[i].lbl, 1) / 2, SBAR_SWR_LBL_Y, 1, swr_marks[i].lbl, white);
 	}
 }
 
@@ -1012,7 +1065,7 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 	//
 	// Meters
 	//
-	draw_sbar(lcd, scr->sig_dbm);
+	draw_sbar(lcd, scr->sig_dbm, scr->vu_peak);
 	vu_update(scr, meter_frac(scr->sig_dbm), now_ms());
 	draw_vu(lcd, scr->needle, scr->sig_dbm, scr->vu_peak, VU_SCALE_S);
 
