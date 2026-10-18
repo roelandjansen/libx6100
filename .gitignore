@@ -1,0 +1,6 @@
+out/
+*.o
+*.a
+.zig-cache/
+zig-cache/
+*.bin
