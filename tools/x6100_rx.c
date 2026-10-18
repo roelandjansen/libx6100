@@ -17,6 +17,14 @@
  *   PWR            quit (as does Ctrl-C)
  *   PTT            ignored: this tool never transmits
  *
+ * Testing from the console (ssh):
+ *   x6100_rx [freq] [mode]            start values, e.g. x6100_rx 7074000 lsb
+ *   type a line + Enter while running:
+ *     7074000 | 7.074 | 7074k         frequency (Hz, MHz with '.', or kHz with 'k')
+ *     usb lsb cw cwr am nfm           mode
+ *     step 1|10|100|1000|5000         tuning step
+ *   tokens can be combined: "14074000 usb"
+ *
  * Stop the GUI first (scripts/x6100_ui.sh stop).
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
@@ -24,6 +32,7 @@
 
 #include "x6100.h"
 
+#include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/input.h>
@@ -32,7 +41,9 @@
 #include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -1154,7 +1165,111 @@ static double iq_level_db(const x6100_flow_frame_t *f)
 	return sum > 0.0 ? 10.0 * log10(sum) : -999.0;
 }
 
-int main(void)
+//
+// Console commands: frequency, mode and step tokens
+//
+
+static bool console_token(rx_t *rx, const char *t)
+{
+	static const struct { const char *name; x6100_mode_t mode; } modes[] = {
+		{ "lsb", X6100_MODE_LSB }, { "usb", X6100_MODE_USB }, { "cw", X6100_MODE_CW },
+		{ "cwr", X6100_MODE_CWR }, { "am", X6100_MODE_AM }, { "nfm", X6100_MODE_NFM },
+	};
+	char *end;
+
+	for (size_t i = 0; i < sizeof(modes) / sizeof(modes[0]); i++) {
+		if (strcasecmp(t, modes[i].name) == 0) {
+			rx->mode = modes[i].mode;
+			return true;
+		}
+	}
+
+	if (isdigit((unsigned char) t[0])) {
+		double v = strtod(t, &end);
+
+		if (*end == 'k' || *end == 'K')
+			v *= 1e3;
+		else if (*end == 'm' || *end == 'M' || strchr(t, '.') != NULL)
+			v *= 1e6;
+		else if (*end != '\0')
+			return false;
+
+		set_freq(rx, (int64_t) llround(v));
+		return true;
+	}
+
+	return false;
+}
+
+static bool console_line(rx_t *rx, char *line)
+{
+	bool changed = false;
+	bool want_step = false;
+
+	for (char *t = strtok(line, " \t"); t != NULL; t = strtok(NULL, " \t")) {
+		if (want_step) {
+			int st = atoi(t);
+
+			want_step = false;
+
+			if (st == 1 || st == 10 || st == 100 || st == 1000 || st == 5000) {
+				rx->step = st;
+				changed = true;
+			} else {
+				fprintf(stderr, "\nstep must be 1, 10, 100, 1000 or 5000\n");
+			}
+
+			continue;
+		}
+
+		if (strcasecmp(t, "step") == 0) {
+			want_step = true;
+			continue;
+		}
+
+		if (console_token(rx, t))
+			changed = true;
+		else
+			fprintf(stderr, "\nunknown: %s\n", t);
+	}
+
+	return changed;
+}
+
+static bool console_read(rx_t *rx, char *buf, size_t size, size_t *len)
+{
+	bool changed = false;
+	ssize_t n = read(STDIN_FILENO, buf + *len, size - 1 - *len);
+
+	if (n <= 0)
+		return false;
+
+	*len += (size_t) n;
+	buf[*len] = '\0';
+
+	char *nl;
+
+	while ((nl = strchr(buf, '\n')) != NULL) {
+		*nl = '\0';
+
+		if (rx->lock)
+			fprintf(stderr, "\nlocked\n");
+		else
+			changed |= console_line(rx, buf);
+
+		size_t rest = *len - (size_t) (nl + 1 - buf);
+
+		memmove(buf, nl + 1, rest + 1);
+		*len = rest;
+	}
+
+	if (*len >= size - 1)
+		*len = 0;
+
+	return changed;
+}
+
+int main(int argc, char **argv)
 {
 	x6100_i2c_t i2c;
 	x6100_ctl_t ctl;
@@ -1162,9 +1277,12 @@ int main(void)
 	x6100_flow_t flow;
 	x6100_flow_frame_t frame;
 	int fds[IN_COUNT];
-	struct pollfd pfd[IN_COUNT];
+	struct pollfd pfd[IN_COUNT + 1];
 	int npfd = 0;
-	input_t pmap[IN_COUNT];
+	input_t pmap[IN_COUNT + 1];
+	char cmd[128];
+	size_t cmd_len = 0;
+	int stdin_slot = -1;
 	rx_t rx = { .vol = 20, .rfg = 100, .step = 100, .agc = X6100_AGC_AUTO, .mode = X6100_MODE_USB };
 	int rc;
 
@@ -1172,6 +1290,13 @@ int main(void)
 		rx.band_freq[i] = g_bands[i].def;
 
 	set_freq(&rx, 14074000);
+
+	for (int i = 1; i < argc; i++) {
+		if (!console_token(&rx, argv[i])) {
+			fprintf(stderr, "usage: %s [freq] [usb|lsb|cw|cwr|am|nfm]\n", argv[0]);
+			return 1;
+		}
+	}
 
 	signal(SIGINT, on_signal);
 	signal(SIGTERM, on_signal);
@@ -1188,6 +1313,12 @@ int main(void)
 		pmap[npfd] = (input_t) i;
 		npfd++;
 	}
+
+	pfd[npfd].fd = STDIN_FILENO;
+	pfd[npfd].events = POLLIN;
+	pmap[npfd] = IN_COUNT;
+	stdin_slot = npfd;
+	npfd++;
 
 	if ((rc = x6100_i2c_open(&i2c, NULL)) < 0 || (rc = x6100_flow_open(&flow, NULL)) < 0) {
 		fprintf(stderr, "open: %s\n", strerror(-rc));
@@ -1244,8 +1375,18 @@ int main(void)
 		for (int p = 0; p < npfd; p++) {
 			struct input_event ev;
 
+			if (p == stdin_slot && (pfd[p].revents & (POLLHUP | POLLERR | POLLNVAL))) {
+				pfd[p].fd = -1;
+				continue;
+			}
+
 			if (!(pfd[p].revents & POLLIN))
 				continue;
+
+			if (p == stdin_slot) {
+				changed |= console_read(&rx, cmd, sizeof(cmd), &cmd_len);
+				continue;
+			}
 
 			while (read(pfd[p].fd, &ev, sizeof(ev)) == (ssize_t) sizeof(ev)) {
 				if (pmap[p] == IN_POWER && ev.type == EV_KEY && ev.code == KEY_POWER && ev.value == 1)
