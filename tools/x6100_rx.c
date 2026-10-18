@@ -5,7 +5,8 @@
  * Status on the display (frequency, mode, IQ meter, spectrum, waterfall)
  * and on the console (ssh).
  *
- *   VFO knob       tune, step set by FST (10 / 100 / 1000 Hz)
+ *   VFO knob       tune, step set by FST (10 / 100 / 1000 / 5000 Hz);
+ *                  long press FST: 1 Hz step on/off
  *   VOL knob       speaker volume, push = mute
  *   MFK knob       RF gain, push = reset to 100
  *   BAND- / BAND+  previous / next band, last frequency per band kept
@@ -291,7 +292,7 @@ static bool on_key(rx_t *rx, int key)
 		rx->lock = !rx->lock;
 		break;
 	case X6100_KEY_FST:
-		rx->step = rx->step == 10 ? 100 : rx->step == 100 ? 1000 : 10;
+		rx->step = rx->step == 10 ? 100 : rx->step == 100 ? 1000 : rx->step == 1000 ? 5000 : 10;
 		break;
 	case X6100_KEY_BAND_UP:
 		band_step(rx, +1);
@@ -341,7 +342,7 @@ typedef struct
 
 static bool has_long(int key)
 {
-	return key == X6100_KEY_PRE;
+	return key == X6100_KEY_PRE || key == X6100_KEY_FST;
 }
 
 static bool on_long_key(rx_t *rx, int key)
@@ -352,6 +353,9 @@ static bool on_long_key(rx_t *rx, int key)
 	switch (key) {
 	case X6100_KEY_PRE:
 		rx->att = !rx->att;
+		return true;
+	case X6100_KEY_FST:
+		rx->step = rx->step == 1 ? 10 : 1;
 		return true;
 	default:
 		return false;
@@ -429,6 +433,10 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 #define FREQ_Y		40
 #define FREQ_SCALE	8	/* 5x7 fallback font scale, unused with the AA font */
 #define INFO_Y		104
+#define INFO_COL_STEP	12
+#define INFO_COL_VOL	138
+#define INFO_COL_RFG	252
+#define INFO_COL_VBAT	378
 #define SBAR_X		12
 #define SBAR_Y		126
 #define SBAR_W		470
@@ -989,9 +997,17 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 	x6100_lcd_text_aa(lcd, &x6100_font_freq, FREQ_X + (480 - x6100_lcd_text_aa_width(&x6100_font_freq, s)),
 		FREQ_Y - 17, s, SCR_FREQ);
 
-	snprintf(s, sizeof(s), "STEP %d  VOL %d%s  RFG %d  %.1fV", rx->step, rx->vol, rx->mute ? " MUTE" : "",
-		rx->rfg, scr->vbat);
-	x6100_lcd_text(lcd, 12, INFO_Y, 2, s, SCR_DIM);
+	//
+	// Info line in fixed columns, so changing values never shift the other fields
+	//
+	snprintf(s, sizeof(s), "STEP %d", rx->step);
+	x6100_lcd_text(lcd, INFO_COL_STEP, INFO_Y, 2, s, SCR_DIM);
+	snprintf(s, sizeof(s), "VOL %d", rx->vol);
+	x6100_lcd_text(lcd, INFO_COL_VOL, INFO_Y, 2, s, rx->mute ? SCR_WARN : SCR_DIM);
+	snprintf(s, sizeof(s), "RFG %d", rx->rfg);
+	x6100_lcd_text(lcd, INFO_COL_RFG, INFO_Y, 2, s, SCR_DIM);
+	snprintf(s, sizeof(s), "%.1fV", scr->vbat);
+	x6100_lcd_text(lcd, INFO_COL_VBAT, INFO_Y, 2, s, SCR_DIM);
 
 	//
 	// Meters
