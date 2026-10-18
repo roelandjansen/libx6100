@@ -388,6 +388,7 @@ BASE 1.1.9, GUI stopped, own code only:
 | register write (full + diff) | ok, no I2C errors |
 | RX 14.074 / 7.074 MHz USB | tuned, FT8 audible on speaker (rxvol 20) |
 | IQ level, no antenna / antenna | −97 dB / −58…−63 dB |
+| front panel receiver (`x6100_rx`) | VFO, VOL, MFK/RF gain, BAND±, SSB/CW/AM-FM, PRE, AGC, FST, LOCK, mute, PWR quit: all ok |
 | TX | not tested, blocked in tooling |
 
 ## 10. Front panel input (from stock DTB `sun8i-r16-x6100.dtb`)
