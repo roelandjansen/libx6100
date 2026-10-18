@@ -390,6 +390,50 @@ BASE 1.1.9, GUI stopped, own code only:
 | IQ level, no antenna / antenna | −97 dB / −58…−63 dB |
 | TX | not tested, blocked in tooling |
 
+## 10. Front panel input (from stock DTB `sun8i-r16-x6100.dtb`)
+
+Standard Linux input drivers; no baseband involvement.
+
+| Device | Driver | Details |
+|--------|--------|---------|
+| keypad | `gpio-matrix-keypad` | 5 rows × 6 cols, active low, 25 ms debounce, no autorepeat; keycodes `BTN_TRIGGER_HAPPY1…30` (0x2C0–0x2DD), index = row × 6 + col |
+| encoder 0 | `rotary-encoder` | PB3/PB2, gray, relative, `REL_X` |
+| encoder 1 | `rotary-encoder` | PB6/PB4, gray, relative, `REL_Y` |
+| encoder 2 | `rotary-encoder` | PB7/PB5, gray, relative, `REL_Z` |
+| lradc keys | `sun4i-a10-lradc-keys` | disabled |
+
+Keypad rows: PG10, PG7, PG6, PG8, PG9. Columns: PE16, PE17, PE11, PE14, PE12, PE13.
+The stock UI reads `/dev/input/event0…4` and compares the low byte of the key code
+(0xC3–0xDA in use). Hand mic keys do not come from here but from the flow frame `hkey`.
+
+### Verified map (x6100_input, 2026-10-18)
+
+Event devices: `event0` matrix_keypad, `event1` rotary0, `event2` rotary1,
+`event3` rotary3, `event4` axp20x-pek (PWR, `KEY_POWER`).
+
+| Index | Key | Index | Key | Index | Key |
+|------:|-----|------:|-----|------:|-----|
+| K00 | GEN | K10 | CW | K20 | VOL push |
+| K01 | KEY | K11 | SSB | K21 | V/M |
+| K02 | DFN | K12 | F1 | K22 | AGC |
+| K03 | PTT | K13 | F2 | K23 | FST |
+| K04 | BAND− | K14 | F3 | K24 | LOCK |
+| K05 | BAND+ | K15 | A/B | K25 | — |
+| K06 | APP | K16 | PRE | K26 | MFK push |
+| K07 | MSG | K17 | ATU | K27 | — |
+| K08 | DFL | K18 | F4 | K28 | — |
+| K09 | AM/FM | K19 | F5 | K29 | — |
+
+| Knob | Device | Axis | Clockwise |
+|------|--------|------|-----------|
+| VFO | rotary0 | REL_X | +1 |
+| VOL/SQL/RFG | rotary1 | REL_Y | −1 |
+| MFK | rotary3 | REL_Z | −1 |
+
+The panel PTT key (K03) is an ordinary matrix key: TX only happens if software sets
+the iptt flag. K25 and K27–K29 are unused positions in the matrix.
+C definitions in `include/x6100_keys.h`.
+
 ## Open items for a clean implementation
 
 - Unknown registers (gaps above) and unmapped bits in 21 and 25.
