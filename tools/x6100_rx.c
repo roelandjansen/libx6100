@@ -354,6 +354,18 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 #define SCR_ACCENT	0x40C0FF
 #define SCR_WARN	0xFF6040
 
+//
+// Scope colours, as set on the IC-7851 (Waveform Fill+Line, averaging 2)
+//
+#define SCOPE_FILL	0xFF3F7F
+#define SCOPE_LINE	0xFFFF00
+#define SCOPE_PEAK	0x007F7F
+#define SCOPE_AVG	0.5f
+#define PEAK_DECAY_DB	0.3f
+#define WF_RANGE_DB	50.0f
+#define WF_BELOW_DB	3.0f
+#define LBL_W		28
+
 #define TOP_Y		8
 #define LEFT_W		492
 #define FREQ_X		8
@@ -382,24 +394,41 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 
 //
 // Meter calibration: dBm = passband power in dB + SMETER_CAL_DB.
-// 0 = uncalibrated; set by comparing a steady carrier with the stock UI.
+// Provisional -15 dB from an FT8 comparison with an IC-7851; refine with a steady carrier.
 //
-#define SMETER_CAL_DB	0.0
+#define SMETER_CAL_DB	-15.0
 #define VU_ATTACK_MS	40.0
 #define VU_RELEASE_MS	400.0
 #define VU_ANGLE	33.0
+#define VU_PEAK_HOLD_MS	1500.0
+#define VU_PEAK_FALL	0.0006
+
+//
+// Meter marker dot: rides on the arc of the active meter scale.
+// RX: peak hold on the S arc. TX (later): Po or ALC arc.
+//
+typedef enum
+{
+	VU_SCALE_S = 0,
+	VU_SCALE_PO,
+	VU_SCALE_ALC
+} vu_scale_t;
 
 typedef struct
 {
 	bool on;
 	x6100_lcd_t lcd;
 	float spec[X6100_FLOW_SAMPLES];
+	float peak[X6100_FLOW_SAMPLES];
+	float floor_db;
 	float pow[X6100_FLOW_SAMPLES];
 	bool spec_valid;
 	double meter_db;
 	double sig_dbm;
 	double needle;
 	uint64_t needle_ms;
+	double vu_peak;
+	uint64_t vu_peak_ms;
 	double vbat;
 } screen_t;
 
@@ -476,34 +505,61 @@ static void spectrum_update(screen_t *scr, const x6100_flow_frame_t *f)
 
 		scr->pow[i] = p / (float) n;
 
-		scr->spec[i] = scr->spec_valid ? scr->spec[i] * 0.6f + db * 0.4f : db;
+		scr->spec[i] = scr->spec_valid ? scr->spec[i] * (1.0f - SCOPE_AVG) + db * SCOPE_AVG : db;
+		scr->peak[i] = scr->spec_valid && scr->peak[i] - PEAK_DECAY_DB > scr->spec[i]
+			? scr->peak[i] - PEAK_DECAY_DB : scr->spec[i];
 	}
 
+	//
+	// Noise floor: 20th percentile of the spectrum, smoothed
+	//
+	static float sorted[X6100_FLOW_SAMPLES];
+
+	memcpy(sorted, scr->spec, sizeof(sorted));
+
+	for (int i = 1; i < n; i++) {
+		float v = sorted[i];
+		int j = i - 1;
+
+		while (j >= 0 && sorted[j] > v) {
+			sorted[j + 1] = sorted[j];
+			j--;
+		}
+
+		sorted[j + 1] = v;
+	}
+
+	float fl = sorted[n / 5];
+
+	scr->floor_db = scr->spec_valid ? scr->floor_db * 0.95f + fl * 0.05f : fl;
 	scr->spec_valid = true;
 }
 
 static uint32_t wf_colour(float t)
 {
-	float r, g, b;
+	static const struct { float t; uint32_t c; } stops[] = {
+		{ 0.00f, 0x000018 }, { 0.20f, 0x00148C }, { 0.40f, 0x1E50F0 }, { 0.55f, 0x00B4FF },
+		{ 0.70f, 0x30F060 }, { 0.82f, 0xFFF000 }, { 0.92f, 0xFF4000 }, { 1.00f, 0xFFFFFF },
+	};
 
 	t = t < 0.0f ? 0.0f : t > 1.0f ? 1.0f : t;
 
-	if (t < 0.33f) {
-		r = 0.0f;
-		g = 0.0f;
-		b = t / 0.33f;
-	} else if (t < 0.66f) {
-		r = 0.0f;
-		g = (t - 0.33f) / 0.33f;
-		b = 1.0f - g;
-	} else {
-		r = (t - 0.66f) / 0.34f;
-		g = 1.0f;
-		b = 0.0f;
+	for (size_t i = 1; i < sizeof(stops) / sizeof(stops[0]); i++) {
+		if (t > stops[i].t)
+			continue;
+
+		float k = (t - stops[i - 1].t) / (stops[i].t - stops[i - 1].t);
+		uint32_t a = stops[i - 1].c, b = stops[i].c;
+		uint32_t r = (uint32_t) ((float) (a >> 16) + k * ((float) (b >> 16) - (float) (a >> 16)));
+		uint32_t g = (uint32_t) ((float) (a >> 8 & 0xFF) + k * ((float) (b >> 8 & 0xFF) - (float) (a >> 8 & 0xFF)));
+		uint32_t bl = (uint32_t) ((float) (a & 0xFF) + k * ((float) (b & 0xFF) - (float) (a & 0xFF)));
+
+		return r << 16 | g << 8 | bl;
 	}
 
-	return ((uint32_t) (r * 255) << 16) | ((uint32_t) (g * 255) << 8) | (uint32_t) (b * 255);
+	return stops[sizeof(stops) / sizeof(stops[0]) - 1].c;
 }
+
 
 //
 // Spectrum value under screen column x, honouring the direction setting
@@ -548,6 +604,23 @@ static void passband(const rx_t *rx, int *lo, int *hi)
 		*hi = (int) high;
 		break;
 	}
+}
+
+static float spec_norm(float db);
+
+static int spec_y(float db)
+{
+	float v = spec_norm(db);
+
+	v = v < 0.0f ? 0.0f : v > 1.0f ? 1.0f : v;
+	return SPEC_Y + SPEC_H - 1 - (int) (v * (float) (SPEC_H - 1));
+}
+
+static float peak_at(const screen_t *scr, int x, int w)
+{
+	int i = x * X6100_FLOW_SAMPLES / w;
+
+	return scr->peak[X6100_FLOW_IQ_MIRRORED ? X6100_FLOW_SAMPLES - 1 - i : i];
 }
 
 static float spec_norm(float db)
@@ -687,7 +760,9 @@ static void vu_label(x6100_lcd_t *lcd, double f, double r, int scale, const char
 	x6100_lcd_text(lcd, x - x6100_lcd_text_width(s, scale) / 2, y - 7 * scale / 2, scale, s, rgb);
 }
 
-static void draw_vu(x6100_lcd_t *lcd, double needle, double dbm)
+static double vu_scale_radius(vu_scale_t scale);
+
+static void draw_vu(x6100_lcd_t *lcd, double needle, double dbm, double marker, vu_scale_t scale)
 {
 	static const struct { double f; const char *s; } po[] = {
 		{ 0.2, "2" }, { 0.4, "4" }, { 0.6, "6" }, { 0.8, "8" }, { 0.97, "10W" },
@@ -696,10 +771,10 @@ static void draw_vu(x6100_lcd_t *lcd, double needle, double dbm)
 		{ 0.0, "1" }, { 0.22, "1.5" }, { 0.38, "2" }, { 0.56, "3" }, { 0.76, "5" }, { 0.97, "INF" },
 	};
 	static const struct { double f; const char *s; } comp[] = {
-		{ 0.10, "5" }, { 0.20, "10" }, { 0.32, "20" }, { 0.44, "30DB" },
+		{ 0.10, "5" }, { 0.20, "10" }, { 0.32, "20" }, { 0.44, "30dB" },
 	};
 	const uint32_t bg = 0x000000, white = 0xF0F0F0, grey = 0x9A9A9A;
-	const uint32_t red = 0xE02828, blue = 0x2E5FD0, dot = 0x58B8F0;
+	const uint32_t red = 0xE02828, blue = 0x2E5FD0, pivot = 0xFFFFFF, mark = 0x58B8F0;
 	char s[32];
 	int x0, y0, x1, y1;
 
@@ -767,7 +842,7 @@ static void draw_vu(x6100_lcd_t *lcd, double needle, double dbm)
 	//
 	s_reading(dbm, s, sizeof(s));
 	x6100_lcd_text(lcd, VU_X + VU_W - 8 - x6100_lcd_text_width(s, 2), VU_Y + VU_H - 38, 2, s, white);
-	snprintf(s, sizeof(s), "%.0fDBM", dbm);
+	snprintf(s, sizeof(s), "%.0fdBm", dbm);
 	x6100_lcd_text(lcd, VU_X + VU_W - 8 - x6100_lcd_text_width(s, 2), VU_Y + VU_H - 20, 2, s, grey);
 
 	//
@@ -779,7 +854,14 @@ static void draw_vu(x6100_lcd_t *lcd, double needle, double dbm)
 	vu_point(needle, r_bot, &x0, &y0);
 	vu_point(needle, VU_R_S + 8, &x1, &y1);
 	x6100_lcd_line(lcd, x0, y0, x1, y1, 2, white);
-	x6100_lcd_fill(lcd, x0 - 5, y0 - 5, 10, 10, dot);
+	x6100_lcd_fill(lcd, x0 - 5, y0 - 5, 10, 10, pivot);
+
+	//
+	// Marker dot on the active scale's arc
+	//
+	vu_point(marker, vu_scale_radius(scale), &x0, &y0);
+	x6100_lcd_fill(lcd, x0 - 4, y0 - 4, 9, 9, 0x000000);
+	x6100_lcd_fill(lcd, x0 - 3, y0 - 3, 7, 7, mark);
 
 	//
 	// Keep the face clipped: clear anything drawn below it
@@ -791,6 +873,18 @@ static void draw_vu(x6100_lcd_t *lcd, double needle, double dbm)
 // Needle ballistics: fast attack, slow release
 //
 
+static double vu_scale_radius(vu_scale_t scale)
+{
+	switch (scale) {
+	case VU_SCALE_PO:
+		return VU_R_S - 3;
+	case VU_SCALE_ALC:
+		return VU_R_ALC;
+	default:
+		return VU_R_S;
+	}
+}
+
 static void vu_update(screen_t *scr, double target, uint64_t t)
 {
 	double dt = scr->needle_ms ? (double) (t - scr->needle_ms) : 0.0;
@@ -799,6 +893,19 @@ static void vu_update(screen_t *scr, double target, uint64_t t)
 
 	scr->needle += (target - scr->needle) * (k > 1.0 ? 1.0 : k);
 	scr->needle_ms = t;
+
+	//
+	// Peak hold: jump up with the needle, hold, then fall slowly
+	//
+	if (scr->needle >= scr->vu_peak) {
+		scr->vu_peak = scr->needle;
+		scr->vu_peak_ms = t;
+	} else if ((double) (t - scr->vu_peak_ms) > VU_PEAK_HOLD_MS) {
+		scr->vu_peak -= VU_PEAK_FALL * dt;
+
+		if (scr->vu_peak < scr->needle)
+			scr->vu_peak = scr->needle;
+	}
 }
 
 static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
@@ -833,7 +940,7 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 	//
 	draw_sbar(lcd, scr->sig_dbm);
 	vu_update(scr, meter_frac(scr->sig_dbm), now_ms());
-	draw_vu(lcd, scr->needle, scr->sig_dbm);
+	draw_vu(lcd, scr->needle, scr->sig_dbm, scr->vu_peak, VU_SCALE_S);
 
 	if (!scr->spec_valid)
 		return;
@@ -865,20 +972,35 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 		char lbl[8];
 		int gy = SPEC_Y + SPEC_H - 1 - (int) (spec_norm((float) db) * (float) (SPEC_H - 1));
 
+		(void) lbl;
 		x6100_lcd_hline(lcd, 0, W - 1, gy, 0x1A2430);
-
-		if (gy > SPEC_Y + 20) {
-			snprintf(lbl, sizeof(lbl), "%d", db + (int) SMETER_CAL_DB);
-			x6100_lcd_text(lcd, 4, gy - 9, 1, lbl, SCR_DIM);
-		}
 	}
 
-	for (int x = 0; x < W; x++) {
-		float v = spec_norm(spec_at(scr, x, W));
-		int y = SPEC_Y + SPEC_H - 1 - (int) (v < 0.0f ? 0.0f : v > 1.0f ? (float) (SPEC_H - 1) : v * (float) (SPEC_H - 1));
+	int prev_y = -1;
 
-		x6100_lcd_vline(lcd, x, y, SPEC_Y + SPEC_H - 1, 0x2060A0);
-		x6100_lcd_fill(lcd, x, y, 1, 2, 0x80D0FF);
+	for (int x = 0; x < W; x++) {
+		int y = spec_y(spec_at(scr, x, W));
+		int py = spec_y(peak_at(scr, x, W));
+
+		x6100_lcd_vline(lcd, x, y, SPEC_Y + SPEC_H - 1, SCOPE_FILL);
+		x6100_lcd_fill(lcd, x, py, 1, 1, SCOPE_PEAK);
+		x6100_lcd_vline(lcd, x, prev_y < 0 ? y : prev_y, y, SCOPE_LINE);
+		prev_y = y;
+	}
+
+	//
+	// dB labels in a left margin box, drawn over the trace
+	//
+	for (int db = (int) SPEC_DB_MAX - GRID_DB; db > (int) SPEC_DB_MIN; db -= GRID_DB) {
+		char lbl[8];
+		int gy = spec_y((float) db);
+
+		if (gy <= SPEC_Y + 20)
+			continue;
+
+		snprintf(lbl, sizeof(lbl), "%d", db + (int) SMETER_CAL_DB);
+		x6100_lcd_fill(lcd, 0, gy - 10, LBL_W, 9, 0x05080C);
+		x6100_lcd_text(lcd, 2, gy - 9, 1, lbl, SCR_DIM);
 	}
 
 	x6100_lcd_vline(lcd, W / 2, SPEC_Y, SPEC_Y + SPEC_H - 1, SCR_WARN);
@@ -890,7 +1012,7 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 		x6100_lcd_scroll_down(lcd, WF_Y, lcd->h - WF_Y);
 
 		for (int x = 0; x < W; x++)
-			x6100_lcd_fill(lcd, x, WF_Y, 1, 1, wf_colour(spec_norm(spec_at(scr, x, W))));
+			x6100_lcd_fill(lcd, x, WF_Y, 1, 1, wf_colour((spec_at(scr, x, W) - (scr->floor_db - WF_BELOW_DB)) / WF_RANGE_DB));
 	}
 }
 
