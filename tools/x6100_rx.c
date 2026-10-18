@@ -2,7 +2,8 @@
  * x6100_rx - minimal console receiver driven by the X6100 front panel
  *
  * Uses libx6100 for the baseband and the front panel input devices directly.
- * Status is printed to the console (ssh); the display is not used yet.
+ * Status on the display (frequency, mode, IQ meter, spectrum, waterfall)
+ * and on the console (ssh).
  *
  *   VFO knob       tune, step set by FST (10 / 100 / 1000 Hz)
  *   VOL knob       speaker volume, push = mute
@@ -35,6 +36,7 @@
 #include <unistd.h>
 
 #include "x6100_keys.h"
+#include "x6100_lcd.h"
 
 #define FREQ_MIN	500000
 #define FREQ_MAX	56000000
@@ -341,6 +343,557 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 	}
 }
 
+//
+// Screen: 800x480 landscape
+//
+
+#define SCR_BG		0x0A0E14
+#define SCR_FG		0xE6E6E6
+#define SCR_DIM		0x7A8494
+#define SCR_FREQ	0xFFD040
+#define SCR_ACCENT	0x40C0FF
+#define SCR_WARN	0xFF6040
+
+#define TOP_Y		8
+#define LEFT_W		492
+#define FREQ_X		8
+#define FREQ_Y		40
+#define FREQ_SCALE	8
+#define INFO_Y		104
+#define SBAR_X		12
+#define SBAR_Y		126
+#define SBAR_W		470
+#define SBAR_H		14
+#define SLBL_Y		144
+#define TOP_H		176
+#define VU_X		500
+#define VU_Y		4
+#define VU_W		296
+#define VU_H		168
+#define SPEC_Y		180
+#define SPEC_H		150
+#define WF_Y		(SPEC_Y + SPEC_H + 4)
+#define DISP_MS		70
+#define SPEC_DB_MIN	-130.0f
+#define SPEC_DB_MAX	-30.0f
+#define SPAN_HZ		96000
+#define GRID_HZ		10000
+#define GRID_DB		10
+
+//
+// Meter calibration: dBm = passband power in dB + SMETER_CAL_DB.
+// 0 = uncalibrated; set by comparing a steady carrier with the stock UI.
+//
+#define SMETER_CAL_DB	0.0
+#define VU_ATTACK_MS	40.0
+#define VU_RELEASE_MS	400.0
+#define VU_ANGLE	33.0
+
+typedef struct
+{
+	bool on;
+	x6100_lcd_t lcd;
+	float spec[X6100_FLOW_SAMPLES];
+	float pow[X6100_FLOW_SAMPLES];
+	bool spec_valid;
+	double meter_db;
+	double sig_dbm;
+	double needle;
+	uint64_t needle_ms;
+	double vbat;
+} screen_t;
+
+//
+// In-place radix-2 FFT, n a power of two
+//
+
+static void fft(float (*v)[2], int n)
+{
+	for (int i = 1, j = 0; i < n; i++) {
+		int bit = n >> 1;
+
+		for (; j & bit; bit >>= 1)
+			j ^= bit;
+
+		j ^= bit;
+
+		if (i < j) {
+			float tr = v[i][0], ti = v[i][1];
+
+			v[i][0] = v[j][0];
+			v[i][1] = v[j][1];
+			v[j][0] = tr;
+			v[j][1] = ti;
+		}
+	}
+
+	for (int len = 2; len <= n; len <<= 1) {
+		float ang = -2.0f * (float) M_PI / (float) len;
+		float wr = cosf(ang), wi = sinf(ang);
+
+		for (int i = 0; i < n; i += len) {
+			float cr = 1.0f, ci = 0.0f;
+
+			for (int k = 0; k < len / 2; k++) {
+				float *a = v[i + k], *b = v[i + k + len / 2];
+				float br = b[0] * cr - b[1] * ci;
+				float bi = b[0] * ci + b[1] * cr;
+				float t = cr * wr - ci * wi;
+
+				b[0] = a[0] - br;
+				b[1] = a[1] - bi;
+				a[0] += br;
+				a[1] += bi;
+				ci = cr * wi + ci * wr;
+				cr = t;
+			}
+		}
+	}
+}
+
+//
+// Windowed FFT of one flow frame, centred, exponentially averaged in dB
+//
+
+static void spectrum_update(screen_t *scr, const x6100_flow_frame_t *f)
+{
+	static float buf[X6100_FLOW_SAMPLES][2];
+	const int n = X6100_FLOW_SAMPLES;
+
+	for (int i = 0; i < n; i++) {
+		float w = 0.5f - 0.5f * cosf(2.0f * (float) M_PI * (float) i / (float) (n - 1));
+
+		buf[i][0] = f->iq[i][0] * w;
+		buf[i][1] = f->iq[i][1] * w;
+	}
+
+	fft(buf, n);
+
+	for (int i = 0; i < n; i++) {
+		int k = (i + n / 2) % n;
+		float p = buf[k][0] * buf[k][0] + buf[k][1] * buf[k][1];
+		float db = p > 1e-20f ? 10.0f * log10f(p / (float) n) : -200.0f;
+
+		scr->pow[i] = p / (float) n;
+
+		scr->spec[i] = scr->spec_valid ? scr->spec[i] * 0.6f + db * 0.4f : db;
+	}
+
+	scr->spec_valid = true;
+}
+
+static uint32_t wf_colour(float t)
+{
+	float r, g, b;
+
+	t = t < 0.0f ? 0.0f : t > 1.0f ? 1.0f : t;
+
+	if (t < 0.33f) {
+		r = 0.0f;
+		g = 0.0f;
+		b = t / 0.33f;
+	} else if (t < 0.66f) {
+		r = 0.0f;
+		g = (t - 0.33f) / 0.33f;
+		b = 1.0f - g;
+	} else {
+		r = (t - 0.66f) / 0.34f;
+		g = 1.0f;
+		b = 0.0f;
+	}
+
+	return ((uint32_t) (r * 255) << 16) | ((uint32_t) (g * 255) << 8) | (uint32_t) (b * 255);
+}
+
+//
+// Spectrum value under screen column x, honouring the direction setting
+//
+
+static float spec_at(const screen_t *scr, int x, int w)
+{
+	int i = x * X6100_FLOW_SAMPLES / w;
+
+	return scr->spec[X6100_FLOW_IQ_MIRRORED ? X6100_FLOW_SAMPLES - 1 - i : i];
+}
+
+static int hz_to_x(int hz, int w)
+{
+	return w / 2 + (int) ((int64_t) hz * w / SPAN_HZ);
+}
+
+//
+// Receive passband relative to the dial frequency, in Hz
+//
+
+static void passband(const rx_t *rx, int *lo, int *hi)
+{
+	uint32_t low, high;
+
+	mode_filter(rx->mode, &low, &high);
+
+	switch (rx->mode) {
+	case X6100_MODE_LSB:
+	case X6100_MODE_LSB_DIG:
+	case X6100_MODE_CWR:
+		*lo = -(int) high;
+		*hi = -(int) low;
+		break;
+	case X6100_MODE_AM:
+	case X6100_MODE_NFM:
+		*lo = -(int) high;
+		*hi = (int) high;
+		break;
+	default:
+		*lo = (int) low;
+		*hi = (int) high;
+		break;
+	}
+}
+
+static float spec_norm(float db)
+{
+	return (db - SPEC_DB_MIN) / (SPEC_DB_MAX - SPEC_DB_MIN);
+}
+
+//
+// Power inside the receive passband, from the last frame, in dBm (calibrated by SMETER_CAL_DB)
+//
+
+static double passband_dbm(const screen_t *scr, const rx_t *rx)
+{
+	const double bw = (double) SPAN_HZ / X6100_FLOW_SAMPLES;
+	const int n = X6100_FLOW_SAMPLES;
+	int lo, hi;
+	double sum = 0.0;
+
+	passband(rx, &lo, &hi);
+
+	for (int hz = lo; hz <= hi; hz += (int) bw) {
+		int off = (int) lround(hz / bw);
+		int i = n / 2 + (X6100_FLOW_IQ_MIRRORED ? -off : off);
+
+		if (i >= 0 && i < n)
+			sum += scr->pow[i];
+	}
+
+	return (sum > 1e-20 ? 10.0 * log10(sum) : -200.0) + SMETER_CAL_DB;
+}
+
+//
+// Meter position 0..1: S0..S9 over the first 60 %, S9..S9+60 over the rest
+//
+
+static double meter_frac(double dbm)
+{
+	if (dbm <= -73.0) {
+		double su = (dbm + 127.0) / 6.0;
+
+		return su < 0.0 ? 0.0 : su / 9.0 * 0.6;
+	}
+
+	double over = dbm + 73.0;
+
+	return 0.6 + (over > 60.0 ? 60.0 : over) / 60.0 * 0.4;
+}
+
+static void s_reading(double dbm, char *buf, size_t len)
+{
+	if (dbm <= -73.0) {
+		int su = (int) ((dbm + 127.0) / 6.0 + 0.5);
+
+		snprintf(buf, len, "S%d", su < 0 ? 0 : su);
+	} else {
+		snprintf(buf, len, "S9+%d", (int) (dbm + 73.0 + 0.5));
+	}
+}
+
+//
+// Bar S-meter with scale under the frequency
+//
+
+static void draw_sbar(x6100_lcd_t *lcd, double dbm)
+{
+	static const struct { double frac; const char *lbl; bool red; } marks[] = {
+		{ 1.0 / 9 * 0.6, "1", false }, { 3.0 / 9 * 0.6, "3", false }, { 5.0 / 9 * 0.6, "5", false },
+		{ 7.0 / 9 * 0.6, "7", false }, { 0.6, "9", false },
+		{ 0.6 + 20.0 / 60 * 0.4, "+20", true }, { 0.6 + 40.0 / 60 * 0.4, "+40", true }, { 1.0, "+60", true },
+	};
+	int fill = (int) (meter_frac(dbm) * SBAR_W);
+	int s9 = (int) (0.6 * SBAR_W);
+
+	x6100_lcd_fill(lcd, SBAR_X, SBAR_Y, SBAR_W, SBAR_H, 0x1A2230);
+	x6100_lcd_fill(lcd, SBAR_X, SBAR_Y, fill < s9 ? fill : s9, SBAR_H, 0x40D080);
+
+	if (fill > s9)
+		x6100_lcd_fill(lcd, SBAR_X + s9, SBAR_Y, fill - s9, SBAR_H, SCR_WARN);
+
+	for (size_t i = 0; i < sizeof(marks) / sizeof(marks[0]); i++) {
+		int x = SBAR_X + (int) (marks[i].frac * SBAR_W);
+		int tw = x6100_lcd_text_width(marks[i].lbl, 2);
+
+		x6100_lcd_vline(lcd, x, SBAR_Y + SBAR_H, SBAR_Y + SBAR_H + 3, SCR_DIM);
+		x = x - tw / 2;
+		x = x + tw > SBAR_X + SBAR_W ? SBAR_X + SBAR_W - tw : x;
+		x6100_lcd_text(lcd, x, SLBL_Y, 2, marks[i].lbl, marks[i].red ? SCR_WARN : SCR_DIM);
+	}
+}
+
+//
+// Multi-scale transceiver meter (Icom style): S / Po, SWR, COMP, ALC on
+// concentric arcs around a pivot below the visible area, white needle
+//
+
+#define VU_CX		(VU_X + VU_W / 2 + 6)
+#define VU_CY		(VU_Y + VU_H + 95)
+#define VU_R_S		205.0
+#define VU_R_SWR	172.0
+#define VU_R_COMP	146.0
+#define VU_R_ALC	138.0
+
+static void vu_point(double frac, double r, int *x, int *y)
+{
+	double a = (-VU_ANGLE + 2.0 * VU_ANGLE * frac) * M_PI / 180.0;
+
+	*x = VU_CX + (int) lround(r * sin(a));
+	*y = VU_CY - (int) lround(r * cos(a));
+}
+
+static void vu_arc(x6100_lcd_t *lcd, double f0, double f1, double r, int width, uint32_t rgb)
+{
+	int x, y;
+
+	for (int i = 0; i <= 600; i++) {
+		double f = f0 + (f1 - f0) * i / 600.0;
+
+		vu_point(f, r, &x, &y);
+		x6100_lcd_fill(lcd, x - width / 2, y - width / 2, width, width, rgb);
+	}
+}
+
+static void vu_tick(x6100_lcd_t *lcd, double f, double r0, double r1, uint32_t rgb)
+{
+	int x0, y0, x1, y1;
+
+	vu_point(f, r0, &x0, &y0);
+	vu_point(f, r1, &x1, &y1);
+	x6100_lcd_line(lcd, x0, y0, x1, y1, 2, rgb);
+}
+
+static void vu_label(x6100_lcd_t *lcd, double f, double r, int scale, const char *s, uint32_t rgb)
+{
+	int x, y;
+
+	vu_point(f, r, &x, &y);
+	x6100_lcd_text(lcd, x - x6100_lcd_text_width(s, scale) / 2, y - 7 * scale / 2, scale, s, rgb);
+}
+
+static void draw_vu(x6100_lcd_t *lcd, double needle, double dbm)
+{
+	static const struct { double f; const char *s; } po[] = {
+		{ 0.2, "2" }, { 0.4, "4" }, { 0.6, "6" }, { 0.8, "8" }, { 0.97, "10W" },
+	};
+	static const struct { double f; const char *s; } swr[] = {
+		{ 0.0, "1" }, { 0.22, "1.5" }, { 0.38, "2" }, { 0.56, "3" }, { 0.76, "5" }, { 0.97, "INF" },
+	};
+	static const struct { double f; const char *s; } comp[] = {
+		{ 0.10, "5" }, { 0.20, "10" }, { 0.32, "20" }, { 0.44, "30DB" },
+	};
+	const uint32_t bg = 0x000000, white = 0xF0F0F0, grey = 0x9A9A9A;
+	const uint32_t red = 0xE02828, blue = 0x2E5FD0, dot = 0x58B8F0;
+	char s[32];
+	int x0, y0, x1, y1;
+
+	x6100_lcd_fill(lcd, VU_X, VU_Y, VU_W, VU_H, bg);
+
+	//
+	// S scale: white to S9, heavy red above; Po labels under it
+	//
+	vu_arc(lcd, 0.0, 0.6, VU_R_S, 2, white);
+	vu_arc(lcd, 0.6, 1.0, VU_R_S + 2, 5, red);
+
+	for (int su = 1; su <= 9; su++) {
+		double f = su / 9.0 * 0.6;
+
+		vu_tick(lcd, f, VU_R_S, VU_R_S + (su % 2 ? 9 : 5), white);
+
+		if (su % 2) {
+			snprintf(s, sizeof(s), "%d", su);
+			vu_label(lcd, f, VU_R_S + 20, 2, s, white);
+		}
+	}
+
+	for (int db = 20; db <= 60; db += 20) {
+		snprintf(s, sizeof(s), "+%d", db);
+		vu_label(lcd, 0.6 + db / 60.0 * 0.4, VU_R_S + 20, 2, s, red);
+	}
+
+	vu_label(lcd, 0.0, VU_R_S + 20, 2, "S", white);
+
+	for (size_t i = 0; i < sizeof(po) / sizeof(po[0]); i++) {
+		vu_tick(lcd, po[i].f, VU_R_S - 1, VU_R_S - 5, grey);
+		vu_label(lcd, po[i].f, VU_R_S - 13, 1, po[i].s, grey);
+	}
+
+	//
+	// SWR scale
+	//
+	vu_arc(lcd, 0.0, 1.0, VU_R_SWR, 2, grey);
+
+	for (size_t i = 0; i < sizeof(swr) / sizeof(swr[0]); i++) {
+		vu_tick(lcd, swr[i].f, VU_R_SWR, VU_R_SWR + 5, grey);
+		vu_label(lcd, swr[i].f, VU_R_SWR + 13, 1, swr[i].s, grey);
+	}
+
+	//
+	// COMP (blue) and ALC (red) partial arcs
+	//
+	vu_arc(lcd, 0.04, 0.46, VU_R_COMP, 3, blue);
+
+	for (size_t i = 0; i < sizeof(comp) / sizeof(comp[0]); i++)
+		vu_label(lcd, comp[i].f, VU_R_COMP + 11, 1, comp[i].s, blue);
+
+	vu_arc(lcd, 0.0, 0.34, VU_R_ALC, 4, red);
+
+	//
+	// Scale names at the left
+	//
+	vu_label(lcd, -0.08, VU_R_S - 13, 1, "PO", grey);
+	vu_label(lcd, -0.08, VU_R_SWR + 2, 1, "SWR", grey);
+	vu_label(lcd, -0.05, VU_R_COMP + 2, 1, "COMP", blue);
+	vu_label(lcd, 0.17, VU_R_ALC - 10, 1, "ALC", red);
+
+	//
+	// Reading
+	//
+	s_reading(dbm, s, sizeof(s));
+	x6100_lcd_text(lcd, VU_X + VU_W - 8 - x6100_lcd_text_width(s, 2), VU_Y + VU_H - 38, 2, s, white);
+	snprintf(s, sizeof(s), "%.0fDBM", dbm);
+	x6100_lcd_text(lcd, VU_X + VU_W - 8 - x6100_lcd_text_width(s, 2), VU_Y + VU_H - 20, 2, s, grey);
+
+	//
+	// Needle from the bottom edge of the face, with pivot dot
+	//
+	double a = (-VU_ANGLE + 2.0 * VU_ANGLE * needle) * M_PI / 180.0;
+	double r_bot = (double) (VU_CY - (VU_Y + VU_H - 3)) / cos(a);
+
+	vu_point(needle, r_bot, &x0, &y0);
+	vu_point(needle, VU_R_S + 8, &x1, &y1);
+	x6100_lcd_line(lcd, x0, y0, x1, y1, 2, white);
+	x6100_lcd_fill(lcd, x0 - 5, y0 - 5, 10, 10, dot);
+
+	//
+	// Keep the face clipped: clear anything drawn below it
+	//
+	x6100_lcd_fill(lcd, VU_X, VU_Y + VU_H, VU_W, TOP_H - VU_Y - VU_H, SCR_BG);
+}
+
+//
+// Needle ballistics: fast attack, slow release
+//
+
+static void vu_update(screen_t *scr, double target, uint64_t t)
+{
+	double dt = scr->needle_ms ? (double) (t - scr->needle_ms) : 0.0;
+	double tau = target > scr->needle ? VU_ATTACK_MS : VU_RELEASE_MS;
+	double k = dt / tau;
+
+	scr->needle += (target - scr->needle) * (k > 1.0 ? 1.0 : k);
+	scr->needle_ms = t;
+}
+
+static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
+{
+	x6100_lcd_t *lcd = &scr->lcd;
+	int W = lcd->w;
+	char s[64];
+
+	//
+	// Status line
+	//
+	x6100_lcd_fill(lcd, 0, 0, W, TOP_H, SCR_BG);
+	snprintf(s, sizeof(s), "%s  %s  AGC %s", rx->band >= 0 ? g_bands[rx->band].name : "GEN",
+		mode_name(rx->mode), agc_name(rx->agc));
+	x6100_lcd_text(lcd, 12, TOP_Y, 3, s, SCR_ACCENT);
+
+	snprintf(s, sizeof(s), "%s%s", rx->pre ? "PRE " : "", rx->lock ? "LOCK" : "");
+	x6100_lcd_text(lcd, LEFT_W - 12 - x6100_lcd_text_width(s, 3), TOP_Y, 3, s, SCR_WARN);
+
+	//
+	// Frequency, MHz.kHz.Hz
+	//
+	snprintf(s, sizeof(s), "%u.%03u.%03u", rx->freq / 1000000, rx->freq / 1000 % 1000, rx->freq % 1000);
+	x6100_lcd_text(lcd, FREQ_X + (480 - x6100_lcd_text_width(s, FREQ_SCALE)), FREQ_Y, FREQ_SCALE, s, SCR_FREQ);
+
+	snprintf(s, sizeof(s), "STEP %d  VOL %d%s  RFG %d  %.1fV", rx->step, rx->vol, rx->mute ? " MUTE" : "",
+		rx->rfg, scr->vbat);
+	x6100_lcd_text(lcd, 12, INFO_Y, 2, s, SCR_DIM);
+
+	//
+	// Meters
+	//
+	draw_sbar(lcd, scr->sig_dbm);
+	vu_update(scr, meter_frac(scr->sig_dbm), now_ms());
+	draw_vu(lcd, scr->needle, scr->sig_dbm);
+
+	if (!scr->spec_valid)
+		return;
+
+	//
+	// Spectrum
+	//
+	x6100_lcd_fill(lcd, 0, SPEC_Y, W, SPEC_H, 0x05080C);
+
+	int pb_lo, pb_hi;
+
+	passband(rx, &pb_lo, &pb_hi);
+	x6100_lcd_fill(lcd, hz_to_x(pb_lo, W), SPEC_Y, hz_to_x(pb_hi, W) - hz_to_x(pb_lo, W) + 1, SPEC_H, 0x183820);
+
+	for (int hz = -GRID_HZ * 4; hz <= GRID_HZ * 4; hz += GRID_HZ) {
+		char lbl[8];
+		int gx = hz_to_x(hz, W);
+
+		x6100_lcd_vline(lcd, gx, SPEC_Y, SPEC_Y + SPEC_H - 1, 0x1A2430);
+
+		if (hz == 0)
+			continue;
+
+		snprintf(lbl, sizeof(lbl), "%+d", hz / 1000);
+		x6100_lcd_text(lcd, gx - x6100_lcd_text_width(lbl, 2) / 2, SPEC_Y + 4, 2, lbl, SCR_DIM);
+	}
+
+	for (int db = (int) SPEC_DB_MAX - GRID_DB; db > (int) SPEC_DB_MIN; db -= GRID_DB) {
+		char lbl[8];
+		int gy = SPEC_Y + SPEC_H - 1 - (int) (spec_norm((float) db) * (float) (SPEC_H - 1));
+
+		x6100_lcd_hline(lcd, 0, W - 1, gy, 0x1A2430);
+
+		if (gy > SPEC_Y + 20) {
+			snprintf(lbl, sizeof(lbl), "%d", db + (int) SMETER_CAL_DB);
+			x6100_lcd_text(lcd, 4, gy - 9, 1, lbl, SCR_DIM);
+		}
+	}
+
+	for (int x = 0; x < W; x++) {
+		float v = spec_norm(spec_at(scr, x, W));
+		int y = SPEC_Y + SPEC_H - 1 - (int) (v < 0.0f ? 0.0f : v > 1.0f ? (float) (SPEC_H - 1) : v * (float) (SPEC_H - 1));
+
+		x6100_lcd_vline(lcd, x, y, SPEC_Y + SPEC_H - 1, 0x2060A0);
+		x6100_lcd_fill(lcd, x, y, 1, 2, 0x80D0FF);
+	}
+
+	x6100_lcd_vline(lcd, W / 2, SPEC_Y, SPEC_Y + SPEC_H - 1, SCR_WARN);
+
+	//
+	// Waterfall, newest line on top
+	//
+	if (new_line) {
+		x6100_lcd_scroll_down(lcd, WF_Y, lcd->h - WF_Y);
+
+		for (int x = 0; x < W; x++)
+			x6100_lcd_fill(lcd, x, WF_Y, 1, 1, wf_colour(spec_norm(spec_at(scr, x, W))));
+	}
+}
+
 static double iq_level_db(const x6100_flow_frame_t *f)
 {
 	double sum = 0.0;
@@ -408,13 +961,29 @@ int main(void)
 		return 1;
 	}
 
+	static screen_t scr;
+
+	if ((rc = x6100_lcd_open(&scr.lcd, X6100_LCD_ROTATION)) < 0)
+		fprintf(stderr, "warning: display not available (%s), console only\n", strerror(-rc));
+	else
+		scr.on = true;
+
+	if (scr.on) {
+		x6100_lcd_fill(&scr.lcd, 0, 0, scr.lcd.w, scr.lcd.h, SCR_BG);
+		draw_screen(&scr, &rx, false);
+		x6100_lcd_flush(&scr.lcd);
+	}
+
 	printf("x6100_rx: PWR or Ctrl-C to quit\n");
 	show(&rx);
 
 	uint64_t last_refresh = now_ms();
 	uint64_t last_meter = last_refresh;
+	uint64_t last_disp = last_refresh;
 	double level = 0.0;
 	int level_n = 0;
+	bool new_frame = false;
+	bool dirty = false;
 
 	while (!g_stop) {
 		bool changed = false;
@@ -441,6 +1010,7 @@ int main(void)
 		if (changed) {
 			apply(&ctl, &cal, &rx);
 			show(&rx);
+			dirty = true;
 		}
 
 		//
@@ -471,16 +1041,39 @@ int main(void)
 
 			level += iq_level_db(&frame);
 			level_n++;
+
+			if (scr.on) {
+				spectrum_update(&scr, &frame);
+				scr.sig_dbm = passband_dbm(&scr, &rx);
+				scr.vbat = frame.vbat * 0.1;
+				new_frame = true;
+			}
 		}
 
 		if (t - last_meter >= METER_MS && level_n > 0) {
+			scr.meter_db = level / level_n;
 			show(&rx);
-			printf("iq %6.1f dB  vbat %.1f", level / level_n, frame.vbat * 0.1);
+			printf("iq %6.1f dB  vbat %.1f", scr.meter_db, frame.vbat * 0.1);
 			fflush(stdout);
 			level = 0.0;
 			level_n = 0;
 			last_meter = t;
+			dirty = true;
 		}
+
+		if (scr.on && (new_frame || dirty) && t - last_disp >= DISP_MS) {
+			draw_screen(&scr, &rx, new_frame);
+			x6100_lcd_flush(&scr.lcd);
+			new_frame = false;
+			dirty = false;
+			last_disp = t;
+		}
+	}
+
+	if (scr.on) {
+		x6100_lcd_fill(&scr.lcd, 0, 0, scr.lcd.w, scr.lcd.h, 0);
+		x6100_lcd_flush(&scr.lcd);
+		x6100_lcd_close(&scr.lcd);
 	}
 
 	x6100_ctl_set(&ctl, X6100_REG_RXVOL, 0);

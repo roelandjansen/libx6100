@@ -389,6 +389,9 @@ BASE 1.1.9, GUI stopped, own code only:
 | RX 14.074 / 7.074 MHz USB | tuned, FT8 audible on speaker (rxvol 20) |
 | IQ level, no antenna / antenna | −97 dB / −58…−63 dB |
 | front panel receiver (`x6100_rx`) | VFO, VOL, MFK/RF gain, BAND±, SSB/CW/AM-FM, PRE, AGC, FST, LOCK, mute, PWR quit: all ok |
+| display (`x6100_rx`) | DRM card1, 480x800 panel, rotation 270 → 800x480; spectrum + waterfall ok |
+| flow IQ orientation | mirrored: reverse bins after centred FFT (RTTY appears above FT8 on 20 m) |
+| spectrum span | 96 kHz (stock UI); same span with fftdec = 0 not yet measured |
 | TX | not tested, blocked in tooling |
 
 ## 10. Front panel input (from stock DTB `sun8i-r16-x6100.dtb`)

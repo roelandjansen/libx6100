@@ -27,6 +27,12 @@
 #define X6100_FLOW_MAGIC	0xAA5555AAu
 #define X6100_FLOW_SAMPLES	512
 
+//
+// The flow IQ spectrum is mirrored: after an FFT with DC in the centre, higher
+// frequencies are at lower bin indices. Verified on 20 m (RTTY above FT8).
+//
+#define X6100_FLOW_IQ_MIRRORED	1
+
 typedef struct
 {
 	int fd;
