@@ -392,6 +392,8 @@ BASE 1.1.9, GUI stopped, own code only:
 | display (`x6100_rx`) | DRM card1, 480x800 panel, rotation 270 → 800x480; spectrum + waterfall ok |
 | flow IQ orientation | mirrored: reverse bins after centred FFT (RTTY appears above FT8 on 20 m) |
 | spectrum span | 96 kHz (stock UI); same span with fftdec = 0 not yet measured |
+| RX audio capture (`x6100_audio`) | card 0 dev 0, 48 kHz S16 stereo, raw ioctls; ~ -20 dBFS RMS on 20 m FT8, L = R (corr 0.98-1.00), 0 xruns |
+| auxiqen (reg 21 bit 6) | no effect on codec capture: still mono audio (corr 0.99); IQ goes elsewhere |
 | TX | not tested, blocked in tooling |
 
 ## 10. Front panel input (from stock DTB `sun8i-r16-x6100.dtb`)

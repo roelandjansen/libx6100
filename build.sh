@@ -12,7 +12,7 @@ set -euo pipefail
 readonly C_TARGET="arm-linux-musleabihf"
 readonly C_CPU="cortex_a7"
 readonly C_OUT="out"
-readonly C_TOOLS=(x6100_info x6100_input x6100_lcdtest x6100_rodump x6100_rx x6100_tune)
+readonly C_TOOLS=(x6100_audio x6100_info x6100_input x6100_lcdtest x6100_rodump x6100_rx x6100_tune)
 
 G_ZIG="${ZIG:-zig}"
 G_CFLAGS=(-std=c11 -D_GNU_SOURCE -Wall -Wextra -O2 -Iinclude)
@@ -44,7 +44,9 @@ build_lib() {
 	zcc -c -o "${C_OUT}/x6100.o" src/x6100.c
 	zcc -c -o "${C_OUT}/x6100_lcd.o" src/x6100_lcd.c
 	zcc -c -o "${C_OUT}/x6100_font_freq.o" src/x6100_font_freq.c
-	"${G_ZIG}" ar rcs "${C_OUT}/libx6100.a" "${C_OUT}/x6100.o" "${C_OUT}/x6100_lcd.o" "${C_OUT}/x6100_font_freq.o"
+	zcc -c -o "${C_OUT}/x6100_pcm.o" src/x6100_pcm.c
+	"${G_ZIG}" ar rcs "${C_OUT}/libx6100.a" "${C_OUT}/x6100.o" "${C_OUT}/x6100_lcd.o" "${C_OUT}/x6100_font_freq.o" \
+		"${C_OUT}/x6100_pcm.o"
 	printf 'built %s\n' "${C_OUT}/libx6100.a"
 }
 
