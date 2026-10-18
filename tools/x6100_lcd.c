@@ -13,7 +13,9 @@
  *
  * Stop the GUI first (scripts/x6100_ui.sh stop): only one DRM master at a time.
  *
- * Usage: x6100_lcd [seconds]
+ * Usage: x6100_lcd [rotation 0|90|180|270] [seconds]
+ *
+ * The panel is native 480x800 portrait, mounted landscape: use 90 or 270.
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -240,20 +242,58 @@ static int show_fb(lcd_t *lcd)
 // Drawing, XRGB8888
 //
 
+//
+// Logical canvas: landscape when rot is 90 or 270, mapped onto the
+// physical portrait panel (480x800)
+//
+
+static int g_rot;
+
+static int logical_w(const lcd_t *lcd)
+{
+	return g_rot % 180 ? lcd->mode.vdisplay : lcd->mode.hdisplay;
+}
+
+static int logical_h(const lcd_t *lcd)
+{
+	return g_rot % 180 ? lcd->mode.hdisplay : lcd->mode.vdisplay;
+}
+
+static void put(lcd_t *lcd, int x, int y, uint32_t rgb)
+{
+	int PW = lcd->mode.hdisplay, PH = lcd->mode.vdisplay;
+	int px, py;
+
+	switch (g_rot) {
+	case 90:
+		px = PW - 1 - y;
+		py = x;
+		break;
+	case 180:
+		px = PW - 1 - x;
+		py = PH - 1 - y;
+		break;
+	case 270:
+		px = y;
+		py = PH - 1 - x;
+		break;
+	default:
+		px = x;
+		py = y;
+		break;
+	}
+
+	if (px < 0 || px >= PW || py < 0 || py >= PH)
+		return;
+
+	((uint32_t *) ((uint8_t *) lcd->pix + (size_t) py * lcd->pitch))[px] = rgb;
+}
+
 static void fill(lcd_t *lcd, int x, int y, int w, int h, uint32_t rgb)
 {
-	int W = lcd->mode.hdisplay, H = lcd->mode.vdisplay;
-
 	for (int j = y; j < y + h; j++) {
-		if (j < 0 || j >= H)
-			continue;
-
-		uint32_t *row = (uint32_t *) ((uint8_t *) lcd->pix + (size_t) j * lcd->pitch);
-
-		for (int i = x; i < x + w; i++) {
-			if (i >= 0 && i < W)
-				row[i] = rgb;
-		}
+		for (int i = x; i < x + w; i++)
+			put(lcd, i, j, rgb);
 	}
 }
 
@@ -277,7 +317,7 @@ static void draw_text(lcd_t *lcd, int x, int y, int scale, const char *s, uint32
 static void test_pattern(lcd_t *lcd)
 {
 	static const uint32_t bars[] = { 0xFFFFFF, 0xFFFF00, 0x00FFFF, 0x00FF00, 0xFF00FF, 0xFF0000, 0x0000FF, 0x000000 };
-	int W = lcd->mode.hdisplay, H = lcd->mode.vdisplay;
+	int W = logical_w(lcd), H = logical_h(lcd);
 	int bw = W / 8;
 	const char *txt = "14.074.000";
 	int scale = W / 80 > 1 ? W / 80 : 1;
@@ -300,7 +340,14 @@ static void test_pattern(lcd_t *lcd)
 int main(int argc, char **argv)
 {
 	lcd_t lcd = { .fd = -1 };
-	int seconds = argc > 1 ? atoi(argv[1]) : 10;
+	int seconds = argc > 2 ? atoi(argv[2]) : 10;
+
+	g_rot = argc > 1 ? atoi(argv[1]) : 270;
+
+	if (g_rot != 0 && g_rot != 90 && g_rot != 180 && g_rot != 270) {
+		fprintf(stderr, "usage: %s [0|90|180|270] [seconds]\n", argv[0]);
+		return 1;
+	}
 	int rc;
 
 	for (int n = 0; n < 4; n++) {
@@ -336,7 +383,7 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	printf("test pattern shown for %d s\n", seconds);
+	printf("test pattern, rotation %d, logical %dx%d, shown for %d s\n", g_rot, logical_w(&lcd), logical_h(&lcd), seconds);
 	sleep((unsigned) seconds);
 
 	munmap(lcd.pix, (size_t) lcd.size);
