@@ -17,8 +17,9 @@ Verified on hardware (BASE 1.1.9), see `docs/x6100_control_interface.md` §9:
 - RX tuning: frequency, mode, filter, band, volume, per-band calibration
 - front panel input (keys, encoders, power key)
 - display: own receiver screen with S-meter, spectrum, waterfall
+- RX audio capture over ALSA (48 kHz stereo, no libasound); FT8 recording decodes in `jt9`
 
-Not yet: TX, audio (ALSA), GPIO, CI-V.
+Not yet: TX (incl. TX audio), GPIO, CI-V.
 
 ## Layout
 
@@ -31,12 +32,15 @@ Not yet: TX, audio (ALSA), GPIO, CI-V.
 | `include/x6100_lcd.h` | display (DRM/KMS), drawing API |
 | `src/x6100.c` | baseband implementation |
 | `src/x6100_lcd.c` | display implementation, 5x7 and anti-aliased text |
+| `include/x6100_pcm.h` | ALSA PCM via kernel ioctls (no libasound) |
+| `src/x6100_pcm.c` | PCM implementation |
 | `src/x6100_font_freq.c` | frequency digits, Liberation Sans Bold 80 px (OFL-1.1), generated |
 | `tools/x6100_info.c` | read-only check: version, calibration, flow |
 | `tools/x6100_rodump.c` | raw dump of status and calibration blocks |
 | `tools/x6100_tune.c` | RX-only tuning test, TX blocked |
 | `tools/x6100_input.c` | front panel event dump |
 | `tools/x6100_lcdtest.c` | display probe and test pattern |
+| `tools/x6100_audio.c` | record RX audio to WAV with levels; `--iq` tests auxiqen |
 | `tools/x6100_rx.c` | standalone receiver: front panel, display, meters, spectrum |
 | `scripts/x6100_ui.sh` | stop/start the GUI (stock and R1CBU images) |
 | `docs/x6100_control_interface.md` | protocol documentation |

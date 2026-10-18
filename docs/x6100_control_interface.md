@@ -393,6 +393,7 @@ BASE 1.1.9, GUI stopped, own code only:
 | flow IQ orientation | mirrored: reverse bins after centred FFT (RTTY appears above FT8 on 20 m) |
 | spectrum span | 96 kHz (stock UI); same span with fftdec = 0 not yet measured |
 | RX audio capture (`x6100_audio`) | card 0 dev 0, 48 kHz S16 stereo, raw ioctls; ~ -20 dBFS RMS on 20 m FT8, L = R (corr 0.98-1.00), 0 xruns |
+| FT8 end to end (`x6100_audio --ft8`) | slot-aligned 15 s, 12 kHz mono: `jt9 -8` decodes 24 stations on 20 m, DT ~0 |
 | auxiqen (reg 21 bit 6) | no effect on codec capture: still mono audio (corr 0.99); IQ goes elsewhere |
 | TX | not tested, blocked in tooling |
 
