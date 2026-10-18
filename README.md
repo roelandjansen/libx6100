@@ -30,7 +30,8 @@ Not yet: TX, audio (ALSA), GPIO, CI-V.
 | `include/x6100_keys.h` | front panel keys and encoders |
 | `include/x6100_lcd.h` | display (DRM/KMS), drawing API |
 | `src/x6100.c` | baseband implementation |
-| `src/x6100_lcd.c` | display implementation |
+| `src/x6100_lcd.c` | display implementation, 5x7 and anti-aliased text |
+| `src/x6100_font_freq.c` | frequency digits, Liberation Sans Bold 80 px (OFL-1.1), generated |
 | `tools/x6100_info.c` | read-only check: version, calibration, flow |
 | `tools/x6100_rodump.c` | raw dump of status and calibration blocks |
 | `tools/x6100_tune.c` | RX-only tuning test, TX blocked |
@@ -70,3 +71,6 @@ The GUI must be stopped: it writes the same bus every millisecond.
 ## License
 
 GPL-3.0-or-later, see `LICENSE`.
+
+`src/x6100_font_freq.c` contains glyph bitmaps rendered from Liberation Sans Bold,
+licensed under the SIL Open Font License 1.1 (Copyright (c) 2012 Red Hat, Inc.).

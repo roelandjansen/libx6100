@@ -453,3 +453,76 @@ void x6100_lcd_scroll_down(x6100_lcd_t *lcd, int y, int h)
 	memmove(lcd->pix + (size_t) (y + 1) * (size_t) lcd->w, lcd->pix + (size_t) y * (size_t) lcd->w,
 		(size_t) (h - 1) * (size_t) lcd->w * sizeof(uint32_t));
 }
+
+//
+// Anti-aliased text, alpha blended over the canvas
+//
+
+static const x6100_aa_glyph_t *aa_glyph(const x6100_aa_font_t *font, char c)
+{
+	for (int i = 0; i < font->count; i++) {
+		if (font->glyphs[i].c == c)
+			return &font->glyphs[i];
+	}
+
+	return NULL;
+}
+
+int x6100_lcd_text_aa_width(const x6100_aa_font_t *font, const char *s)
+{
+	int w = 0;
+
+	for (; *s; s++) {
+		const x6100_aa_glyph_t *g = aa_glyph(font, *s);
+
+		w += g != NULL ? g->adv : font->height / 3;
+	}
+
+	return w;
+}
+
+static uint32_t blend(uint32_t dst, uint32_t src, uint32_t a)
+{
+	uint32_t r = ((src >> 16 & 0xFF) * a + (dst >> 16 & 0xFF) * (255 - a)) / 255;
+	uint32_t g = ((src >> 8 & 0xFF) * a + (dst >> 8 & 0xFF) * (255 - a)) / 255;
+	uint32_t b = ((src & 0xFF) * a + (dst & 0xFF) * (255 - a)) / 255;
+
+	return r << 16 | g << 8 | b;
+}
+
+int x6100_lcd_text_aa(x6100_lcd_t *lcd, const x6100_aa_font_t *font, int x, int y, const char *s, uint32_t rgb)
+{
+	int x0 = x;
+
+	for (; *s; s++) {
+		const x6100_aa_glyph_t *g = aa_glyph(font, *s);
+
+		if (g == NULL) {
+			x += font->height / 3;
+			continue;
+		}
+
+		for (int j = 0; j < g->h; j++) {
+			int py = y + g->yoff + j;
+
+			if (py < 0 || py >= lcd->h)
+				continue;
+
+			uint32_t *row = lcd->pix + (size_t) py * (size_t) lcd->w;
+
+			for (int i = 0; i < g->w; i++) {
+				int px = x + g->xoff + i;
+				uint32_t a = g->alpha[j * g->w + i];
+
+				if (a == 0 || px < 0 || px >= lcd->w)
+					continue;
+
+				row[px] = a == 255 ? rgb : blend(row[px], rgb, a);
+			}
+		}
+
+		x += g->adv;
+	}
+
+	return x - x0;
+}

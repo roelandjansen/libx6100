@@ -21,6 +21,30 @@
 #define X6100_LCD_FONT_W	5
 #define X6100_LCD_FONT_H	7
 
+//
+// Anti-aliased bitmap font: 8-bit alpha per glyph, y offset from the line top
+//
+
+typedef struct
+{
+	char c;
+	uint8_t w;
+	uint8_t h;
+	int8_t xoff;
+	int8_t yoff;
+	uint8_t adv;
+	const uint8_t *alpha;
+} x6100_aa_glyph_t;
+
+typedef struct
+{
+	int height;
+	int count;
+	const x6100_aa_glyph_t *glyphs;
+} x6100_aa_font_t;
+
+extern const x6100_aa_font_t x6100_font_freq;
+
 typedef struct
 {
 	//
@@ -64,3 +88,10 @@ void x6100_lcd_line(x6100_lcd_t *lcd, int x0, int y0, int x1, int y1, int width,
 int x6100_lcd_text(x6100_lcd_t *lcd, int x, int y, int scale, const char *s, uint32_t rgb);
 int x6100_lcd_text_width(const char *s, int scale);
 void x6100_lcd_scroll_down(x6100_lcd_t *lcd, int y, int h);
+
+//
+// Anti-aliased text; the 5x7 functions above stay available as the fallback font
+//
+
+int x6100_lcd_text_aa(x6100_lcd_t *lcd, const x6100_aa_font_t *font, int x, int y, const char *s, uint32_t rgb);
+int x6100_lcd_text_aa_width(const x6100_aa_font_t *font, const char *s);

@@ -350,7 +350,7 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 #define SCR_BG		0x0A0E14
 #define SCR_FG		0xE6E6E6
 #define SCR_DIM		0x7A8494
-#define SCR_FREQ	0xFFD040
+#define SCR_FREQ	0xF4F4F4
 #define SCR_ACCENT	0x40C0FF
 #define SCR_WARN	0xFF6040
 
@@ -370,7 +370,7 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 #define LEFT_W		492
 #define FREQ_X		8
 #define FREQ_Y		40
-#define FREQ_SCALE	8
+#define FREQ_SCALE	8	/* 5x7 fallback font scale, unused with the AA font */
 #define INFO_Y		104
 #define SBAR_X		12
 #define SBAR_Y		126
@@ -929,7 +929,8 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 	// Frequency, MHz.kHz.Hz
 	//
 	snprintf(s, sizeof(s), "%u.%03u.%03u", rx->freq / 1000000, rx->freq / 1000 % 1000, rx->freq % 1000);
-	x6100_lcd_text(lcd, FREQ_X + (480 - x6100_lcd_text_width(s, FREQ_SCALE)), FREQ_Y, FREQ_SCALE, s, SCR_FREQ);
+	x6100_lcd_text_aa(lcd, &x6100_font_freq, FREQ_X + (480 - x6100_lcd_text_aa_width(&x6100_font_freq, s)),
+		FREQ_Y - 17, s, SCR_FREQ);
 
 	snprintf(s, sizeof(s), "STEP %d  VOL %d%s  RFG %d  %.1fV", rx->step, rx->vol, rx->mute ? " MUTE" : "",
 		rx->rfg, scr->vbat);
