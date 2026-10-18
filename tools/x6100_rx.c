@@ -10,7 +10,7 @@
  *   MFK knob       RF gain, push = reset to 100
  *   BAND- / BAND+  previous / next band, last frequency per band kept
  *   SSB / CW / AM-FM   USB<->LSB / CW<->CWR / AM<->NFM
- *   PRE            preamp on/off
+ *   PRE            preamp on/off; long press: attenuator on/off
  *   AGC            off / slow / fast / auto
  *   LOCK           lock knobs and keys (LOCK again to unlock)
  *   PWR            quit (as does Ctrl-C)
@@ -41,6 +41,7 @@
 #define FREQ_MIN	500000
 #define FREQ_MAX	56000000
 #define POLL_MS		5
+#define LONG_PRESS_MS	600
 #define REFRESH_MS	1000
 #define METER_MS	500
 
@@ -72,6 +73,7 @@ typedef struct
 	int step;
 	int band;
 	bool pre;
+	bool att;
 	bool mute;
 	bool lock;
 	uint32_t band_freq[11];
@@ -213,6 +215,8 @@ static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 	x6100_set_mode(ctl, 1, rx->mode);
 	x6100_ctl_set(ctl, X6100_REG_VFOA_AGC, rx->agc);
 	x6100_ctl_set(ctl, X6100_REG_VFOB_AGC, rx->agc);
+	x6100_ctl_set(ctl, X6100_REG_VFOA_ATT, rx->att);
+	x6100_ctl_set(ctl, X6100_REG_VFOB_ATT, rx->att);
 	x6100_ctl_set(ctl, X6100_REG_VFOA_PRE, rx->pre);
 	x6100_ctl_set(ctl, X6100_REG_VFOB_PRE, rx->pre);
 	x6100_ctl_set(ctl, X6100_REG_FILTER1_LOW, low);
@@ -321,6 +325,59 @@ static bool on_key(rx_t *rx, int key)
 	}
 
 	return true;
+}
+
+//
+// Long press: keys with a long function act on release (short) or after
+// LONG_PRESS_MS held (long); all other keys act immediately on press
+//
+
+typedef struct
+{
+	int key;
+	uint64_t since;
+	bool fired;
+} hold_t;
+
+static bool has_long(int key)
+{
+	return key == X6100_KEY_PRE;
+}
+
+static bool on_long_key(rx_t *rx, int key)
+{
+	if (rx->lock)
+		return false;
+
+	switch (key) {
+	case X6100_KEY_PRE:
+		rx->att = !rx->att;
+		return true;
+	default:
+		return false;
+	}
+}
+
+static bool on_keypad(rx_t *rx, hold_t *hold, int key, int value)
+{
+	if (!has_long(key))
+		return value == 1 ? on_key(rx, key) : false;
+
+	if (value == 1) {
+		hold->key = key;
+		hold->since = now_ms();
+		hold->fired = false;
+		return false;
+	}
+
+	if (value == 0 && hold->key == key) {
+		bool short_press = !hold->fired;
+
+		hold->key = -1;
+		return short_press ? on_key(rx, key) : false;
+	}
+
+	return false;
 }
 
 static bool on_knob(rx_t *rx, input_t in, int value)
@@ -922,7 +979,7 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 		mode_name(rx->mode), agc_name(rx->agc));
 	x6100_lcd_text(lcd, 12, TOP_Y, 3, s, SCR_ACCENT);
 
-	snprintf(s, sizeof(s), "%s%s", rx->pre ? "PRE " : "", rx->lock ? "LOCK" : "");
+	snprintf(s, sizeof(s), "%s%s%s", rx->att ? "ATT " : "", rx->pre ? "PRE " : "", rx->lock ? "LOCK" : "");
 	x6100_lcd_text(lcd, LEFT_W - 12 - x6100_lcd_text_width(s, 3), TOP_Y, 3, s, SCR_WARN);
 
 	//
@@ -1107,6 +1164,7 @@ int main(void)
 	int level_n = 0;
 	bool new_frame = false;
 	bool dirty = false;
+	hold_t hold = { .key = -1 };
 
 	while (!g_stop) {
 		bool changed = false;
@@ -1123,11 +1181,16 @@ int main(void)
 			while (read(pfd[p].fd, &ev, sizeof(ev)) == (ssize_t) sizeof(ev)) {
 				if (pmap[p] == IN_POWER && ev.type == EV_KEY && ev.code == KEY_POWER && ev.value == 1)
 					g_stop = 1;
-				else if (pmap[p] == IN_KEYPAD && ev.type == EV_KEY && ev.value == 1)
-					changed |= on_key(&rx, (int) ev.code - X6100_KEY_BASE);
+				else if (pmap[p] == IN_KEYPAD && ev.type == EV_KEY)
+					changed |= on_keypad(&rx, &hold, (int) ev.code - X6100_KEY_BASE, ev.value);
 				else if (ev.type == EV_REL)
 					changed |= on_knob(&rx, pmap[p], ev.value);
 			}
+		}
+
+		if (hold.key >= 0 && !hold.fired && now_ms() - hold.since >= LONG_PRESS_MS) {
+			hold.fired = true;
+			changed |= on_long_key(&rx, hold.key);
 		}
 
 		if (changed) {
