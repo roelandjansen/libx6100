@@ -45,6 +45,7 @@ Not yet: GPIO, CI-V, TX from the receiver UI.
 | `tools/x6100_tx.c` | controlled TX tests: ATU tune, carrier, codec tone; hard limits |
 | `tools/x6100_i2csniff.c` | LD_PRELOAD logger for register writes of another UI (glibc build) |
 | `tools/x6100_rx.c` | standalone receiver: front panel, display, meters, spectrum |
+| `tools/x6100_trx.c` | transceiver: x6100_rx plus PTT, ATU, TX power, TX meters |
 | `scripts/x6100_ui.sh` | stop/start the GUI (stock and R1CBU images) |
 | `docs/x6100_control_interface.md` | protocol documentation |
 
@@ -73,7 +74,8 @@ The GUI must be stopped: it writes the same bus every millisecond.
 ## Safety
 
 - No function writes the calibration block; keep your own dump as backup.
-- Only `x6100_tx` keys the transmitter: 0.1-10 W (default 1 W), max 30 s, amateur bands only,
+- `x6100_trx` keys TX from the PTT key: amateur bands only, 180 s timeout, SWR > 3 for 300 ms drops TX.
+- `x6100_tx` (test tool) keys the transmitter: 0.1-10 W (default 1 W), max 30 s, amateur bands only,
   3 s countdown, stops on any key, Ctrl-C or SWR > 3. Use a dummy load.
 - All other tools never set PTT.
 
