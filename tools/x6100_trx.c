@@ -25,6 +25,7 @@
  *
  * Console (ssh):
  *   x6100_trx [freq] [mode]           start values, e.g. x6100_trx 7074000 lsb
+ *   x6100_trx --oob ...               no band check before TX (test use; legal limits are yours)
  *   type a line + Enter while running:
  *     7074000 | 7.074 | 7074k         frequency (Hz, MHz with '.', or kHz with 'k')
  *     usb lsb cw cwr am nfm           mode
@@ -298,8 +299,13 @@ static void apply_flags(x6100_ctl_t *ctl, const rx_t *rx)
 // TX allowed here? Sets rx->warn when not
 //
 
+static bool g_allow_oob;	/* --oob: skip the band check (test use) */
+
 static bool tx_allowed(rx_t *rx)
 {
+	if (g_allow_oob)
+		return true;
+
 	if (rx->band < 0 || !(x6100_band_index(rx->freq) & 1)) {
 		rx->warn = "OUT OF BAND";
 		return false;
@@ -1252,7 +1258,7 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 	// Status line, TX indicator, indicators right (TUNE while the tuner searches)
 	//
 	x6100_lcd_fill(lcd, 0, 0, W, TOP_H, SCR_BG);
-	snprintf(s, sizeof(s), "%s  %s  AGC %s", rx->band >= 0 ? g_bands[rx->band].name : "GEN",
+	snprintf(s, sizeof(s), "%4s %5s AGC %4s", rx->band >= 0 ? g_bands[rx->band].name : "GEN",
 		mode_name(rx->mode), agc_name(rx->agc));
 	x6100_lcd_text(lcd, 12, TOP_Y, 3, s, SCR_ACCENT);
 
@@ -1288,10 +1294,21 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 		x6100_lcd_text(lcd, bx + (bw - x6100_lcd_text_width(s, 2)) / 2, by + bh + 6, 2, s, SCR_FG);
 	}
 
-	snprintf(s, sizeof(s), "%s%s%s%s", rx->tuning ? "TUNE " : rx->atu_on ? "ATU " : "", rx->att ? "ATT " : "",
-		rx->pre ? "PRE " : "",
-		rx->lock ? "LOCK" : "");
-	x6100_lcd_text(lcd, LEFT_W - 12 - x6100_lcd_text_width(s, 2), TOP_Y + 4, 2, s, SCR_WARN);
+	//
+	// Indicators in fixed slots, two rows, so nothing shifts when one changes
+	//
+	{
+		static const struct { int x, y; } slot[4] = {
+			{ 372, 2 }, { 432, 2 }, { 372, 18 }, { 432, 18 },
+		};
+		const char *txt[4] = {
+			rx->tuning ? "TUNE" : rx->atu_on ? "ATU" : "", rx->att ? "ATT" : "",
+			rx->pre ? "PRE" : "", rx->lock ? "LOCK" : "",
+		};
+
+		for (int i = 0; i < 4; i++)
+			x6100_lcd_text(lcd, slot[i].x, slot[i].y, 2, txt[i], SCR_WARN);
+	}
 
 	//
 	// Frequency, MHz.kHz.Hz
@@ -1303,7 +1320,7 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 	//
 	// Info line in fixed columns, so changing values never shift the other fields
 	//
-	snprintf(s, sizeof(s), "STEP %d", rx->step);
+	snprintf(s, sizeof(s), "STEP %4d", rx->step);
 	x6100_lcd_text(lcd, INFO_COL_STEP, INFO_Y, 2, s, SCR_DIM);
 	snprintf(s, sizeof(s), "VOL %d", rx->vol);
 	x6100_lcd_text(lcd, INFO_COL_VOL, INFO_Y, 2, s, rx->mute ? SCR_WARN : SCR_DIM);
@@ -1594,8 +1611,14 @@ int main(int argc, char **argv)
 	set_freq(&rx, 14074000);
 
 	for (int i = 1; i < argc; i++) {
+		if (strcmp(argv[i], "--oob") == 0) {
+			g_allow_oob = true;
+			fprintf(stderr, "warning: --oob, band check off: you are responsible for where you transmit\n");
+			continue;
+		}
+
 		if (!console_token(&rx, argv[i])) {
-			fprintf(stderr, "usage: %s [freq] [usb|lsb|cw|cwr|am|nfm]\n", argv[0]);
+			fprintf(stderr, "usage: %s [--oob] [freq] [usb|lsb|cw|cwr|am|nfm]\n", argv[0]);
 			return 1;
 		}
 	}
