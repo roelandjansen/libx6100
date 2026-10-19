@@ -22,6 +22,7 @@
  *   type a line + Enter while running:
  *     7074000 | 7.074 | 7074k         frequency (Hz, MHz with '.', or kHz with 'k')
  *     usb lsb cw cwr am nfm           mode
+ *     off slow fast auto              AGC
  *     step 1|10|100|1000|5000         tuning step
  *   tokens can be combined: "14074000 usb"
  *
@@ -1188,11 +1189,21 @@ static bool console_token(rx_t *rx, const char *t)
 		{ "lsb", X6100_MODE_LSB }, { "usb", X6100_MODE_USB }, { "cw", X6100_MODE_CW },
 		{ "cwr", X6100_MODE_CWR }, { "am", X6100_MODE_AM }, { "nfm", X6100_MODE_NFM },
 	};
+	static const struct { const char *name; x6100_agc_t agc; } agcs[] = {
+		{ "off", X6100_AGC_OFF }, { "slow", X6100_AGC_SLOW }, { "fast", X6100_AGC_FAST }, { "auto", X6100_AGC_AUTO },
+	};
 	char *end;
 
 	for (size_t i = 0; i < sizeof(modes) / sizeof(modes[0]); i++) {
 		if (strcasecmp(t, modes[i].name) == 0) {
 			rx->mode = modes[i].mode;
+			return true;
+		}
+	}
+
+	for (size_t i = 0; i < sizeof(agcs) / sizeof(agcs[0]); i++) {
+		if (strcasecmp(t, agcs[i].name) == 0) {
+			rx->agc = agcs[i].agc;
 			return true;
 		}
 	}
@@ -1306,7 +1317,7 @@ int main(int argc, char **argv)
 
 	for (int i = 1; i < argc; i++) {
 		if (!console_token(&rx, argv[i])) {
-			fprintf(stderr, "usage: %s [freq] [usb|lsb|cw|cwr|am|nfm]\n", argv[0]);
+			fprintf(stderr, "usage: %s [freq] [usb|lsb|cw|cwr|am|nfm] [off|slow|fast|auto]\n", argv[0]);
 			return 1;
 		}
 	}
