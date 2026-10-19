@@ -85,11 +85,11 @@ Gaps 16, 18–19, 26, 30–32, 35–40, 52, 54: unknown.
 | Bit mask  | Meaning |
 |-----------|---------|
 | `0x00002` | split |
-| `0x00008` | voice rec: audio stream mic/speaker ↔ RX/TX |
+| `0x00008` | voice rec: codec plays on the speaker instead of RX audio (local playback); must not be set for TX |
 | `0x00010` | SWR scan |
 | `0x01000` | ATU enable |
 | `0x02000` | ATU tune start |
-| `0x04000` | modem: route serial to STM32 bootloader (fw update) |
+| `0x04000` | codec TX ("modem"): key TX with the R16 codec playback as audio (FT8, voice messages); stock IAP also uses it with xmodem |
 | `0x08000` | calibration (after STM32 update) |
 | `0x10000` | power off |
 | `0x40000` | PTT |
@@ -142,7 +142,7 @@ Frame (packed, little-endian), 4 136 bytes:
 |-------:|-----:|-------|
 | 0      | 4    | magic `0xAA5555AA` |
 | 4      | 4096 | 512 × complex float IQ (spectrum/panadapter) |
-| 4100   | 4    | flags: b0 resync, b1 tx, b2 charging, b3 ext. power |
+| 4100   | 4    | flags: b0 resync, b1 tx, b2 ATU tune done (stock UI; 2023 lib called it charging), b3 ext. power |
 | 4104   | 1    | reserved |
 | 4105   | 1    | TX power ×10 W |
 | 4106   | 1    | VSWR ×10 |
@@ -395,7 +395,10 @@ BASE 1.1.9, GUI stopped, own code only:
 | RX audio capture (`x6100_audio`) | card 0 dev 0, 48 kHz S16 stereo, raw ioctls; ~ -20 dBFS RMS on 20 m FT8, L = R (corr 0.98-1.00), 0 xruns |
 | FT8 end to end (`x6100_audio --ft8`) | slot-aligned 15 s, 12 kHz mono: `jt9 -8` decodes 24 stations on 20 m, DT ~0 |
 | auxiqen (reg 21 bit 6) | no effect on codec capture: still mono audio (corr 0.99); IQ goes elsewhere |
-| TX | not tested, blocked in tooling |
+| ATU tune (`x6100_tx tune`) | 3.6-8.5 s, done flag = flow bit 2, network read from `atu_params` and written to reg 17 |
+| NFM carrier (`x6100_tx carrier`) | 5 W into dummy load, power/SWR/ALC telemetry decoded correctly |
+| Codec TX (`x6100_tx codec`) | 2026-10-19: 1 kHz tone at -30 dBFS, USB-D, keyed with reg 12 `0x4000`: steady carrier + tone heard on IC-7851 |
+| PTT + codec audio | no modulation in any mode or reg 20/21 setting: PTT takes the microphone input |
 
 ## 10. Front panel input (from stock DTB `sun8i-r16-x6100.dtb`)
 
@@ -441,10 +444,32 @@ The panel PTT key (K03) is an ordinary matrix key: TX only happens if software s
 the iptt flag. K25 and K27–K29 are unused positions in the matrix.
 C definitions in `include/x6100_keys.h`.
 
+## 11. TX and antenna tuner (from stock UI, BASE 1.1.9)
+
+- PTT: register 12 bit `0x40000` (`iptt`); CAT PTT has its own path (`civptt`).
+- TX power: register 15 [15:8] in 0.1 W, 1-100. Stock default 5.0 W; libx6100 default 1.0 W.
+- TX audio sources (verified 2026-10-19):
+  - PTT (`0x40000`): microphone (internal / hand, register 21 [1:0], gain register 20 [23:16] / [31:24]).
+  - Codec TX (`0x04000`, x6100_gui `radio_set_modem`): the R16 codec playback (card 0, 48 kHz S16
+    stereo, DAC on at 0 dB, headphone from DAC at 63) is the modulation. No PTT needed. Used for
+    FT8, voice messages, any audio generated on the radio. `voice_rec` (`0x8`) must stay off.
+  - USB-D / LSB-D (mode 3 / 1) with PTT: presumably the external line input (not tested).
+  Line-in level is register 20 [7:0], stock default 10 (range 0-36).
+- ALC telemetry reads 100 (10.0) with no audio arriving, not overdrive.
+- Mixer: the R1CBU / IU1WXY image can leave `DAC Playback` off; `x6100_mixer_tx_setup()` sets it.
+- ATU (`MainWidget::slot_atuTune`):
+  1. set register 12 `0x2000` (tune) and `0x1000` (ATU enable)
+  2. poll flow flags bit 2 until set (tune done)
+  3. clear `0x2000`, read flow `atu_params` bytes 0/1/2 = L / C / S
+  4. write L | C<<8 | S<<16 to register 17
+  5. stock stores the network per frequency (`saveAtuNetworkInfo`) and writes it back
+     to register 17 on every frequency change
+
 ## Open items for a clean implementation
 
 - Unknown registers (gaps above) and unmapped bits in 21 and 25.
-- Audio path: ALSA device, sample rate, which codec; how `voice_rec` changes routing.
+- TX audio level vs ALC: x6100_gui raises the codec gain until ALC shows, then holds.
+- Registers 36 (`0x4A02`) and 38 (`160 / 3000`) copied from the GUI; meaning unconfirmed.
 - ATU params / atu_network encoding.
 - Diff against gdyuldin/x6100_gui for registers added with newer base firmware.
 - Front-panel keys/encoders: not in this library (likely evdev/input on the SoC).

@@ -206,3 +206,80 @@ void x6100_pcm_close(x6100_pcm_t *pcm)
 
 	pcm->fd = -1;
 }
+
+//
+// Mixer control by name, same value on every channel (BOOLEAN, INTEGER or ENUMERATED item index)
+//
+
+int x6100_mixer_set(int card, const char *name, long value)
+{
+	struct snd_ctl_elem_info info;
+	struct snd_ctl_elem_value val;
+	char path[32];
+	int fd, rc = 0;
+
+	snprintf(path, sizeof(path), "/dev/snd/controlC%d", card);
+
+	if ((fd = open(path, O_RDWR | O_CLOEXEC)) < 0)
+		return -errno;
+
+	memset(&info, 0, sizeof(info));
+	info.id.iface = SNDRV_CTL_ELEM_IFACE_MIXER;
+	snprintf((char *) info.id.name, sizeof(info.id.name), "%s", name);
+
+	if (ioctl(fd, SNDRV_CTL_IOCTL_ELEM_INFO, &info) < 0) {
+		rc = -errno;
+		goto out;
+	}
+
+	if (info.type != SNDRV_CTL_ELEM_TYPE_BOOLEAN && info.type != SNDRV_CTL_ELEM_TYPE_INTEGER
+		&& info.type != SNDRV_CTL_ELEM_TYPE_ENUMERATED) {
+		rc = -EINVAL;
+		goto out;
+	}
+
+	memset(&val, 0, sizeof(val));
+	val.id = info.id;
+
+	for (unsigned i = 0; i < info.count && i < 64; i++) {
+		if (info.type == SNDRV_CTL_ELEM_TYPE_ENUMERATED)
+			val.value.enumerated.item[i] = (unsigned) value;
+		else
+			val.value.integer.value[i] = value;
+	}
+
+	if (ioctl(fd, SNDRV_CTL_IOCTL_ELEM_WRITE, &val) < 0)
+		rc = -errno;
+out:
+	close(fd);
+	return rc;
+}
+
+//
+// Stock TX path: DAC unmuted at 0 dB, headphone from DAC at full scale
+//
+
+int x6100_mixer_tx_setup(int card)
+{
+	static const struct { const char *name; long value; } C_SET[] = {
+		{ "AIF1 Slot 0 Digital DAC Playback Switch", 1 },
+		{ "AIF1 DA0 Playback Volume", 160 },
+		{ "DAC Playback Switch", 1 },
+		{ "DAC Playback Volume", 160 },
+		{ "Headphone Source Playback Route", 0 },
+		{ "Headphone Playback Switch", 1 },
+		{ "Headphone Playback Volume", 63 },
+	};
+	int rc = 0;
+
+	for (size_t i = 0; i < sizeof(C_SET) / sizeof(C_SET[0]); i++) {
+		int r = x6100_mixer_set(card, C_SET[i].name, C_SET[i].value);
+
+		if (r < 0) {
+			fprintf(stderr, "mixer: %s: %s\n", C_SET[i].name, strerror(-r));
+			rc = r;
+		}
+	}
+
+	return rc;
+}

@@ -10,9 +10,10 @@ set -euo pipefail
 #
 
 readonly C_TARGET="arm-linux-musleabihf"
+readonly C_TARGET_GLIBC="arm-linux-gnueabihf.2.23"
 readonly C_CPU="cortex_a7"
 readonly C_OUT="out"
-readonly C_TOOLS=(x6100_audio x6100_info x6100_input x6100_lcdtest x6100_rodump x6100_rx x6100_tune)
+readonly C_TOOLS=(x6100_audio x6100_info x6100_input x6100_lcdtest x6100_rodump x6100_rx x6100_tune x6100_tx)
 
 G_ZIG="${ZIG:-zig}"
 G_CFLAGS=(-std=c11 -D_GNU_SOURCE -Wall -Wextra -O2 -Iinclude)
@@ -54,6 +55,16 @@ build_lib() {
 # Build tools, statically linked and stripped
 #
 
+#
+# Build the LD_PRELOAD register sniffer against the radio's glibc (not musl)
+#
+
+build_sniff() {
+	"${G_ZIG}" cc -target "${C_TARGET_GLIBC}" -mcpu="${C_CPU}" "${G_CFLAGS[@]}" -shared -fPIC -s \
+		-o "${C_OUT}/x6100_i2csniff.so" tools/x6100_i2csniff.c -ldl -lpthread
+	printf 'built %s\n' "${C_OUT}/x6100_i2csniff.so"
+}
+
 build_tools() {
 	local L_TOOL
 
@@ -77,3 +88,4 @@ printf 'zig %s\n' "$("${G_ZIG}" version)"
 
 build_lib
 build_tools
+build_sniff

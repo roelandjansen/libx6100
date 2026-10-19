@@ -5,6 +5,7 @@
  *   capture   Mic1/ADC: demodulated RX audio from the baseband (default routing)
  *   playback  DAC/headphone: TX modulation audio to the baseband
  * Stock mixer setup (S51amixer): Mic1 capture on, ADC gain 3, DAC on, headphone 63.
+ * The R1CBU GUI leaves "DAC Playback" off/0: x6100_mixer_tx_setup() restores the TX path.
  *
  * Interleaved S16_LE only.
  *
@@ -40,3 +41,10 @@ int x6100_pcm_open(x6100_pcm_t *pcm, int card, int device, bool capture, unsigne
 ssize_t x6100_pcm_read(x6100_pcm_t *pcm, int16_t *buf, unsigned frames);
 ssize_t x6100_pcm_write(x6100_pcm_t *pcm, const int16_t *buf, unsigned frames);
 void x6100_pcm_close(x6100_pcm_t *pcm);
+
+//
+// Mixer (control device); returns 0 or -errno
+//
+
+int x6100_mixer_set(int card, const char *name, long value);
+int x6100_mixer_tx_setup(int card);

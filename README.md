@@ -18,8 +18,9 @@ Verified on hardware (BASE 1.1.9), see `docs/x6100_control_interface.md` §9:
 - front panel input (keys, encoders, power key)
 - display: own receiver screen with S-meter, spectrum, waterfall
 - RX audio capture over ALSA (48 kHz stereo, no libasound); FT8 recording decodes in `jt9`
+- TX: ATU tune, carrier, and codec audio as modulation (tone into a dummy load, verified on a separate receiver)
 
-Not yet: TX (incl. TX audio), GPIO, CI-V.
+Not yet: GPIO, CI-V, TX from the receiver UI.
 
 ## Layout
 
@@ -41,6 +42,8 @@ Not yet: TX (incl. TX audio), GPIO, CI-V.
 | `tools/x6100_input.c` | front panel event dump |
 | `tools/x6100_lcdtest.c` | display probe and test pattern |
 | `tools/x6100_audio.c` | record RX audio to WAV with levels; `--iq` tests auxiqen |
+| `tools/x6100_tx.c` | controlled TX tests: ATU tune, carrier, codec tone; hard limits |
+| `tools/x6100_i2csniff.c` | LD_PRELOAD logger for register writes of another UI (glibc build) |
 | `tools/x6100_rx.c` | standalone receiver: front panel, display, meters, spectrum |
 | `scripts/x6100_ui.sh` | stop/start the GUI (stock and R1CBU images) |
 | `docs/x6100_control_interface.md` | protocol documentation |
@@ -70,7 +73,9 @@ The GUI must be stopped: it writes the same bus every millisecond.
 ## Safety
 
 - No function writes the calibration block; keep your own dump as backup.
-- The tools never set PTT. Test any future TX code into a dummy load.
+- Only `x6100_tx` keys the transmitter: 0.1-10 W (default 1 W), max 30 s, amateur bands only,
+  3 s countdown, stops on any key, Ctrl-C or SWR > 3. Use a dummy load.
+- All other tools never set PTT.
 
 ## License
 

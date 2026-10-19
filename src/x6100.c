@@ -133,8 +133,9 @@ void x6100_ctl_init(x6100_ctl_t *ctl, x6100_i2c_t *i2c)
 	ctl->want[X6100_REG_VFOB_AGC] = X6100_AGC_AUTO;
 
 	ctl->want[X6100_REG_VI_BAND_VM] = X6100_R13(0, x6100_band_index(14074000), 0);
-	ctl->want[X6100_REG_RFG_TXPWR_FFTDEC] = X6100_R15(100, 50, 0);
-	ctl->want[X6100_REG_MIC_PTT_SQL] = X6100_R21(2, 0, 0, 0, 0, 0);
+	ctl->want[X6100_REG_RFG_TXPWR_FFTDEC] = X6100_R15(100, 10, 0);
+	ctl->want[X6100_REG_AUDIO_GAIN] = X6100_R20(10, 10, 30, 20);
+	ctl->want[X6100_REG_MIC_PTT_SQL] = X6100_R21(2, 0, 1, 0, 0, 0);
 	ctl->want[X6100_REG_AGC] = X6100_R27(-60, 6, 0);
 	ctl->want[X6100_REG_AGC_TC] = X6100_R28(250, 50, 5);
 	ctl->want[X6100_REG_BIAS] = X6100_R41(X6100_CAL_BIAS_DRIVE_DEF, X6100_CAL_BIAS_FINAL_DEF);
@@ -143,6 +144,21 @@ void x6100_ctl_init(x6100_ctl_t *ctl, x6100_i2c_t *i2c)
 	ctl->want[X6100_REG_FILTER2_LOW] = 50;
 	ctl->want[X6100_REG_FILTER2_HIGH] = 2950;
 	ctl->want[X6100_REG_PWRSYNC] = 2000000;
+
+	//
+	// Remaining values the R1CBU GUI writes at start (register 35 left out: it moves
+	// the spectrum centre). Register 38 is suspected to be the TX passband. Under test:
+	// TX audio gives 0 W with these at zero
+	//
+	ctl->want[X6100_REG_VOX] = 0x01F40000;		/* VOX off, delay 500 ms */
+	ctl->want[X6100_REG_NR_NB] = 0x000A0A00;	/* NR/NB off, NB width 10, level 10 */
+	ctl->want[X6100_REG_DNF] = 0x000323E8;		/* DNF off, 1000 Hz, width 50 */
+	ctl->want[X6100_REG_CMP] = 0x00000002;		/* compressor level 2, off */
+	ctl->want[X6100_REG_MONILEVEL] = 30;
+	ctl->want[X6100_REG_KEYER] = 0x052BC00F;
+	ctl->want[X6100_REG_QSK_KR] = 0x001E0064;
+	ctl->want[X6100_REG_UNK36] = 0x00004A02;
+	ctl->want[X6100_REG_TX_FILTER] = 3000u << 16 | 160u;
 	ctl->want[X6100_REG_LAST] = 0x100001;
 }
 
@@ -240,9 +256,58 @@ void x6100_set_mode(x6100_ctl_t *ctl, int vfo, x6100_mode_t mode)
 	x6100_ctl_set(ctl, vfo == 0 ? X6100_REG_VFOA_MODE : X6100_REG_VFOB_MODE, mode);
 }
 
+//
+// Transmit with the R16 codec playback as modulation (FT8, voice messages).
+// Separate from PTT, which keys TX from the microphone input.
+//
+
+void x6100_set_codec_tx(x6100_ctl_t *ctl, bool on)
+{
+	x6100_ctl_update(ctl, X6100_REG_FLAGS, X6100_FLAG_CODEC_TX, on ? X6100_FLAG_CODEC_TX : 0);
+}
+
 void x6100_set_ptt(x6100_ctl_t *ctl, bool on)
 {
 	x6100_ctl_update(ctl, X6100_REG_FLAGS, X6100_FLAG_IPTT, on ? X6100_FLAG_IPTT : 0);
+}
+
+//
+// TX power in W, 0.1 .. 10.0, register 15 [15:8] in units of 0.1 W
+//
+
+void x6100_set_txpwr(x6100_ctl_t *ctl, float watts)
+{
+	int p = (int) (watts * 10.0f + 0.5f);
+
+	p = p < 1 ? 1 : p > 100 ? 100 : p;
+	x6100_ctl_update(ctl, X6100_REG_RFG_TXPWR_FFTDEC, 0xFF00, (uint32_t) p << 8);
+}
+
+//
+// Antenna tuner, as in the stock UI: tune bit in register 12, done = flow flag bit 2,
+// result network in flow atu_params bytes 0..2, written back to register 17
+//
+
+void x6100_atu_enable(x6100_ctl_t *ctl, bool on)
+{
+	x6100_ctl_update(ctl, X6100_REG_FLAGS, X6100_FLAG_ATUE, on ? X6100_FLAG_ATUE : 0);
+}
+
+void x6100_atu_tune(x6100_ctl_t *ctl, bool on)
+{
+	x6100_ctl_update(ctl, X6100_REG_FLAGS, X6100_FLAG_ATU_TUNE, on ? X6100_FLAG_ATU_TUNE : 0);
+}
+
+void x6100_atu_from_frame(const x6100_flow_frame_t *frame, x6100_atu_t *atu)
+{
+	atu->l = (uint8_t) (frame->atu_params & 0xFF);
+	atu->c = (uint8_t) (frame->atu_params >> 8 & 0xFF);
+	atu->s = (uint8_t) (frame->atu_params >> 16 & 0xFF);
+}
+
+void x6100_atu_set_network(x6100_ctl_t *ctl, const x6100_atu_t *atu)
+{
+	x6100_ctl_set(ctl, X6100_REG_ATU_NETWORK, (uint32_t) atu->l | (uint32_t) atu->c << 8 | (uint32_t) atu->s << 16);
 }
 
 //

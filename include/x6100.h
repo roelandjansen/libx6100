@@ -59,7 +59,7 @@ typedef struct __attribute__((__packed__))
 	float iq[X6100_FLOW_SAMPLES][2];
 
 	//
-	// Status flags: b0 resync, b1 tx, b2 charging, b3 external power
+	// Status flags: b0 resync, b1 tx, b2 ATU tune done, b3 external power
 	//
 	uint32_t flags;
 
@@ -93,7 +93,7 @@ typedef struct
 
 #define X6100_FLOW_RESYNC	0x1u
 #define X6100_FLOW_TX		0x2u
-#define X6100_FLOW_CHG		0x4u
+#define X6100_FLOW_ATU		0x4u	/* stock UI: xradio_get_atu_status(), ATU tune done */
 #define X6100_FLOW_VEXT		0x8u
 
 //
@@ -137,6 +137,24 @@ uint8_t x6100_band_index(uint32_t freq);
 void x6100_set_freq(x6100_ctl_t *ctl, int vfo, uint32_t freq);
 void x6100_set_mode(x6100_ctl_t *ctl, int vfo, x6100_mode_t mode);
 void x6100_set_ptt(x6100_ctl_t *ctl, bool on);
+void x6100_set_codec_tx(x6100_ctl_t *ctl, bool on);
+void x6100_set_txpwr(x6100_ctl_t *ctl, float watts);
+
+//
+// Antenna tuner: L, C and side (input/output capacitor) of the matching network
+//
+
+typedef struct
+{
+	uint8_t l;
+	uint8_t c;
+	uint8_t s;
+} x6100_atu_t;
+
+void x6100_atu_enable(x6100_ctl_t *ctl, bool on);
+void x6100_atu_tune(x6100_ctl_t *ctl, bool on);
+void x6100_atu_from_frame(const x6100_flow_frame_t *frame, x6100_atu_t *atu);
+void x6100_atu_set_network(x6100_ctl_t *ctl, const x6100_atu_t *atu);
 
 //
 // Calibration

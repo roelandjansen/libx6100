@@ -57,6 +57,8 @@ typedef enum
 	X6100_REG_KEYER = 33,
 	X6100_REG_QSK_KR = 34,
 	X6100_REG_LO_CENTER = 35,
+	X6100_REG_UNK36 = 36,		/* R1CBU GUI writes 0x00004A02; meaning unknown */
+	X6100_REG_TX_FILTER = 38,	/* presumed: [15:0] TX low cut Hz, [31:16] TX high cut Hz (GUI: 160 / 3000) */
 	X6100_REG_BIAS = 41,
 	X6100_REG_RIT = 42,
 	X6100_REG_XIT = 43,
@@ -101,7 +103,7 @@ typedef enum
 #define X6100_FLAG_SWRSCAN	0x00010u
 #define X6100_FLAG_ATUE		0x01000u
 #define X6100_FLAG_ATU_TUNE	0x02000u
-#define X6100_FLAG_MODEM	0x04000u
+#define X6100_FLAG_CODEC_TX	0x04000u	/* key TX with the codec playback as audio (x6100_gui "modem"); stock IAP also uses it */
 #define X6100_FLAG_CALIBRATION	0x08000u
 #define X6100_FLAG_POWER_OFF	0x10000u
 #define X6100_FLAG_IPTT		0x40000u
