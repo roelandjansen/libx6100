@@ -421,8 +421,9 @@ static void apply_gui_state(x6100_ctl_t *ctl, unsigned mask)
 
 static void usage(const char *argv0)
 {
-	fprintf(stderr, "usage: %s [-g[mask]] <freq_hz> tune\n", argv0);
+	fprintf(stderr, "usage: %s [-g[mask]] [-musb|-musbd] <freq_hz> tune\n", argv0);
 	fprintf(stderr, "       -g[mask]: sniffed IU1WXY GUI register groups (hex, default FF), see source\n");
+	fprintf(stderr, "       -musb / -musbd: TX mode for tone and codec (default USB); exit restores USB/LSB\n");
 	fprintf(stderr, "       %s <freq_hz> carrier <seconds 1-30> [watts 0.1-10, default 1]\n", argv0);
 	fprintf(stderr, "       %s <freq_hz> mictone <seconds> ... (as tone, plain USB)\n", argv0);
 	fprintf(stderr, "       %s <freq_hz> codec <seconds> ... (as tone, keyed with the codec-TX flag, not PTT)\n", argv0);
@@ -444,10 +445,21 @@ int main(int argc, char **argv)
 	int micsel = 2, pttmode = 0, vrec = 0;
 	bool tune, carrier = false, mictone = false, codec = false;
 	unsigned gui = 0;
+	x6100_mode_t tx_mode = X6100_MODE_USB;
 	int rc;
 
-	if (argc > 1 && strncmp(argv[1], "-g", 2) == 0) {
-		gui = argv[1][2] ? (unsigned) strtoul(argv[1] + 2, NULL, 16) : 0xFFu;
+	while (argc > 1 && argv[1][0] == '-') {
+		if (strncmp(argv[1], "-g", 2) == 0) {
+			gui = argv[1][2] ? (unsigned) strtoul(argv[1] + 2, NULL, 16) : 0xFFu;
+		} else if (strcmp(argv[1], "-musb") == 0) {
+			tx_mode = X6100_MODE_USB;
+		} else if (strcmp(argv[1], "-musbd") == 0) {
+			tx_mode = X6100_MODE_USB_DIG;
+		} else {
+			usage(argv[0]);
+			return 1;
+		}
+
 		argv[1] = argv[0];
 		argv++;
 		argc--;
@@ -512,8 +524,8 @@ int main(int argc, char **argv)
 
 	x6100_set_freq(&tx.ctl, 0, freq);
 	x6100_set_freq(&tx.ctl, 1, freq);
-	x6100_set_mode(&tx.ctl, 0, carrier ? X6100_MODE_NFM : mictone ? X6100_MODE_USB : X6100_MODE_USB_DIG);
-	x6100_set_mode(&tx.ctl, 1, carrier ? X6100_MODE_NFM : mictone ? X6100_MODE_USB : X6100_MODE_USB_DIG);
+	x6100_set_mode(&tx.ctl, 0, carrier ? X6100_MODE_NFM : mictone ? X6100_MODE_USB : tx_mode);
+	x6100_set_mode(&tx.ctl, 1, carrier ? X6100_MODE_NFM : mictone ? X6100_MODE_USB : tx_mode);
 	x6100_set_txpwr(&tx.ctl, watts);
 	x6100_ctl_update(&tx.ctl, X6100_REG_AUDIO_GAIN, 0xFF, (uint32_t) line_in);
 
@@ -543,13 +555,21 @@ int main(int argc, char **argv)
 		printf("%u Hz USB-D, power %.1f W, ATU tune\n", freq, watts);
 	else
 		printf("%u Hz %s, power %.1f W, tone %.0f Hz at %.0f dBFS, line-in %d, micsel %d, pttmode %d\n", freq,
-			mictone ? "USB" : "USB-D",
+			mictone || tx_mode == X6100_MODE_USB ? "USB" : "USB-D",
 			watts, tone_hz,
 			level_dbfs, line_in, micsel, pttmode);
 
 	rc = tune ? do_tune(&tx) : do_tone(&tx, seconds, tone_hz, level_dbfs, !carrier, codec);
 
 	tx_off(&tx);
+
+	//
+	// Back to the voice mode for the band: a digital mode left behind ignores the mic
+	//
+	x6100_set_mode(&tx.ctl, 0, freq < 10000000 ? X6100_MODE_LSB : X6100_MODE_USB);
+	x6100_set_mode(&tx.ctl, 1, freq < 10000000 ? X6100_MODE_LSB : X6100_MODE_USB);
+	x6100_ctl_refresh(&tx.ctl);
+
 	x6100_flow_close(&tx.flow);
 	x6100_i2c_close(&tx.i2c);
 

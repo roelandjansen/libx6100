@@ -397,7 +397,7 @@ BASE 1.1.9, GUI stopped, own code only:
 | auxiqen (reg 21 bit 6) | no effect on codec capture: still mono audio (corr 0.99); IQ goes elsewhere |
 | ATU tune (`x6100_tx tune`) | 3.6-8.5 s, done flag = flow bit 2, network read from `atu_params` and written to reg 17 |
 | NFM carrier (`x6100_tx carrier`) | 5 W into dummy load, power/SWR/ALC telemetry decoded correctly |
-| Codec TX (`x6100_tx codec`) | 2026-10-19: 1 kHz tone at -30 dBFS, USB-D, keyed with reg 12 `0x4000`: steady carrier + tone heard on IC-7851 |
+| Codec TX (`x6100_tx codec`) | 2026-10-19: 1 kHz tone at -30 dBFS, keyed with reg 12 `0x4000`, in USB and in USB-D: steady tone heard on IC-7851; mic works again after mode restore |
 | PTT + codec audio | no modulation in any mode or reg 20/21 setting: PTT takes the microphone input |
 
 ## 10. Front panel input (from stock DTB `sun8i-r16-x6100.dtb`)
@@ -453,6 +453,8 @@ C definitions in `include/x6100_keys.h`.
   - Codec TX (`0x04000`, x6100_gui `radio_set_modem`): the R16 codec playback (card 0, 48 kHz S16
     stereo, DAC on at 0 dB, headphone from DAC at 63) is the modulation. No PTT needed. Used for
     FT8, voice messages, any audio generated on the radio. `voice_rec` (`0x8`) must stay off.
+    Works in USB as well as USB-D, so no mode switch is needed. A digital mode left set makes PTT
+    ignore the mic.
   - USB-D / LSB-D (mode 3 / 1) with PTT: presumably the external line input (not tested).
   Line-in level is register 20 [7:0], stock default 10 (range 0-36).
 - ALC telemetry reads 100 (10.0) with no audio arriving, not overdrive.
