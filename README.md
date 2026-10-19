@@ -48,6 +48,7 @@ Not yet: GPIO, CI-V, TX from the receiver UI.
 | `tools/x6100_trx.c` | transceiver: x6100_rx plus PTT, ATU, TX power, TX meters |
 | `scripts/x6100_ui.sh` | stop/start the GUI (stock and R1CBU images) |
 | `docs/x6100_control_interface.md` | protocol documentation |
+| `docs/x6100_netaudio_design.md` | network audio / wfview design (draft) |
 
 ## Build
 
