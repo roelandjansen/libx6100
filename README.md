@@ -44,9 +44,9 @@ Not yet: GPIO, CI-V, TX from the receiver UI.
 | `tools/x6100_audio.c` | record RX audio to WAV with levels; `--iq` tests auxiqen |
 | `tools/x6100_tx.c` | controlled TX tests: ATU tune, carrier, codec tone; hard limits |
 | `tools/x6100_i2csniff.c` | LD_PRELOAD logger for register writes of another UI (glibc build) |
-| `tools/x6100_rx.c` | standalone receiver: front panel, display, meters, spectrum |
+| `x6100_rx` (binary) | `tools/x6100_trx.c` built with `-DX6100_RX_ONLY`: receiver, never transmits |
 | `tools/x6100_trx.c` | transceiver: x6100_rx plus PTT, ATU, TX power, TX meters |
-| `tools/x6100_iqcal.c` | RX IQ image calibration (registers 48/49) against a steady carrier |
+| `tools/x6100_iqcal.c` | RX IQ image calibration attempt (registers 48/49); parked: flow IQ too little range to measure |
 | `scripts/x6100_ui.sh` | stop/start the GUI (stock and R1CBU images) |
 | `docs/x6100_control_interface.md` | protocol documentation |
 | `docs/x6100_netaudio_design.md` | network audio / wfview design (draft) |

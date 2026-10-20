@@ -13,7 +13,7 @@ readonly C_TARGET="arm-linux-musleabihf"
 readonly C_TARGET_GLIBC="arm-linux-gnueabihf.2.23"
 readonly C_CPU="cortex_a7"
 readonly C_OUT="out"
-readonly C_TOOLS=(x6100_audio x6100_info x6100_input x6100_iqcal x6100_lcdtest x6100_rodump x6100_rx x6100_trx x6100_tune x6100_tx)
+readonly C_TOOLS=(x6100_audio x6100_info x6100_input x6100_iqcal x6100_lcdtest x6100_rodump x6100_trx x6100_tune x6100_tx)
 
 G_ZIG="${ZIG:-zig}"
 G_CFLAGS=(-std=c11 -D_GNU_SOURCE -Wall -Wextra -O2 -Iinclude)
@@ -72,6 +72,13 @@ build_tools() {
 		zcc -static -s -o "${C_OUT}/${L_TOOL}" "tools/${L_TOOL}.c" "${C_OUT}/libx6100.a"
 		printf 'built %s\n' "${C_OUT}/${L_TOOL}"
 	done
+
+	#
+	# x6100_rx: the x6100_trx source built receive-only
+	#
+
+	zcc -static -s -DX6100_RX_ONLY -o "${C_OUT}/x6100_rx" tools/x6100_trx.c "${C_OUT}/libx6100.a"
+	printf 'built %s\n' "${C_OUT}/x6100_rx"
 }
 
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")"

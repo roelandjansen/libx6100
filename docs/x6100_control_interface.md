@@ -399,6 +399,8 @@ BASE 1.1.9, GUI stopped, own code only:
 | NFM carrier (`x6100_tx carrier`) | 5 W into dummy load, power/SWR/ALC telemetry decoded correctly |
 | Codec TX (`x6100_tx codec`) | 2026-10-19: 1 kHz tone at -30 dBFS, keyed with reg 12 `0x4000`, in USB and in USB-D: steady tone heard on IC-7851; mic works again after mode restore |
 | PTT + codec audio | no modulation in any mode or reg 20/21 setting: PTT takes the microphone input |
+| Flow IQ as measuring instrument (`x6100_iqcal`) | 2026-10-20: about 30 dB between a strong carrier (S9+10, reads -2 dB) and the floor, level-normalised; RX image of that carrier not visible above the floor; registers 48/49 show no measurable effect this way. IQ calibration parked |
+| Birdie | 7.309300 MHz, no antenna |
 
 ## 10. Front panel input (from stock DTB `sun8i-r16-x6100.dtb`)
 

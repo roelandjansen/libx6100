@@ -41,7 +41,8 @@
 #define FRAMES		24	/* frames averaged per measurement, ~0.9 s */
 #define SETTLE_FRAMES	6	/* frames dropped after a register change */
 #define BIN_SPREAD	2	/* bins either side summed (Hann main lobe) */
-#define MIN_SNR_DB	40.0
+#define MIN_SNR_DB	20.0
+#define MIN_IMAGE_DB	10.0	/* image above the floor for a valid measurement */
 
 static volatile sig_atomic_t g_stop;
 
@@ -244,6 +245,17 @@ static int check_carrier(const meas_t *m)
 	if (m->carrier_db - m->floor_db < MIN_SNR_DB) {
 		fprintf(stderr, "carrier only %.1f dB above the floor (need %.0f): no steady carrier at the given frequency?\n",
 			m->carrier_db - m->floor_db, MIN_SNR_DB);
+		return -1;
+	}
+
+	//
+	// The image must stand clear of the noise, else the rejection only follows the
+	// carrier's fading and the registers show no effect
+	//
+	if (m->image_db - m->floor_db < MIN_IMAGE_DB) {
+		fprintf(stderr, "image only %.1f dB above the floor (need %.0f): carrier too weak to see its image;\n"
+			"use a stronger steady carrier (about 60 dB above the floor)\n", m->image_db - m->floor_db,
+			MIN_IMAGE_DB);
 		return -1;
 	}
 

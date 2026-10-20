@@ -12,6 +12,9 @@
  *   BAND- / BAND+  previous / next band, last frequency per band kept
  *   SSB / CW / AM-FM   USB<->LSB / CW<->CWR / AM<->NFM
  *   PRE            preamp on/off; long press: attenuator on/off
+ *   F1             scope CENTER <-> SCROLL-C (waterfall follows tuning)
+ *   F2             scope FIX <-> SCROLL-F (fixed window; SCROLL-F slides at the edges)
+ *   F3             scope span +-48 / 24 / 12 / 6 / 3 / 1.5 kHz
  *   AGC            off / slow / fast / auto
  *   PTT            hold: transmit while held; tap (< 400 ms): latch TX on,
  *                  next press drops it
@@ -30,9 +33,14 @@
  *     7074000 | 7.074 | 7074k         frequency (Hz, MHz with '.', or kHz with 'k')
  *     usb lsb cw cwr am nfm           mode
  *     off slow fast auto              AGC
+ *     att noatt pre nopre             attenuator / preamp
+ *     center scrollc fix scrollf      spectrum scope mode (also F1 / F2)
  *     step 1|10|100|1000|5000         tuning step
  *     pwr 0.1-10                      TX power in W
  *   tokens can be combined: "14074000 usb"
+ *
+ * Built twice: x6100_trx, and x6100_rx with -DX6100_RX_ONLY (PTT and tune refused,
+ * the transmitter is never keyed; hand mic TX is only displayed).
  *
  * Stop the GUI first (scripts/x6100_ui.sh stop). Use a dummy load or a tuned antenna.
  *
@@ -91,6 +99,22 @@ typedef struct
 	uint32_t def;
 } band_t;
 
+//
+// Spectrum scope modes (Icom style)
+//   CENTER     VFO in the middle, waterfall rows stay where they were drawn
+//   CENTER_S   VFO in the middle, waterfall shifts with tuning (stays frequency aligned)
+//   FIX        fixed frequency window, the VFO cursor moves across it
+//   FIX_S      fixed window that slides along when the VFO reaches an edge
+//
+
+typedef enum
+{
+	SCOPE_CENTER = 0,
+	SCOPE_CENTER_S,
+	SCOPE_FIX,
+	SCOPE_FIX_S
+} scope_mode_t;
+
 typedef struct
 {
 	uint32_t freq;
@@ -121,6 +145,13 @@ typedef struct
 	x6100_atu_t atu_net[11];	/* tuned network per band */
 	bool atu_valid[11];
 	const char *warn;	/* last TX refusal / trip reason, shown until next TX */
+
+	//
+	// Spectrum scope
+	//
+	scope_mode_t scope;
+	int64_t fix_lo;		/* left edge of the fixed window, Hz */
+	int span;		/* window width, Hz */
 } rx_t;
 
 static const band_t g_bands[] = {
@@ -304,6 +335,11 @@ static bool g_allow_oob;	/* --oob: skip the band check (test use) */
 
 static bool tx_allowed(rx_t *rx)
 {
+#ifdef X6100_RX_ONLY
+	rx->warn = "RX ONLY";
+	return false;
+#endif
+
 	if (g_allow_oob)
 		return true;
 
@@ -378,6 +414,65 @@ static void band_step(rx_t *rx, int dir)
 // Key handling; returns true when the state changed
 //
 
+//
+// Scope window: fixed window starts centred on the VFO, on a 1 kHz boundary;
+// the sliding window follows the VFO when it leaves the window
+//
+
+static void scope_fix_start(rx_t *rx)
+{
+	rx->fix_lo = ((int64_t) rx->freq - rx->span / 2) / 1000 * 1000;
+}
+
+static void scope_follow(rx_t *rx)
+{
+	if (rx->scope != SCOPE_FIX_S)
+		return;
+
+	if ((int64_t) rx->freq < rx->fix_lo)
+		rx->fix_lo = rx->freq;
+	else if ((int64_t) rx->freq > rx->fix_lo + rx->span)
+		rx->fix_lo = (int64_t) rx->freq - rx->span;
+}
+
+//
+// Span (F3): full IQ width down to 3 kHz; the fixed window keeps its centre
+//
+
+static const int g_spans[] = { 96000, 48000, 24000, 12000, 6000, 3000 };
+
+#define SPAN_COUNT	((int) (sizeof(g_spans) / sizeof(g_spans[0])))
+
+static void scope_span_next(rx_t *rx)
+{
+	int i = 0;
+	int64_t centre = rx->fix_lo + rx->span / 2;
+
+	while (i < SPAN_COUNT && g_spans[i] != rx->span)
+		i++;
+
+	rx->span = g_spans[(i + 1) % SPAN_COUNT];
+
+	if (rx->scope == SCOPE_FIX || rx->scope == SCOPE_FIX_S)
+		rx->fix_lo = centre - rx->span / 2;
+}
+
+//
+// Grid step: 1-2-5 sequence, about 8 lines across the window
+//
+
+static int grid_step(int span)
+{
+	static const int steps[] = { 100, 200, 500, 1000, 2000, 5000, 10000, 20000 };
+
+	for (size_t i = 0; i < sizeof(steps) / sizeof(steps[0]); i++) {
+		if (span / steps[i] <= 10)
+			return steps[i];
+	}
+
+	return 20000;
+}
+
 static bool on_key(rx_t *rx, int key)
 {
 	//
@@ -424,6 +519,21 @@ static bool on_key(rx_t *rx, int key)
 		break;
 	case X6100_KEY_ATU:
 		rx->atu_on = !rx->atu_on;
+		break;
+	case X6100_KEY_F1:
+		rx->scope = rx->scope == SCOPE_CENTER ? SCOPE_CENTER_S : SCOPE_CENTER;
+		break;
+	case X6100_KEY_F2:
+		if (rx->scope != SCOPE_FIX && rx->scope != SCOPE_FIX_S) {
+			scope_fix_start(rx);
+			rx->scope = SCOPE_FIX;
+		} else {
+			rx->scope = rx->scope == SCOPE_FIX ? SCOPE_FIX_S : SCOPE_FIX;
+		}
+
+		break;
+	case X6100_KEY_F3:
+		scope_span_next(rx);
 		break;
 	case X6100_KEY_MFK_PUSH:
 		if (rx->mfk_pwr)
@@ -671,6 +781,13 @@ typedef struct
 	double swr;
 	int alc;		/* 0-100; 100 = no audio arriving */
 	bool was_tx;
+
+	//
+	// Waterfall alignment state
+	//
+	scope_mode_t wf_scope;
+	int wf_span;
+	double wf_ref;		/* window left edge the waterfall rows are aligned to, Hz */
 } screen_t;
 
 //
@@ -806,16 +923,77 @@ static uint32_t wf_colour(float t)
 // Spectrum value under screen column x, honouring the direction setting
 //
 
-static float spec_at(const screen_t *scr, int x, int w)
-{
-	int i = x * X6100_FLOW_SAMPLES / w;
+//
+// Scope view: frequency window on screen. The baseband IQ is centred on the VFO
+// and spans SPAN_HZ; window pixels outside that have no data.
+//
 
-	return scr->spec[X6100_FLOW_IQ_MIRRORED ? X6100_FLOW_SAMPLES - 1 - i : i];
+typedef struct
+{
+	int64_t lo;
+	int span;
+	uint32_t vfo;
+	int w;
+} view_t;
+
+static view_t scope_view(const rx_t *rx, int w)
+{
+	view_t v = { .span = rx->span, .vfo = rx->freq, .w = w };
+
+	v.lo = rx->scope == SCOPE_FIX || rx->scope == SCOPE_FIX_S ? rx->fix_lo : (int64_t) rx->freq - rx->span / 2;
+	return v;
 }
 
-static int hz_to_x(int hz, int w)
+static int spec_index(const view_t *v, int x)
 {
-	return w / 2 + (int) ((int64_t) hz * w / SPAN_HZ);
+	const int n = X6100_FLOW_SAMPLES;
+	int64_t f = v->lo + (int64_t) x * v->span / v->w;
+	int i = n / 2 + (int) floor((double) (f - (int64_t) v->vfo) * n / SPAN_HZ);
+
+	if (i < 0 || i >= n)
+		return -1;
+
+	return X6100_FLOW_IQ_MIRRORED ? n - 1 - i : i;
+}
+
+//
+// Value at pixel x, linearly interpolated between FFT bins (narrow spans show
+// fewer bins than pixels); outside the IQ span: below the scale
+//
+
+static float bin_at(const float *arr, const view_t *v, int x)
+{
+	const int n = X6100_FLOW_SAMPLES;
+	int64_t f = v->lo + (int64_t) x * v->span / v->w;
+	double pos = n / 2 + (double) (f - (int64_t) v->vfo) * n / SPAN_HZ;
+	int i0 = (int) floor(pos);
+	double t = pos - i0;
+	int i1 = i0 + 1;
+
+	if (i0 < 0 || i1 >= n)
+		return i0 >= 0 && i0 < n ? arr[X6100_FLOW_IQ_MIRRORED ? n - 1 - i0 : i0] : SPEC_DB_MIN - 20.0f;
+
+	if (X6100_FLOW_IQ_MIRRORED) {
+		i0 = n - 1 - i0;
+		i1 = n - 1 - i1;
+	}
+
+	return (float) (arr[i0] * (1.0 - t) + arr[i1] * t);
+}
+
+static float spec_at(const screen_t *scr, const view_t *v, int x)
+{
+	return bin_at(scr->spec, v, x);
+}
+
+static float peak_at(const screen_t *scr, const view_t *v, int x)
+{
+	return bin_at(scr->peak, v, x);
+}
+
+static int f_to_x(const view_t *v, int64_t f)
+{
+	return (int) ((f - v->lo) * v->w / v->span);
 }
 
 //
@@ -855,13 +1033,6 @@ static int spec_y(float db)
 
 	v = v < 0.0f ? 0.0f : v > 1.0f ? 1.0f : v;
 	return SPEC_Y + SPEC_H - 1 - (int) (v * (float) (SPEC_H - 1));
-}
-
-static float peak_at(const screen_t *scr, int x, int w)
-{
-	int i = x * X6100_FLOW_SAMPLES / w;
-
-	return scr->peak[X6100_FLOW_IQ_MIRRORED ? X6100_FLOW_SAMPLES - 1 - i : i];
 }
 
 static float spec_norm(float db)
@@ -1249,6 +1420,32 @@ static void vu_update(screen_t *scr, double target, uint64_t t)
 	}
 }
 
+//
+// Shift a band of rows horizontally by dx pixels (positive = right), fill the gap black
+//
+
+static void wf_shift(x6100_lcd_t *lcd, int y0, int h, int dx)
+{
+	int w = lcd->w;
+
+	if (dx >= w || dx <= -w) {
+		x6100_lcd_fill(lcd, 0, y0, w, h, 0x000000);
+		return;
+	}
+
+	for (int y = y0; y < y0 + h; y++) {
+		uint32_t *row = lcd->pix + (size_t) y * (size_t) w;
+
+		if (dx > 0) {
+			memmove(row + dx, row, (size_t) (w - dx) * sizeof(uint32_t));
+			memset(row, 0, (size_t) dx * sizeof(uint32_t));
+		} else {
+			memmove(row, row - dx, (size_t) (w + dx) * sizeof(uint32_t));
+			memset(row + w + dx, 0, (size_t) -dx * sizeof(uint32_t));
+		}
+	}
+}
+
 static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 {
 	x6100_lcd_t *lcd = &scr->lcd;
@@ -1372,42 +1569,107 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 		return;
 
 	//
-	// Spectrum
+	// Spectrum in the scope window
 	//
+	view_t v = scope_view(rx, W);
+	bool fixed = rx->scope == SCOPE_FIX || rx->scope == SCOPE_FIX_S;
+
 	x6100_lcd_fill(lcd, 0, SPEC_Y, W, SPEC_H, 0x05080C);
+
+	//
+	// Waterfall alignment: a mode change clears it; in the scrolling modes a moved
+	// window shifts it by the same number of pixels, so it stays frequency aligned
+	//
+	if (rx->scope != scr->wf_scope || rx->span != scr->wf_span) {
+		x6100_lcd_fill(lcd, 0, WF_Y, W, lcd->h - WF_Y, 0x000000);
+		scr->wf_scope = rx->scope;
+		scr->wf_span = rx->span;
+		scr->wf_ref = (double) v.lo;
+	} else if (rx->scope == SCOPE_CENTER_S || rx->scope == SCOPE_FIX_S) {
+		int dx = (int) lround((scr->wf_ref - (double) v.lo) * W / v.span);
+
+		if (dx != 0) {
+			wf_shift(lcd, WF_Y, lcd->h - WF_Y, dx);
+			scr->wf_ref -= (double) dx * v.span / W;
+		}
+	} else {
+		scr->wf_ref = (double) v.lo;
+	}
 
 	int pb_lo, pb_hi;
 
 	passband(rx, &pb_lo, &pb_hi);
-	x6100_lcd_fill(lcd, hz_to_x(pb_lo, W), SPEC_Y, hz_to_x(pb_hi, W) - hz_to_x(pb_lo, W) + 1, SPEC_H, 0x183820);
 
-	for (int hz = -GRID_HZ * 4; hz <= GRID_HZ * 4; hz += GRID_HZ) {
-		char lbl[8];
-		int gx = hz_to_x(hz, W);
+	{
+		int x0 = f_to_x(&v, (int64_t) rx->freq + pb_lo);
+		int x1 = f_to_x(&v, (int64_t) rx->freq + pb_hi);
 
-		x6100_lcd_vline(lcd, gx, SPEC_Y, SPEC_Y + SPEC_H - 1, 0x1A2430);
+		x0 = x0 < 0 ? 0 : x0;
+		x1 = x1 >= W ? W - 1 : x1;
 
-		if (hz == 0)
-			continue;
+		if (x1 >= x0)
+			x6100_lcd_fill(lcd, x0, SPEC_Y, x1 - x0 + 1, SPEC_H, 0x183820);
+	}
 
-		snprintf(lbl, sizeof(lbl), "%+d", hz / 1000);
-		x6100_lcd_text(lcd, gx - x6100_lcd_text_width(lbl, 2) / 2, SPEC_Y + 4, 2, lbl, SCR_DIM);
+	//
+	// Frequency grid: relative kHz around the VFO in the centre modes, absolute
+	// MHz on round frequencies in the fixed modes
+	//
+	if (fixed) {
+		int step = grid_step(v.span);
+
+		for (int64_t g = (v.lo / step + 1) * step; g < v.lo + v.span; g += step) {
+			char lbl[16];
+			int gx = f_to_x(&v, g);
+
+			x6100_lcd_vline(lcd, gx, SPEC_Y, SPEC_Y + SPEC_H - 1, 0x1A2430);
+
+			if (step >= 1000)
+				snprintf(lbl, sizeof(lbl), "%d.%03d", (int) (g / 1000000), (int) (g / 1000 % 1000));
+			else
+				snprintf(lbl, sizeof(lbl), "%d.%04d", (int) (g / 1000000), (int) (g / 100 % 10000));
+
+			x6100_lcd_text(lcd, gx - x6100_lcd_text_width(lbl, 1) / 2, SPEC_Y + 4, 1, lbl, SCR_DIM);
+		}
+	} else {
+		int step = grid_step(v.span);
+
+		for (int hz = -(v.span / 2) / step * step; hz <= v.span / 2; hz += step) {
+			char lbl[12];
+			int gx = f_to_x(&v, (int64_t) rx->freq + hz);
+
+			x6100_lcd_vline(lcd, gx, SPEC_Y, SPEC_Y + SPEC_H - 1, 0x1A2430);
+
+			if (hz == 0 || gx < LBL_W + 12 || gx > W - 24)
+				continue;
+
+			if (step >= 1000)
+				snprintf(lbl, sizeof(lbl), "%+d", hz / 1000);
+			else
+				snprintf(lbl, sizeof(lbl), "%+.1f", hz / 1000.0);
+
+			x6100_lcd_text(lcd, gx - x6100_lcd_text_width(lbl, 2) / 2, SPEC_Y + 4, 2, lbl, SCR_DIM);
+		}
 	}
 
 	for (int db = (int) SPEC_DB_MAX - GRID_DB; db > (int) SPEC_DB_MIN; db -= GRID_DB) {
-		char lbl[8];
 		int gy = SPEC_Y + SPEC_H - 1 - (int) (spec_norm((float) db) * (float) (SPEC_H - 1));
 
-		(void) lbl;
 		x6100_lcd_hline(lcd, 0, W - 1, gy, 0x1A2430);
 	}
 
 	int prev_y = -1;
 
 	for (int x = 0; x < W; x++) {
-		int y = spec_y(spec_at(scr, x, W));
-		int py = spec_y(peak_at(scr, x, W));
+		int y, py;
 
+		if (spec_index(&v, x) < 0) {
+			prev_y = -1;
+			continue;
+		}
+
+		y = spec_y(spec_at(scr, &v, x));
+		py = spec_y(peak_at(scr, &v, x));
 		x6100_lcd_vline(lcd, x, y, SPEC_Y + SPEC_H - 1, SCOPE_FILL);
 		x6100_lcd_fill(lcd, x, py, 1, 1, SCOPE_PEAK);
 		x6100_lcd_vline(lcd, x, prev_y < 0 ? y : prev_y, y, SCOPE_LINE);
@@ -1429,7 +1691,38 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 		x6100_lcd_text(lcd, 2, gy - 9, 1, lbl, SCR_DIM);
 	}
 
-	x6100_lcd_vline(lcd, W / 2, SPEC_Y, SPEC_Y + SPEC_H - 1, SCR_WARN);
+	//
+	// VFO cursor; in a fixed window an arrow at the edge when the VFO is outside it
+	//
+	{
+		int cx = f_to_x(&v, rx->freq);
+
+		if (cx >= 0 && cx < W)
+			x6100_lcd_vline(lcd, cx, SPEC_Y, SPEC_Y + SPEC_H - 1, SCR_WARN);
+		else if (cx < 0)
+			x6100_lcd_text(lcd, LBL_W + 2, SPEC_Y + SPEC_H / 2 - 7, 2, "<", SCR_WARN);
+		else
+			x6100_lcd_text(lcd, W - 14, SPEC_Y + SPEC_H / 2 - 7, 2, ">", SCR_WARN);
+	}
+
+	//
+	// Scope mode, top right of the spectrum
+	//
+	{
+		static const char *names[] = { "CENTER", "SCROLL-C", "FIX", "SCROLL-F" };
+		char m[24];
+		int tw;
+
+		if (rx->span % 2000 == 0)
+			snprintf(m, sizeof(m), "%s +-%dk", names[rx->scope], rx->span / 2000);
+		else
+			snprintf(m, sizeof(m), "%s +-%d.%dk", names[rx->scope], rx->span / 2000, rx->span / 200 % 10);
+
+		tw = x6100_lcd_text_width(m, 2);
+
+		x6100_lcd_fill(lcd, W - tw - 10, SPEC_Y + 20, tw + 8, 18, 0x000000);
+		x6100_lcd_text(lcd, W - tw - 6, SPEC_Y + 22, 2, m, SCR_ACCENT);
+	}
 
 	//
 	// Last TX refusal or trip, until the next TX
@@ -1442,13 +1735,17 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 	}
 
 	//
-	// Waterfall, newest line on top
+	// Waterfall, newest line on top; no data outside the IQ span stays black
 	//
 	if (new_line) {
 		x6100_lcd_scroll_down(lcd, WF_Y, lcd->h - WF_Y);
 
-		for (int x = 0; x < W; x++)
-			x6100_lcd_fill(lcd, x, WF_Y, 1, 1, wf_colour((spec_at(scr, x, W) - (scr->floor_db - WF_BELOW_DB)) / WF_RANGE_DB));
+		for (int x = 0; x < W; x++) {
+			uint32_t c = spec_index(&v, x) < 0 ? 0x000000
+				: wf_colour((spec_at(scr, &v, x) - (scr->floor_db - WF_BELOW_DB)) / WF_RANGE_DB);
+
+			x6100_lcd_fill(lcd, x, WF_Y, 1, 1, c);
+		}
 	}
 }
 
@@ -1490,6 +1787,29 @@ static bool console_token(rx_t *rx, const char *t)
 			rx->agc = agcs[i].agc;
 			return true;
 		}
+	}
+
+	if (strcasecmp(t, "center") == 0 || strcasecmp(t, "scrollc") == 0) {
+		rx->scope = strcasecmp(t, "center") == 0 ? SCOPE_CENTER : SCOPE_CENTER_S;
+		return true;
+	}
+
+	if (strcasecmp(t, "fix") == 0 || strcasecmp(t, "scrollf") == 0) {
+		if (rx->scope != SCOPE_FIX && rx->scope != SCOPE_FIX_S)
+			scope_fix_start(rx);
+
+		rx->scope = strcasecmp(t, "fix") == 0 ? SCOPE_FIX : SCOPE_FIX_S;
+		return true;
+	}
+
+	if (strcasecmp(t, "att") == 0 || strcasecmp(t, "noatt") == 0) {
+		rx->att = strcasecmp(t, "att") == 0;
+		return true;
+	}
+
+	if (strcasecmp(t, "pre") == 0 || strcasecmp(t, "nopre") == 0) {
+		rx->pre = strcasecmp(t, "pre") == 0;
+		return true;
 	}
 
 	if (isdigit((unsigned char) t[0])) {
@@ -1613,7 +1933,7 @@ int main(int argc, char **argv)
 	size_t cmd_len = 0;
 	int stdin_slot = -1;
 	rx_t rx = { .vol = 20, .rfg = 100, .step = 100, .agc = X6100_AGC_AUTO, .mode = X6100_MODE_USB,
-		.txpwr = TXPWR_DEF };
+		.txpwr = TXPWR_DEF, .scope = SCOPE_CENTER, .span = SPAN_HZ };
 	int rc;
 
 	for (int i = 0; i < BAND_COUNT; i++)
@@ -1629,7 +1949,7 @@ int main(int argc, char **argv)
 		}
 
 		if (!console_token(&rx, argv[i])) {
-			fprintf(stderr, "usage: %s [--oob] [freq] [usb|lsb|cw|cwr|am|nfm] [off|slow|fast|auto]\n", argv[0]);
+			fprintf(stderr, "usage: %s [--oob] [freq] [usb|lsb|cw|cwr|am|nfm] [off|slow|fast|auto] [att|noatt] [pre|nopre]\n", argv[0]);
 			return 1;
 		}
 	}
@@ -1690,7 +2010,11 @@ int main(int argc, char **argv)
 		x6100_lcd_flush(&scr.lcd);
 	}
 
+#ifdef X6100_RX_ONLY
+	printf("x6100_rx (receive only): PWR or Ctrl-C to quit\n");
+#else
 	printf("x6100_trx: PWR or Ctrl-C to quit\n");
+#endif
 	show(&rx);
 
 	uint64_t last_refresh = now_ms();
@@ -1741,6 +2065,7 @@ int main(int argc, char **argv)
 		}
 
 		if (changed) {
+			scope_follow(&rx);
 			apply(&ctl, &cal, &rx);
 			show(&rx);
 			dirty = true;
