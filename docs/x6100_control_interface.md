@@ -399,8 +399,9 @@ BASE 1.1.9, GUI stopped, own code only:
 | NFM carrier (`x6100_tx carrier`) | 5 W into dummy load, power/SWR/ALC telemetry decoded correctly |
 | Codec TX (`x6100_tx codec`) | 2026-10-19: 1 kHz tone at -30 dBFS, keyed with reg 12 `0x4000`, in USB and in USB-D: steady tone heard on IC-7851; mic works again after mode restore |
 | PTT + codec audio | no modulation in any mode or reg 20/21 setting: PTT takes the microphone input |
-| Flow IQ as measuring instrument (`x6100_iqcal`) | 2026-10-20: about 30 dB between a strong carrier (S9+10, reads -2 dB) and the floor, level-normalised; RX image of that carrier not visible above the floor; registers 48/49 show no measurable effect this way. IQ calibration parked |
+| Flow IQ as measuring instrument (`x6100_iqcal`) | 2026-10-20: about 30 dB between a strong carrier (S9+10, reads -2 dB) and the floor; a weak broadcast carrier read almost the same (-4 dB), so the display data look level-scaled, though ATT does show (next row); RX image of that carrier not visible above the floor; registers 48/49 show no measurable effect this way. IQ calibration parked |
 | Birdie | 7.309300 MHz, no antenna |
+| ATT | 2026-10-20: flow IQ level -58.3 dB without, -70.1 dB with ATT: about 12 dB |
 
 ## 10. Front panel input (from stock DTB `sun8i-r16-x6100.dtb`)
 
@@ -460,6 +461,10 @@ C definitions in `include/x6100_keys.h`.
   - USB-D / LSB-D (mode 3 / 1) with PTT: presumably the external line input (not tested).
   Line-in level is register 20 [7:0], stock default 10 (range 0-36).
 - ALC telemetry reads 100 (10.0) with no audio arriving, not overdrive.
+- TX enable per VFO: registers 0 / 6 bit 0 (old lib name `vfoa_ham_band`). The stock UI sets it from
+  `XBandPlan::isHamBand(freq)` in `xradio_update_params()`; `/etc/xgradio/xgradio.conf` `[mods]
+  fullband-tx=enable` makes `isHamBand` return true everywhere. With bit 0 clear the baseband refuses
+  PTT (verified 5.450 MHz); the ATU tune carrier is not blocked. The band index (reg 13) is unaffected.
 - Mixer: the R1CBU / IU1WXY image can leave `DAC Playback` off; `x6100_mixer_tx_setup()` sets it.
 - ATU (`MainWidget::slot_atuTune`):
   1. set register 12 `0x2000` (tune) and `0x1000` (ATU enable)

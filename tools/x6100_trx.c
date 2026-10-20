@@ -15,6 +15,9 @@
  *   F1             scope CENTER <-> SCROLL-C (waterfall follows tuning)
  *   F2             scope FIX <-> SCROLL-F (fixed window; SCROLL-F slides at the edges)
  *   F3             scope span +-48 / 24 / 12 / 6 / 3 / 1.5 kHz
+ *   F4             TX meter on dial and bar: PO / SWR / ALC
+ *   F5             receive filter FIL1 / FIL2 / FIL3 (wide / mid / narrow per mode)
+ *                  (F1-F5 do not drop a latched TX)
  *   AGC            off / slow / fast / auto
  *   PTT            hold: transmit while held; tap (< 400 ms): latch TX on,
  *                  next press drops it
@@ -35,6 +38,7 @@
  *     off slow fast auto              AGC
  *     att noatt pre nopre             attenuator / preamp
  *     center scrollc fix scrollf      spectrum scope mode (also F1 / F2)
+ *     fil1 fil2 fil3                  receive filter
  *     step 1|10|100|1000|5000         tuning step
  *     pwr 0.1-10                      TX power in W
  *   tokens can be combined: "14074000 usb"
@@ -152,6 +156,16 @@ typedef struct
 	scope_mode_t scope;
 	int64_t fix_lo;		/* left edge of the fixed window, Hz */
 	int span;		/* window width, Hz */
+
+	//
+	// Meter shown on the dial during TX (F4): 0 Po, 1 SWR, 2 ALC
+	//
+	int meter;
+
+	//
+	// Receive filter FIL1-3 (F5), 0-2
+	//
+	int fil;
 } rx_t;
 
 static const band_t g_bands[] = {
@@ -254,25 +268,39 @@ static int band_of(uint32_t freq)
 	return -1;
 }
 
-static void mode_filter(x6100_mode_t mode, uint32_t *low, uint32_t *high)
+//
+// Receive filters FIL1 / FIL2 / FIL3 (wide / mid / narrow) per mode family,
+// audio passband low / high in Hz; CW centred on the 700 Hz sidetone
+//
+
+static void mode_filter(x6100_mode_t mode, int fil, uint32_t *low, uint32_t *high)
 {
+	static const uint32_t ssb[3][2] = { { 100, 3000 }, { 300, 2700 }, { 300, 2100 } };
+	static const uint32_t cw[3][2] = { { 100, 1300 }, { 450, 950 }, { 575, 825 } };
+	static const uint32_t am[3][2] = { { 0, 4500 }, { 0, 3000 }, { 0, 2000 } };
+	const uint32_t (*t)[2];
+
+	fil = fil < 0 || fil > 2 ? 0 : fil;
+
 	switch (mode) {
 	case X6100_MODE_CW:
 	case X6100_MODE_CWR:
-		*low = 450;
-		*high = 950;
+		t = cw;
 		break;
 	case X6100_MODE_AM:
 	case X6100_MODE_NFM:
-		*low = 0;
-		*high = 4000;
+		t = am;
 		break;
 	default:
-		*low = 50;
-		*high = 2950;
+		t = ssb;
 		break;
 	}
+
+	*low = t[fil][0];
+	*high = t[fil][1];
 }
+
+static bool g_allow_oob;	/* --oob: skip the band check, enable TX in the baseband everywhere */
 
 //
 // Push the receiver state into the register shadow
@@ -282,10 +310,20 @@ static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 {
 	uint32_t low, high;
 
-	mode_filter(rx->mode, &low, &high);
+	mode_filter(rx->mode, rx->fil, &low, &high);
 
 	x6100_set_freq(ctl, 0, rx->freq);
 	x6100_set_freq(ctl, 1, rx->freq);
+
+	//
+	// Registers 0 / 6: TX enable per VFO ("ham band"), normally set from the band
+	// plan; --oob sets it everywhere, as the stock UI does with fullband-tx=enable.
+	// The band index in register 13 stays the real one (filters, calibration).
+	//
+	if (g_allow_oob) {
+		x6100_ctl_set(ctl, X6100_REG_VFOA_BAND, 1);
+		x6100_ctl_set(ctl, X6100_REG_VFOB_BAND, 1);
+	}
 	x6100_set_mode(ctl, 0, rx->mode);
 	x6100_set_mode(ctl, 1, rx->mode);
 	x6100_ctl_set(ctl, X6100_REG_VFOA_AGC, rx->agc);
@@ -331,7 +369,6 @@ static void apply_flags(x6100_ctl_t *ctl, const rx_t *rx)
 // TX allowed here? Sets rx->warn when not
 //
 
-static bool g_allow_oob;	/* --oob: skip the band check (test use) */
 
 static bool tx_allowed(rx_t *rx)
 {
@@ -476,9 +513,13 @@ static int grid_step(int span)
 static bool on_key(rx_t *rx, int key)
 {
 	//
-	// Any other key drops a latched TX or aborts a tune, and does nothing else
+	// Any other key drops a latched TX or aborts a tune, and does nothing else;
+	// F1-F5 are exempt (scope, meter, receive filter)
 	//
-	if (rx->ptt_latch || rx->tuning) {
+	bool display_key = key == X6100_KEY_F1 || key == X6100_KEY_F2 || key == X6100_KEY_F3 || key == X6100_KEY_F4
+		|| key == X6100_KEY_F5;
+
+	if ((rx->ptt_latch || rx->tuning) && !display_key) {
 		tx_drop(rx, rx->tuning ? "TUNE ABORTED" : NULL);
 		return true;
 	}
@@ -534,6 +575,12 @@ static bool on_key(rx_t *rx, int key)
 		break;
 	case X6100_KEY_F3:
 		scope_span_next(rx);
+		break;
+	case X6100_KEY_F4:
+		rx->meter = (rx->meter + 1) % 3;
+		break;
+	case X6100_KEY_F5:
+		rx->fil = (rx->fil + 1) % 3;
 		break;
 	case X6100_KEY_MFK_PUSH:
 		if (rx->mfk_pwr)
@@ -708,9 +755,10 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 #define FREQ_SCALE	8	/* 5x7 fallback font scale, unused with the AA font */
 #define INFO_Y		104
 #define INFO_COL_STEP	12
-#define INFO_COL_VOL	138
-#define INFO_COL_RFG	252
-#define INFO_COL_VBAT	378
+#define INFO_COL_VOL	132
+#define INFO_COL_RFG	228
+#define INFO_COL_FIL	348
+#define INFO_COL_VBAT	408
 #define SBAR_X		34
 #define SBAR_W		410
 #define SBAR_LBL_Y	121
@@ -753,7 +801,8 @@ typedef enum
 {
 	VU_SCALE_S = 0,
 	VU_SCALE_PO,
-	VU_SCALE_ALC
+	VU_SCALE_ALC,
+	VU_SCALE_SWR
 } vu_scale_t;
 
 typedef struct
@@ -781,6 +830,7 @@ typedef struct
 	double swr;
 	int alc;		/* 0-100; 100 = no audio arriving */
 	bool was_tx;
+	int was_meter;
 
 	//
 	// Waterfall alignment state
@@ -1004,7 +1054,7 @@ static void passband(const rx_t *rx, int *lo, int *hi)
 {
 	uint32_t low, high;
 
-	mode_filter(rx->mode, &low, &high);
+	mode_filter(rx->mode, rx->fil, &low, &high);
 
 	switch (rx->mode) {
 	case X6100_MODE_LSB:
@@ -1114,11 +1164,12 @@ static double swr_frac(double swr)
 }
 
 //
-// Bar meter under the frequency: S scale in RX, Po scale in TX; SWR scale below,
+// Bar meter under the frequency: S scale in RX; in TX the meter chosen with F4
+// (Po, SWR or ALC) on the upper scale; SWR scale below,
 // with an SWR bar in TX. frac and peak are 0..1 of the bar width.
 //
 
-static void draw_sbar(x6100_lcd_t *lcd, double frac, double peak, bool tx, double swr)
+static void draw_sbar(x6100_lcd_t *lcd, double frac, double peak, bool tx, double swr, int meter)
 {
 	static const struct { double frac; const char *lbl; } s_marks[] = {
 		{ 1.0 / 9 * 0.6, "1" }, { 3.0 / 9 * 0.6, "3" }, { 5.0 / 9 * 0.6, "5" },
@@ -1140,7 +1191,35 @@ static void draw_sbar(x6100_lcd_t *lcd, double frac, double peak, bool tx, doubl
 
 	x6100_lcd_fill(lcd, 0, SBAR_LBL_Y - 2, LEFT_W, SBAR_SWR_LBL_Y + 10 - SBAR_LBL_Y, 0x000000);
 
-	if (tx) {
+	if (tx && meter == 1) {
+		//
+		// SWR on the upper scale: white to 3, red above
+		//
+		x6100_lcd_text(lcd, 0, SBAR_LBL_Y + 4, 2, "SWR", white);
+		x6100_lcd_hline(lcd, x0, x9, SBAR_SCALE_Y, white);
+		x6100_lcd_fill(lcd, x9, SBAR_SCALE_Y - 1, x1 - x9 + 1, 3, red);
+
+		for (size_t i = 0; i < sizeof(swr_marks) / sizeof(swr_marks[0]); i++) {
+			int x = x0 + (int) (swr_marks[i].frac * SBAR_W);
+			int tw = x6100_lcd_text_width(swr_marks[i].lbl, 2);
+
+			x6100_lcd_vline(lcd, x, SBAR_SCALE_Y - 6, SBAR_SCALE_Y, swr_marks[i].frac > 0.6 ? red : white);
+			x = i + 1 == sizeof(swr_marks) / sizeof(swr_marks[0]) ? x - tw : x - tw / 2;
+			x6100_lcd_text(lcd, x, SBAR_LBL_Y, 2, swr_marks[i].lbl, swr_marks[i].frac > 0.6 ? red : white);
+		}
+	} else if (tx && meter == 2) {
+		//
+		// ALC on the upper scale: 0-100, ticks every 10
+		//
+		x6100_lcd_text(lcd, 0, SBAR_LBL_Y + 4, 2, "ALC", white);
+		x6100_lcd_hline(lcd, x0, x1, SBAR_SCALE_Y, white);
+
+		for (int a = 1; a <= 10; a++)
+			x6100_lcd_vline(lcd, x0 + a * SBAR_W / 10, SBAR_SCALE_Y - (a % 5 ? 3 : 6), SBAR_SCALE_Y, white);
+
+		x6100_lcd_text(lcd, x0 + SBAR_W / 2 - 12, SBAR_LBL_Y, 2, "50", white);
+		x6100_lcd_text(lcd, x1 - 36, SBAR_LBL_Y, 2, "100", white);
+	} else if (tx) {
 		//
 		// Po scale: 0-10 W linear, ticks every watt
 		//
@@ -1295,32 +1374,50 @@ static void draw_vu(x6100_lcd_t *lcd, double needle, double marker, vu_scale_t s
 	x6100_lcd_fill(lcd, VU_X, VU_Y, VU_W, VU_H, bg);
 
 	//
-	// S scale: white to S9, heavy red above; Po labels under it
+	// RX: S scale, white to S9, heavy red above, small Po labels under it.
+	// TX (PO meter): the main arc becomes the Po scale, 0-10 W in white
 	//
-	vu_arc(lcd, 0.0, 0.6, VU_R_S, 2, white);
-	vu_arc(lcd, 0.6, 1.0, VU_R_S + 2, 5, red);
+	if (scale == VU_SCALE_PO) {
+		vu_arc(lcd, 0.0, 1.0, VU_R_S, 2, white);
 
-	for (int su = 1; su <= 9; su++) {
-		double f = su / 9.0 * 0.6;
+		for (int w = 0; w <= 10; w++) {
+			double f = w / 10.0 * 0.97;
 
-		vu_tick(lcd, f, VU_R_S, VU_R_S + (su % 2 ? 9 : 5), white);
+			vu_tick(lcd, f, VU_R_S, VU_R_S + (w % 2 ? 5 : 9), white);
 
-		if (su % 2) {
-			snprintf(s, sizeof(s), "%d", su);
-			vu_label(lcd, f, VU_R_S + 20, 2, s, white);
+			if (w % 2 == 0) {
+				snprintf(s, sizeof(s), w == 10 ? "10W" : "%d", w);
+				vu_label(lcd, f, VU_R_S + 20, 2, s, white);
+			}
 		}
-	}
 
-	for (int db = 20; db <= 60; db += 20) {
-		snprintf(s, sizeof(s), "+%d", db);
-		vu_label(lcd, 0.6 + db / 60.0 * 0.4, VU_R_S + 20, 2, s, red);
-	}
+		vu_label(lcd, -0.11, VU_R_S + 12, 2, "PO", white);
+	} else {
+		vu_arc(lcd, 0.0, 0.6, VU_R_S, 2, white);
+		vu_arc(lcd, 0.6, 1.0, VU_R_S + 2, 5, red);
 
-	vu_label(lcd, 0.0, VU_R_S + 20, 2, "S", white);
+		for (int su = 1; su <= 9; su++) {
+			double f = su / 9.0 * 0.6;
 
-	for (size_t i = 0; i < sizeof(po) / sizeof(po[0]); i++) {
-		vu_tick(lcd, po[i].f, VU_R_S - 1, VU_R_S - 5, grey);
-		vu_label(lcd, po[i].f, VU_R_S - 13, 1, po[i].s, grey);
+			vu_tick(lcd, f, VU_R_S, VU_R_S + (su % 2 ? 9 : 5), white);
+
+			if (su % 2) {
+				snprintf(s, sizeof(s), "%d", su);
+				vu_label(lcd, f, VU_R_S + 20, 2, s, white);
+			}
+		}
+
+		for (int db = 20; db <= 60; db += 20) {
+			snprintf(s, sizeof(s), "+%d", db);
+			vu_label(lcd, 0.6 + db / 60.0 * 0.4, VU_R_S + 20, 2, s, red);
+		}
+
+		vu_label(lcd, 0.0, VU_R_S + 20, 2, "S", white);
+
+		for (size_t i = 0; i < sizeof(po) / sizeof(po[0]); i++) {
+			vu_tick(lcd, po[i].f, VU_R_S - 1, VU_R_S - 5, grey);
+			vu_label(lcd, po[i].f, VU_R_S - 13, 1, po[i].s, grey);
+		}
 	}
 
 	//
@@ -1390,6 +1487,8 @@ static double vu_scale_radius(vu_scale_t scale)
 	switch (scale) {
 	case VU_SCALE_PO:
 		return VU_R_S - 3;
+	case VU_SCALE_SWR:
+		return VU_R_SWR;
 	case VU_SCALE_ALC:
 		return VU_R_ALC;
 	default:
@@ -1533,33 +1632,60 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 
 	snprintf(s, sizeof(s), "%.1fV", scr->vbat);
 	x6100_lcd_text(lcd, INFO_COL_VBAT, INFO_Y, 2, s, SCR_DIM);
+	snprintf(s, sizeof(s), "FIL%d", rx->fil + 1);
+	x6100_lcd_text(lcd, INFO_COL_FIL, INFO_Y, 2, s, SCR_DIM);
 
 	//
 	// Meters: S in RX; Po (needle, bar) and SWR in TX, marker on the ALC arc
 	// while the ALC is working, else on Po
 	//
-	if (scr->tx != scr->was_tx) {
+	if (scr->tx != scr->was_tx || rx->meter != scr->was_meter) {
 		scr->needle = 0.0;
 		scr->vu_peak = 0.0;
 		scr->was_tx = scr->tx;
+		scr->was_meter = rx->meter;
 	}
 
 	if (scr->tx) {
-		char l1[16], l2[16];
+		static const char *names[] = { "PO", "SWR", "ALC" };
+		char l1[16], l2[24];
 		double po = scr->pwr / 10.0;
-		bool alc_active = scr->alc > 0 && scr->alc < 100;
+		int alc = scr->alc >= 100 ? 0 : scr->alc;	/* 100 = no audio arriving */
+		double target, marker;
+		vu_scale_t scale;
 
-		vu_update(scr, po, now_ms());
-		draw_sbar(lcd, po, scr->vu_peak, true, scr->swr);
-		snprintf(l1, sizeof(l1), "%.1fW", scr->pwr);
-		snprintf(l2, sizeof(l2), "SWR %.1f", scr->swr);
-		draw_vu(lcd, scr->needle, alc_active ? scr->alc / 100.0 * 0.34 : scr->vu_peak,
-			alc_active ? VU_SCALE_ALC : VU_SCALE_PO, l1, l2);
+		switch (rx->meter) {
+		case 1:
+			target = swr_frac(scr->swr);
+			scale = VU_SCALE_SWR;
+			snprintf(l1, sizeof(l1), "SWR %.1f", scr->swr);
+			snprintf(l2, sizeof(l2), "%.1fW ALC %d", scr->pwr, alc);
+			break;
+		case 2:
+			target = alc / 100.0 * 0.34;
+			scale = VU_SCALE_ALC;
+			snprintf(l1, sizeof(l1), "ALC %d", alc);
+			snprintf(l2, sizeof(l2), "%.1fW SWR %.1f", scr->pwr, scr->swr);
+			break;
+		default:
+			target = po * 0.97;	/* 10 W at the 10W mark */
+			scale = VU_SCALE_PO;
+			snprintf(l1, sizeof(l1), "%.1fW", scr->pwr);
+			snprintf(l2, sizeof(l2), "SWR %.1f", scr->swr);
+			break;
+		}
+
+		vu_update(scr, target, now_ms());
+		marker = scr->vu_peak;
+		draw_sbar(lcd, rx->meter == 0 ? po : rx->meter == 1 ? swr_frac(scr->swr) : alc / 100.0,
+			rx->meter == 2 ? scr->vu_peak / 0.34 : scr->vu_peak, true, scr->swr, rx->meter);
+		draw_vu(lcd, scr->needle, marker, scale, l1, l2);
+		x6100_lcd_text(lcd, VU_X + 8, VU_Y + VU_H - 20, 2, names[rx->meter], SCR_ACCENT);
 	} else {
 		char l1[16], l2[16];
 
 		vu_update(scr, meter_frac(scr->sig_dbm), now_ms());
-		draw_sbar(lcd, meter_frac(scr->sig_dbm), scr->vu_peak, false, 1.0);
+		draw_sbar(lcd, meter_frac(scr->sig_dbm), scr->vu_peak, false, 1.0, 0);
 		s_reading(scr->sig_dbm, l1, sizeof(l1));
 		snprintf(l2, sizeof(l2), "%.0fdBm", scr->sig_dbm);
 		draw_vu(lcd, scr->needle, scr->vu_peak, VU_SCALE_S, l1, l2);
@@ -1799,6 +1925,11 @@ static bool console_token(rx_t *rx, const char *t)
 			scope_fix_start(rx);
 
 		rx->scope = strcasecmp(t, "fix") == 0 ? SCOPE_FIX : SCOPE_FIX_S;
+		return true;
+	}
+
+	if (strncasecmp(t, "fil", 3) == 0 && t[3] >= '1' && t[3] <= '3' && t[4] == '\0') {
+		rx->fil = t[3] - '1';
 		return true;
 	}
 
@@ -2178,11 +2309,16 @@ int main(int argc, char **argv)
 
 		if (t - last_meter >= METER_MS && level_n > 0) {
 			scr.meter_db = level / level_n;
-			show(&rx);
-			if (scr.tx)
-				printf("TX %4.1f W  swr %3.1f  alc %3d", scr.pwr, scr.swr, scr.alc);
-			else
+			if (scr.tx) {
+				//
+				// TX: one line per update, so the readings stay on screen
+				//
+				printf("\nTX %4.1f W  swr %3.1f  alc %3d  (raw pwr %u)\n", scr.pwr, scr.swr, scr.alc,
+					(unsigned) frame.tx_power);
+			} else {
+				show(&rx);
 				printf("iq %6.1f dB  vbat %.1f", scr.meter_db, frame.vbat * 0.1);
+			}
 			fflush(stdout);
 			level = 0.0;
 			level_n = 0;
