@@ -46,6 +46,7 @@ Not yet: GPIO, CI-V, TX from the receiver UI.
 | `tools/x6100_i2csniff.c` | LD_PRELOAD logger for register writes of another UI (glibc build) |
 | `tools/x6100_rx.c` | standalone receiver: front panel, display, meters, spectrum |
 | `tools/x6100_trx.c` | transceiver: x6100_rx plus PTT, ATU, TX power, TX meters |
+| `tools/x6100_iqcal.c` | RX IQ image calibration (registers 48/49) against a steady carrier |
 | `scripts/x6100_ui.sh` | stop/start the GUI (stock and R1CBU images) |
 | `docs/x6100_control_interface.md` | protocol documentation |
 | `docs/x6100_netaudio_design.md` | network audio / wfview design (draft) |
