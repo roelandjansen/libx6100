@@ -51,6 +51,7 @@ Not yet: GPIO, CI-V, TX from the receiver UI.
 | `scripts/x6100_ui.sh` | stop/start the GUI (stock and R1CBU images) |
 | `docs/x6100_control_interface.md` | protocol documentation |
 | `docs/x6100_netaudio_design.md` | network audio / wfview design (draft) |
+| `docs/x6100_baseband_handover.md` | handover for a separate baseband-firmware (clean-room) discussion |
 
 ## Build
 
