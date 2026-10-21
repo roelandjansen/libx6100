@@ -15,12 +15,13 @@
  *
  * --boost sets the codec Mic1 boost (0 = 0 dB, 1 = +24 dB, +3 dB per step); default 0
  * for AM / NFM (the stock +24 dB saturates the codec input on AM), 1 otherwise.
+ * --agc and --rfg set the baseband AGC (default auto) and RF gain (default 100).
  *
  * --ft8 waits for the next 15 s UTC slot boundary, records one 15 s slot and
  * writes 12 kHz mono 16-bit (WSJT-X File > Open format); <seconds> is ignored.
  * The radio clock must be on UTC time within about a second (NTP).
  *
- * Usage: x6100_audio <freq_hz> <mode> <seconds> <out.wav> [--iq] [--rate N] [--ft8] [--boost 0-7]
+ * Usage: x6100_audio <freq_hz> <mode> <seconds> <out.wav> [--iq] [--rate N] [--ft8] [--boost 0-7] [--agc off|slow|fast|auto] [--rfg 0-100]
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -50,6 +51,18 @@ static void on_signal(int sig)
 {
 	(void) sig;
 	g_stop = 1;
+}
+
+static int parse_agc(const char *s)
+{
+	static const char *names[] = { "off", "slow", "fast", "auto" };
+
+	for (int i = 0; i < 4; i++) {
+		if (strcasecmp(s, names[i]) == 0)
+			return i;
+	}
+
+	return -2;
 }
 
 static int parse_mode(const char *s, x6100_mode_t *mode)
@@ -181,7 +194,7 @@ static void wait_slot(void)
 
 static void usage(const char *argv0)
 {
-	fprintf(stderr, "usage: %s <freq_hz> <usb|lsb|cw|cwr|am|nfm> <seconds> <out.wav> [--iq] [--rate N] [--ft8] [--boost 0-7]\n", argv0);
+	fprintf(stderr, "usage: %s <freq_hz> <usb|lsb|cw|cwr|am|nfm> <seconds> <out.wav> [--iq] [--rate N] [--ft8] [--boost 0-7] [--agc off|slow|fast|auto] [--rfg 0-100]\n", argv0);
 }
 
 int main(int argc, char **argv)
@@ -194,6 +207,8 @@ int main(int argc, char **argv)
 	x6100_pcm_t pcm;
 	x6100_mode_t mode;
 	int boost = -1;
+	int agc = -1;
+	int rfg = -1;
 	static int16_t buf[PERIOD * CHANNELS];
 	unsigned rate = DEF_RATE;
 	bool iq = false;
@@ -215,6 +230,10 @@ int main(int argc, char **argv)
 			iq = true;
 		else if (strcmp(argv[i], "--ft8") == 0)
 			ft8 = true;
+		else if (strcmp(argv[i], "--agc") == 0 && i + 1 < argc)
+			agc = parse_agc(argv[++i]);
+		else if (strcmp(argv[i], "--rfg") == 0 && i + 1 < argc)
+			rfg = atoi(argv[++i]);
 		else if (strcmp(argv[i], "--boost") == 0 && i + 1 < argc)
 			boost = atoi(argv[++i]);
 		else if (strcmp(argv[i], "--rate") == 0 && i + 1 < argc)
@@ -225,7 +244,7 @@ int main(int argc, char **argv)
 		}
 	}
 
-	if (freq < 100000 || freq > 60000000 || seconds < 1) {
+	if (freq < 100000 || freq > 60000000 || seconds < 1 || agc == -2 || rfg > 100) {
 		usage(argv[0]);
 		return 1;
 	}
@@ -251,6 +270,14 @@ int main(int argc, char **argv)
 	x6100_set_mode(&ctl, 0, mode);
 	x6100_set_mode(&ctl, 1, mode);
 	x6100_ctl_set(&ctl, X6100_REG_RXVOL, RXVOL);
+
+	if (agc >= 0) {
+		x6100_ctl_set(&ctl, X6100_REG_VFOA_AGC, (uint32_t) agc);
+		x6100_ctl_set(&ctl, X6100_REG_VFOB_AGC, (uint32_t) agc);
+	}
+
+	if (rfg >= 0)
+		x6100_ctl_update(&ctl, X6100_REG_RFG_TXPWR_FFTDEC, 0xFF, (uint32_t) rfg);
 	x6100_ctl_update(&ctl, X6100_REG_MIC_PTT_SQL, 1u << 6, iq ? 1u << 6 : 0);
 	x6100_ctl_set(&ctl, X6100_REG_FLAGS, 0);
 
