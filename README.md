@@ -46,7 +46,7 @@ Not yet: GPIO, CI-V, TX from the receiver UI.
 | `tools/x6100_i2csniff.c` | LD_PRELOAD logger for register writes of another UI (glibc build) |
 | `x6100_rx` (binary) | `tools/x6100_trx.c` built with `-DX6100_RX_ONLY`: receiver, never transmits |
 | `tools/x6100_trx.c` | transceiver: x6100_rx plus PTT, ATU, TX power, TX meters |
-| `tools/x6100_spk.c` | experiment: speaker audio through Linux (5.5 kHz low-pass, reg 12 bit 0x8), A/B with any key |
+| `tools/x6100_spk.c` | experiment, negative: speaker through Linux via reg 12 bit 0x8 (capture loses RX audio in play mode), kept for reference |
 | `tools/x6100_iqcal.c` | RX IQ image calibration attempt (registers 48/49); parked: flow IQ too little range to measure |
 | `scripts/x6100_ui.sh` | stop/start the GUI (stock and R1CBU images) |
 | `docs/x6100_control_interface.md` | protocol documentation |

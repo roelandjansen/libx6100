@@ -405,6 +405,7 @@ BASE 1.1.9, GUI stopped, own code only:
 | AM capture level | 2026-10-21: with the stock Mic1 Boost (+24 dB) AM saturates the codec input: RMS -3 dBFS, crest factor 2 dB, harmonics to 24 kHz, DC -2.9 %. Boost 0: RMS -22.6 dBFS, crest about 13 dB, 6-8 kHz down 31 dB, DC 0.1 %. `x6100_mixer_rx_setup(card, 0)` for AM / FM |
 | AM and AGC | 2026-10-21, 7215 kHz: AGC AUTO holds AM at near-constant loudness (50 ms RMS range p1-p99 4 dB), which pulls noise up between words ("sandpaper"); AGC SLOW gives 26 dB range, pauses 15 dB under the median. AGC OFF at RF gain 40: no usable audio. x6100_trx defaults AM / FM to SLOW |
 | AM / FM filter | 2026-10-21: with filter low = 0 an off-tune AM carrier is heard as a beat tone (1 kHz off = 1 kHz tone). The baseband takes the absolute low / high values for the I and Q low-pass filters, so AM / FM need low = -high (as x6100_gui does); filter 2 = filter 1 widened 40 Hz each side. `x6100_set_filter()` |
+| Speaker via Linux (`x6100_spk`) | 2026-10-21: with register 12 bit 0x8 (play mode) set, codec capture no longer carries RX audio (drops from -30 to -54 dBFS within a second, back as soon as 0x8 is cleared); the speaker plays the codec, but there is nothing to feed it. Real-time filtering of the speaker from Linux is not possible this way. The 12 kHz audio images (6-11 kHz) stay on the speaker; recordings / network audio use a Linux low-pass (`x6100_audio --lpf`) |
 
 ## 10. Front panel input (from stock DTB `sun8i-r16-x6100.dtb`)
 
