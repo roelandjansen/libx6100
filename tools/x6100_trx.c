@@ -17,6 +17,9 @@
  *   F3             scope span +-48 / 24 / 12 / 6 / 3 / 1.5 kHz
  *   F4             TX meter on dial and bar: PO / SWR / ALC
  *   F5             receive filter FIL1 / FIL2 / FIL3 (wide / mid / narrow per mode)
+ *   F5 long        filter panel (IC-705 style): MFK turn = BW or SFT, MFK push = BW <-> SFT,
+ *                  MFK long = DEF; F5 = next FIL; F5 long, another key or 10 s idle closes;
+ *                  per mode group (SSB, SSB-D, CW, AM, FM), saved in /etc/x6100/filters.conf
  *                  (F1-F5 do not drop a latched TX)
  *   AGC            off / slow / fast / auto
  *   PTT            hold: transmit while held; tap (< 400 ms): latch TX on,
@@ -65,6 +68,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -166,6 +170,9 @@ typedef struct
 	// Receive filter FIL1-3 (F5), 0-2
 	//
 	int fil;
+	bool fedit;		/* filter panel open (F5 long) */
+	int fedit_par;		/* 0 BW, 1 SFT */
+	uint64_t fedit_since;	/* last panel activity, for the idle close */
 } rx_t;
 
 static const band_t g_bands[] = {
@@ -269,35 +276,190 @@ static int band_of(uint32_t freq)
 }
 
 //
-// Receive filters FIL1 / FIL2 / FIL3 (wide / mid / narrow) per mode family,
-// audio passband low / high in Hz; CW centred on the 700 Hz sidetone
+// Receive filters, IC-705 style: five mode groups x FIL1 / FIL2 / FIL3, each an
+// audio passband low / high in Hz (registers 44-47). Edited with F5 long + MFK as
+// bandwidth (BW) and shift (SFT); kept in G_FIL_PATH.
 //
+
+typedef enum
+{
+	FG_SSB = 0,
+	FG_SSBD,
+	FG_CW,
+	FG_AM,
+	FG_FM,
+	FG_COUNT
+} fgroup_t;
+
+#define FIL_PATH	"/etc/x6100/filters.conf"
+#define FIL_MAX_HZ	4500
+
+static const char *g_fg_name[FG_COUNT] = { "ssb", "ssbd", "cw", "am", "fm" };
+
+static const uint32_t g_fil_def[FG_COUNT][3][2] = {
+	{ { 100, 3000 }, { 300, 2700 }, { 300, 2100 } },	/* SSB */
+	{ { 100, 3000 }, { 300, 2700 }, { 300, 2100 } },	/* SSB-D */
+	{ { 100, 1300 }, { 450, 950 }, { 575, 825 } },		/* CW, centred on 700 Hz */
+	{ { 0, 4500 }, { 0, 3000 }, { 0, 2000 } },		/* AM */
+	{ { 0, 4500 }, { 0, 3000 }, { 0, 2000 } },		/* FM */
+};
+
+static uint32_t g_fil[FG_COUNT][3][2];
+static bool g_fil_dirty;
+
+static fgroup_t mode_group(x6100_mode_t mode)
+{
+	switch (mode) {
+	case X6100_MODE_LSB_DIG:
+	case X6100_MODE_USB_DIG:
+		return FG_SSBD;
+	case X6100_MODE_CW:
+	case X6100_MODE_CWR:
+		return FG_CW;
+	case X6100_MODE_AM:
+		return FG_AM;
+	case X6100_MODE_NFM:
+		return FG_FM;
+	default:
+		return FG_SSB;
+	}
+}
 
 static void mode_filter(x6100_mode_t mode, int fil, uint32_t *low, uint32_t *high)
 {
-	static const uint32_t ssb[3][2] = { { 100, 3000 }, { 300, 2700 }, { 300, 2100 } };
-	static const uint32_t cw[3][2] = { { 100, 1300 }, { 450, 950 }, { 575, 825 } };
-	static const uint32_t am[3][2] = { { 0, 4500 }, { 0, 3000 }, { 0, 2000 } };
-	const uint32_t (*t)[2];
+	fgroup_t g = mode_group(mode);
 
 	fil = fil < 0 || fil > 2 ? 0 : fil;
+	*low = g_fil[g][fil][0];
+	*high = g_fil[g][fil][1];
+}
 
-	switch (mode) {
-	case X6100_MODE_CW:
-	case X6100_MODE_CWR:
-		t = cw;
-		break;
-	case X6100_MODE_AM:
-	case X6100_MODE_NFM:
-		t = am;
-		break;
-	default:
-		t = ssb;
-		break;
+//
+// Filter file: one line per filter, "<group> <1-3> <low> <high>"; missing or bad
+// lines keep the default
+//
+
+static void fil_load(void)
+{
+	FILE *fp;
+	char line[128];
+
+	memcpy(g_fil, g_fil_def, sizeof(g_fil));
+
+	if ((fp = fopen(FIL_PATH, "r")) == NULL)
+		return;
+
+	while (fgets(line, sizeof(line), fp) != NULL) {
+		char name[16];
+		int n;
+		unsigned lo, hi;
+
+		if (line[0] == '#' || sscanf(line, "%15s %d %u %u", name, &n, &lo, &hi) != 4)
+			continue;
+
+		for (int g = 0; g < FG_COUNT; g++) {
+			if (strcmp(name, g_fg_name[g]) == 0 && n >= 1 && n <= 3 && lo < hi && hi <= FIL_MAX_HZ) {
+				g_fil[g][n - 1][0] = lo;
+				g_fil[g][n - 1][1] = hi;
+			}
+		}
 	}
 
-	*low = t[fil][0];
-	*high = t[fil][1];
+	fclose(fp);
+}
+
+static void fil_save(void)
+{
+	char tmp[] = FIL_PATH ".tmp";
+	FILE *fp;
+
+	if (!g_fil_dirty)
+		return;
+
+	mkdir("/etc/x6100", 0755);
+
+	if ((fp = fopen(tmp, "w")) == NULL) {
+		fprintf(stderr, "\nfilters: cannot write %s: %s\n", tmp, strerror(errno));
+		return;
+	}
+
+	fprintf(fp, "# x6100_trx receive filters: <group> <fil 1-3> <low Hz> <high Hz>\n");
+
+	for (int g = 0; g < FG_COUNT; g++) {
+		for (int n = 0; n < 3; n++)
+			fprintf(fp, "%s %d %u %u\n", g_fg_name[g], n + 1, g_fil[g][n][0], g_fil[g][n][1]);
+	}
+
+	if (fclose(fp) == 0 && rename(tmp, FIL_PATH) == 0)
+		g_fil_dirty = false;
+	else
+		fprintf(stderr, "\nfilters: cannot save %s: %s\n", FIL_PATH, strerror(errno));
+}
+
+//
+// BW / SFT edits. AM and FM have no shift: the passband stays at 0 Hz and BW
+// moves the high edge. Shift is shown relative to the default centre.
+//
+
+static void fil_bw(fgroup_t g, int n, int steps)
+{
+	uint32_t *f = g_fil[g][n];
+	int step = g == FG_CW ? 50 : 100;
+	int min_bw = g == FG_CW ? 50 : 300;
+	int lo = (int) f[0], hi = (int) f[1];
+
+	if (g == FG_AM || g == FG_FM) {
+		hi += steps * step;
+		hi = hi < min_bw ? min_bw : hi > FIL_MAX_HZ ? FIL_MAX_HZ : hi;
+		lo = 0;
+	} else {
+		int c2 = lo + hi;	/* twice the centre, keeps odd widths exact */
+		int bw = hi - lo + steps * step;
+
+		bw = bw < min_bw ? min_bw : bw > FIL_MAX_HZ ? FIL_MAX_HZ : bw;
+		lo = (c2 - bw) / 2;
+		hi = lo + bw;
+
+		if (lo < 0) {
+			hi -= lo;
+			lo = 0;
+		}
+
+		if (hi > FIL_MAX_HZ) {
+			lo -= hi - FIL_MAX_HZ;
+			hi = FIL_MAX_HZ;
+		}
+	}
+
+	f[0] = (uint32_t) lo;
+	f[1] = (uint32_t) hi;
+	g_fil_dirty = true;
+}
+
+static void fil_sft(fgroup_t g, int n, int steps)
+{
+	uint32_t *f = g_fil[g][n];
+	int d = steps * (g == FG_CW ? 10 : 50);
+	int lo = (int) f[0] + d, hi = (int) f[1] + d;
+
+	if (g == FG_AM || g == FG_FM || lo < 0 || hi > FIL_MAX_HZ)
+		return;
+
+	f[0] = (uint32_t) lo;
+	f[1] = (uint32_t) hi;
+	g_fil_dirty = true;
+}
+
+static int fil_sft_hz(fgroup_t g, int n)
+{
+	return ((int) (g_fil[g][n][0] + g_fil[g][n][1]) - (int) (g_fil_def[g][n][0] + g_fil_def[g][n][1])) / 2;
+}
+
+static void fil_default(fgroup_t g, int n)
+{
+	g_fil[g][n][0] = g_fil_def[g][n][0];
+	g_fil[g][n][1] = g_fil_def[g][n][1];
+	g_fil_dirty = true;
 }
 
 static bool g_allow_oob;	/* --oob: skip the band check, enable TX in the baseband everywhere */
@@ -524,6 +686,29 @@ static bool on_key(rx_t *rx, int key)
 		return true;
 	}
 
+	//
+	// Filter panel open: F5 cycles FIL1-3, MFK push switches BW / SFT; any other key
+	// closes the panel (edits are kept) and then does its normal job
+	//
+	if (rx->fedit) {
+		fgroup_t g = mode_group(rx->mode);
+
+		rx->fedit_since = now_ms();
+
+		if (key == X6100_KEY_F5) {
+			rx->fil = (rx->fil + 1) % 3;
+			return true;
+		}
+
+		if (key == X6100_KEY_MFK_PUSH) {
+			rx->fedit_par = g == FG_AM || g == FG_FM ? 0 : !rx->fedit_par;
+			return true;
+		}
+
+		rx->fedit = false;
+		fil_save();
+	}
+
 	if (rx->lock && key != X6100_KEY_LOCK)
 		return false;
 
@@ -609,7 +794,8 @@ typedef struct
 
 static bool has_long(int key)
 {
-	return key == X6100_KEY_PRE || key == X6100_KEY_FST || key == X6100_KEY_ATU || key == X6100_KEY_MFK_PUSH;
+	return key == X6100_KEY_PRE || key == X6100_KEY_FST || key == X6100_KEY_ATU || key == X6100_KEY_MFK_PUSH
+		|| key == X6100_KEY_F5;
 }
 
 static bool on_long_key(rx_t *rx, int key)
@@ -621,8 +807,24 @@ static bool on_long_key(rx_t *rx, int key)
 	case X6100_KEY_PRE:
 		rx->att = !rx->att;
 		return true;
+	case X6100_KEY_F5:
+		rx->fedit = !rx->fedit;
+		rx->fedit_since = now_ms();
+
+		if (rx->fedit)
+			rx->fedit_par = 0;
+		else
+			fil_save();
+
+		return true;
 	case X6100_KEY_MFK_PUSH:
-		rx->mfk_pwr = !rx->mfk_pwr;
+		if (rx->fedit) {
+			fil_default(mode_group(rx->mode), rx->fil);
+			rx->fedit_since = now_ms();
+		} else {
+			rx->mfk_pwr = !rx->mfk_pwr;
+		}
+
 		return true;
 	case X6100_KEY_ATU:
 		if (rx->ptt || rx->tuning || !tx_allowed(rx))
@@ -715,10 +917,21 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 		rx->vol = clampi(rx->vol + value * X6100_DIR_VOL, 0, 100);
 		return true;
 	case IN_MFK:
-		if (rx->mfk_pwr)
+		if (rx->fedit) {
+			fgroup_t g = mode_group(rx->mode);
+
+			if (rx->fedit_par == 0)
+				fil_bw(g, rx->fil, value * X6100_DIR_MFK);
+			else
+				fil_sft(g, rx->fil, value * X6100_DIR_MFK);
+
+			rx->fedit_since = now_ms();
+		} else if (rx->mfk_pwr) {
 			rx->txpwr = clampi(rx->txpwr + value * X6100_DIR_MFK, 1, TXPWR_MAX);
-		else
+		} else {
 			rx->rfg = clampi(rx->rfg + value * X6100_DIR_MFK * 2, 0, 100);
+		}
+
 		return true;
 	default:
 		return false;
@@ -1520,6 +1733,105 @@ static void vu_update(screen_t *scr, double target, uint64_t t)
 }
 
 //
+// Filter width as text: "500", "1.50k", "2.40k"
+//
+
+static void fil_width_str(uint32_t hz, char *buf, size_t len)
+{
+	if (hz < 1000)
+		snprintf(buf, len, "%u", hz);
+	else
+		snprintf(buf, len, "%u.%02uk", hz / 1000, hz % 1000 / 10);
+}
+
+//
+// Filter edit panel (F5 long), IC-705 style, drawn over the spectrum (which is
+// redrawn every frame, so the panel never smears into the waterfall)
+//
+
+static void draw_filter_panel(x6100_lcd_t *lcd, const rx_t *rx)
+{
+	static const char *gname[FG_COUNT] = { "SSB", "SSB-D", "CW", "AM", "FM" };
+	const int px = LBL_W + 8, py = SPEC_Y + 16, pw = 560, ph = 132;
+	const uint32_t bg = 0x0C1622, edge = 0x40C0FF, act = 0x1E4A7A, dim = 0x7A8494, white = 0xF0F0F0;
+	const uint32_t green = 0x3CC83C;
+	fgroup_t g = mode_group(rx->mode);
+	bool no_sft = g == FG_AM || g == FG_FM;
+	uint32_t lo, hi;
+	char s[48], w[12];
+
+	mode_filter(rx->mode, rx->fil, &lo, &hi);
+
+	x6100_lcd_fill(lcd, px, py, pw, ph, bg);
+	x6100_lcd_hline(lcd, px, px + pw - 1, py, edge);
+	x6100_lcd_hline(lcd, px, px + pw - 1, py + ph - 1, edge);
+	x6100_lcd_vline(lcd, px, py, py + ph - 1, edge);
+	x6100_lcd_vline(lcd, px + pw - 1, py, py + ph - 1, edge);
+
+	//
+	// Title and FIL number
+	//
+	snprintf(s, sizeof(s), "FILTER  %s", gname[g]);
+	x6100_lcd_text(lcd, px + 10, py + 8, 2, s, white);
+	snprintf(s, sizeof(s), "FIL%d", rx->fil + 1);
+	x6100_lcd_fill(lcd, px + pw - 70, py + 5, 60, 20, act);
+	x6100_lcd_text(lcd, px + pw - 64, py + 8, 2, s, white);
+
+	//
+	// BW and SFT boxes; the one MFK adjusts is highlighted
+	//
+	fil_width_str(hi - lo, w, sizeof(w));
+	snprintf(s, sizeof(s), "BW %s", w);
+	x6100_lcd_fill(lcd, px + 10, py + 32, 160, 22, rx->fedit_par == 0 ? act : bg);
+	x6100_lcd_text(lcd, px + 16, py + 36, 2, s, rx->fedit_par == 0 ? white : dim);
+
+	if (no_sft)
+		snprintf(s, sizeof(s), "SFT --");
+	else
+		snprintf(s, sizeof(s), "SFT %+d", fil_sft_hz(g, rx->fil));
+
+	x6100_lcd_fill(lcd, px + 180, py + 32, 160, 22, rx->fedit_par == 1 ? act : bg);
+	x6100_lcd_text(lcd, px + 186, py + 36, 2, s, rx->fedit_par == 1 ? white : dim);
+
+	//
+	// Passband on a 0 .. max axis with a trapezoid, edges and centre labelled
+	//
+	{
+		const int ax0 = px + 360, ax1 = px + pw - 16, ay = py + 92;
+		const uint32_t span = g == FG_CW ? 2000 : FIL_MAX_HZ;
+		int x0 = ax0 + (int) ((int64_t) lo * (ax1 - ax0) / span);
+		int x1 = ax0 + (int) ((int64_t) hi * (ax1 - ax0) / span);
+
+		x1 = x1 > ax1 ? ax1 : x1;
+		x6100_lcd_hline(lcd, ax0, ax1, ay, dim);
+
+		for (int r = 0; r < 28; r++) {
+			int inset = (28 - r) * 6 / 28;
+			int a = x0 + inset, b = x1 - inset;
+
+			if (b > a)
+				x6100_lcd_hline(lcd, a, b, ay - 28 + r, green);
+		}
+
+		snprintf(s, sizeof(s), "%u", lo);
+		x6100_lcd_text(lcd, x0 - x6100_lcd_text_width(s, 1) / 2, ay + 6, 1, s, white);
+		snprintf(s, sizeof(s), "%u", (lo + hi) / 2);
+		x6100_lcd_text(lcd, (x0 + x1) / 2 - x6100_lcd_text_width(s, 1) / 2, ay + 16, 1, s, dim);
+		snprintf(s, sizeof(s), "%u", hi);
+		x6100_lcd_text(lcd, x1 - x6100_lcd_text_width(s, 1) / 2, ay + 6, 1, s, white);
+	}
+
+	//
+	// Edges as text, and the controls
+	//
+	snprintf(s, sizeof(s), "%u - %u Hz", lo, hi);
+	x6100_lcd_text(lcd, px + 16, py + 66, 2, s, white);
+	x6100_lcd_text(lcd, px + 16, py + 96, 1, no_sft ? "MFK: BW    HOLD MFK: DEF" : "MFK: ADJUST    PUSH MFK: BW/SFT    HOLD MFK: DEF",
+		dim);
+	x6100_lcd_text(lcd, px + 16, py + 110, 1, "F5: FIL1-3    HOLD F5: CLOSE", dim);
+}
+
+//
 // Shift a band of rows horizontally by dx pixels (positive = right), fill the gap black
 //
 
@@ -1851,6 +2163,25 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 	}
 
 	//
+	// Filter label under the scope mode: FILn and its width
+	//
+	{
+		uint32_t lo, hi;
+		char m[24], w[12];
+		int tw;
+
+		mode_filter(rx->mode, rx->fil, &lo, &hi);
+		fil_width_str(hi - lo, w, sizeof(w));
+		snprintf(m, sizeof(m), "FIL%d %s", rx->fil + 1, w);
+		tw = x6100_lcd_text_width(m, 2);
+		x6100_lcd_fill(lcd, W - tw - 10, SPEC_Y + 40, tw + 8, 18, 0x000000);
+		x6100_lcd_text(lcd, W - tw - 6, SPEC_Y + 42, 2, m, rx->fedit ? SCR_WARN : SCR_ACCENT);
+	}
+
+	if (rx->fedit)
+		draw_filter_panel(lcd, rx);
+
+	//
 	// Last TX refusal or trip, until the next TX
 	//
 	if (rx->warn != NULL) {
@@ -2067,6 +2398,8 @@ int main(int argc, char **argv)
 		.txpwr = TXPWR_DEF, .scope = SCOPE_CENTER, .span = SPAN_HZ };
 	int rc;
 
+	fil_load();
+
 	for (int i = 0; i < BAND_COUNT; i++)
 		rx.band_freq[i] = g_bands[i].def;
 
@@ -2205,6 +2538,15 @@ int main(int argc, char **argv)
 		uint64_t t = now_ms();
 
 		//
+		// Filter panel closes after 10 s without activity
+		//
+		if (rx.fedit && t - rx.fedit_since >= 10000) {
+			rx.fedit = false;
+			fil_save();
+			dirty = true;
+		}
+
+		//
 		// TX supervision: band edge (VFO moved while keyed), timeout
 		//
 		if ((rx.ptt || rx.tuning) && !tx_allowed(&rx)) {
@@ -2336,11 +2678,12 @@ int main(int argc, char **argv)
 	}
 
 	//
-	// Drop TX before anything else
+	// Drop TX before anything else; keep filter edits
 	//
 	tx_drop(&rx, NULL);
 	apply_flags(&ctl, &rx);
 	x6100_ctl_sync(&ctl);
+	fil_save();
 
 	if (scr.on) {
 		x6100_lcd_fill(&scr.lcd, 0, 0, scr.lcd.w, scr.lcd.h, 0);

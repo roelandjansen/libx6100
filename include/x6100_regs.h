@@ -26,14 +26,14 @@
 
 typedef enum
 {
-	X6100_REG_VFOA_BAND = 0,
+	X6100_REG_VFOA_BAND = 0,	/* bit 0: TX enable ("ham band"); stock: band plan, or 1 with fullband-tx */
 	X6100_REG_VFOA_FREQ = 1,
 	X6100_REG_VFOA_ATT = 2,
 	X6100_REG_VFOA_PRE = 3,
 	X6100_REG_VFOA_MODE = 4,
 	X6100_REG_VFOA_AGC = 5,
 
-	X6100_REG_VFOB_BAND = 6,
+	X6100_REG_VFOB_BAND = 6,	/* as register 0, VFO B */
 	X6100_REG_VFOB_FREQ = 7,
 	X6100_REG_VFOB_ATT = 8,
 	X6100_REG_VFOB_PRE = 9,
