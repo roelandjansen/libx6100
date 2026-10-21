@@ -13,11 +13,14 @@
  * Stop the GUI first (scripts/x6100_ui.sh stop). If the device is busy,
  * PulseAudio may hold it.
  *
+ * --boost sets the codec Mic1 boost (0 = 0 dB, 1 = +24 dB, +3 dB per step); default 0
+ * for AM / NFM (the stock +24 dB saturates the codec input on AM), 1 otherwise.
+ *
  * --ft8 waits for the next 15 s UTC slot boundary, records one 15 s slot and
  * writes 12 kHz mono 16-bit (WSJT-X File > Open format); <seconds> is ignored.
  * The radio clock must be on UTC time within about a second (NTP).
  *
- * Usage: x6100_audio <freq_hz> <mode> <seconds> <out.wav> [--iq] [--rate N] [--ft8]
+ * Usage: x6100_audio <freq_hz> <mode> <seconds> <out.wav> [--iq] [--rate N] [--ft8] [--boost 0-7]
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -178,7 +181,7 @@ static void wait_slot(void)
 
 static void usage(const char *argv0)
 {
-	fprintf(stderr, "usage: %s <freq_hz> <usb|lsb|cw|cwr|am|nfm> <seconds> <out.wav> [--iq] [--rate N] [--ft8]\n", argv0);
+	fprintf(stderr, "usage: %s <freq_hz> <usb|lsb|cw|cwr|am|nfm> <seconds> <out.wav> [--iq] [--rate N] [--ft8] [--boost 0-7]\n", argv0);
 }
 
 int main(int argc, char **argv)
@@ -190,6 +193,7 @@ int main(int argc, char **argv)
 	x6100_flow_frame_t frame;
 	x6100_pcm_t pcm;
 	x6100_mode_t mode;
+	int boost = -1;
 	static int16_t buf[PERIOD * CHANNELS];
 	unsigned rate = DEF_RATE;
 	bool iq = false;
@@ -211,6 +215,8 @@ int main(int argc, char **argv)
 			iq = true;
 		else if (strcmp(argv[i], "--ft8") == 0)
 			ft8 = true;
+		else if (strcmp(argv[i], "--boost") == 0 && i + 1 < argc)
+			boost = atoi(argv[++i]);
 		else if (strcmp(argv[i], "--rate") == 0 && i + 1 < argc)
 			rate = (unsigned) atoi(argv[++i]);
 		else {
@@ -254,8 +260,16 @@ int main(int argc, char **argv)
 	}
 
 	//
-	// Codec capture
+	// Codec capture: Mic1 boost 0 for AM / FM (saturates otherwise), +24 dB for the rest
 	//
+	if (boost < 0)
+		boost = mode == X6100_MODE_AM || mode == X6100_MODE_NFM ? 0 : 1;
+
+	if ((rc = x6100_mixer_rx_setup(X6100_PCM_CARD, boost)) < 0)
+		fprintf(stderr, "warning: mixer setup: %s\n", strerror(-rc));
+
+	printf("capture: Mic1 boost %d (%s)\n", boost, boost == 0 ? "0 dB" : boost == 1 ? "+24 dB" : "+27 dB or more");
+
 	if ((rc = x6100_pcm_open(&pcm, X6100_PCM_CARD, X6100_PCM_DEVICE, true, rate, CHANNELS, PERIOD, PERIODS)) < 0) {
 		fprintf(stderr, "pcm open: %s%s\n", strerror(-rc), rc == -EBUSY ? " (PulseAudio or the GUI holds it?)" : "");
 		return 1;

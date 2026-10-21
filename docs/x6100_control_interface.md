@@ -402,6 +402,7 @@ BASE 1.1.9, GUI stopped, own code only:
 | Flow IQ as measuring instrument (`x6100_iqcal`) | 2026-10-20: about 30 dB between a strong carrier (S9+10, reads -2 dB) and the floor; a weak broadcast carrier read almost the same (-4 dB), so the display data look level-scaled, though ATT does show (next row); RX image of that carrier not visible above the floor; registers 48/49 show no measurable effect this way. IQ calibration parked |
 | Birdie | 7.309300 MHz, no antenna |
 | ATT | 2026-10-20: flow IQ level -58.3 dB without, -70.1 dB with ATT: about 12 dB |
+| AM capture level | 2026-10-21: with the stock Mic1 Boost (+24 dB) AM saturates the codec input: RMS -3 dBFS, crest factor 2 dB, harmonics to 24 kHz, DC -2.9 %. Boost 0: RMS -22.6 dBFS, crest about 13 dB, 6-8 kHz down 31 dB, DC 0.1 %. `x6100_mixer_rx_setup(card, 0)` for AM / FM |
 
 ## 10. Front panel input (from stock DTB `sun8i-r16-x6100.dtb`)
 

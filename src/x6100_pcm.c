@@ -283,3 +283,39 @@ int x6100_mixer_tx_setup(int card)
 
 	return rc;
 }
+
+//
+// Stock RX capture path (Mic1 = baseband audio). boost: Mic1 Boost Volume 0-7
+// (0 = 0 dB, 1 = +24 dB, then +3 dB per step); use 0 for AM / FM, whose
+// demodulated level saturates the codec input with the stock +24 dB
+//
+
+int x6100_mixer_rx_setup(int card, int boost)
+{
+	static const struct { const char *name; long value; } C_SET[] = {
+		{ "Mic1 Capture Switch", 1 },
+		{ "Mixer Capture Switch", 0 },
+		{ "ADC Gain Capture Volume", 3 },
+		{ "ADC Capture Volume", 160 },
+		{ "AIF1 AD0 Capture Volume", 160 },
+		{ "AIF1 AD0 Stereo Capture Route", 3 },
+		{ "AIF1 Data Digital ADC Capture Switch", 1 },
+	};
+	int rc = 0, r;
+
+	for (size_t i = 0; i < sizeof(C_SET) / sizeof(C_SET[0]); i++) {
+		if ((r = x6100_mixer_set(card, C_SET[i].name, C_SET[i].value)) < 0) {
+			fprintf(stderr, "mixer: %s: %s\n", C_SET[i].name, strerror(-r));
+			rc = r;
+		}
+	}
+
+	boost = boost < 0 ? 0 : boost > 7 ? 7 : boost;
+
+	if ((r = x6100_mixer_set(card, "Mic1 Boost Volume", boost)) < 0) {
+		fprintf(stderr, "mixer: Mic1 Boost Volume: %s\n", strerror(-r));
+		rc = r;
+	}
+
+	return rc;
+}
