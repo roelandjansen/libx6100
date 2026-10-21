@@ -2295,6 +2295,13 @@ static bool console_token(rx_t *rx, const char *t)
 		else if (*end != '\0')
 			return false;
 
+		//
+		// Outside the receiver range is a typo (e.g. a stray "20"), not a wish
+		// for the band edge: refuse instead of clamping
+		//
+		if (v < FREQ_MIN || v > FREQ_MAX)
+			return false;
+
 		set_freq(rx, (int64_t) llround(v));
 		return true;
 	}
