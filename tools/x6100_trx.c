@@ -303,7 +303,7 @@ static int band_of(uint32_t freq)
 //
 
 #define FIL_PATH	"/etc/x6100/filters.conf"
-#define FIL_MAX_HZ	4500
+#define FIL_MAX_HZ	6000	/* baseband audio runs at 12 kHz; x6100_gui allows 6000 too */
 
 static const char *g_fg_name[FG_COUNT] = { "ssb", "ssbd", "cw", "am", "fm" };
 
