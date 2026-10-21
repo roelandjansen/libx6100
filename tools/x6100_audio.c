@@ -16,12 +16,14 @@
  * --boost sets the codec Mic1 boost (0 = 0 dB, 1 = +24 dB, +3 dB per step); default 0
  * for AM / NFM (the stock +24 dB saturates the codec input on AM), 1 otherwise.
  * --agc and --rfg set the baseband AGC (default auto) and RF gain (default 100).
+ * --lpf low-passes the recording at 5.5 kHz: removes the images of the baseband 12 kHz
+ * audio (6-11 kHz) that sound as sizzle on AM.
  *
  * --ft8 waits for the next 15 s UTC slot boundary, records one 15 s slot and
  * writes 12 kHz mono 16-bit (WSJT-X File > Open format); <seconds> is ignored.
  * The radio clock must be on UTC time within about a second (NTP).
  *
- * Usage: x6100_audio <freq_hz> <mode> <seconds> <out.wav> [--iq] [--rate N] [--ft8] [--boost 0-7] [--agc off|slow|fast|auto] [--rfg 0-100]
+ * Usage: x6100_audio <freq_hz> <mode> <seconds> <out.wav> [--iq] [--rate N] [--ft8] [--boost 0-7] [--agc off|slow|fast|auto] [--rfg 0-100] [--lpf]
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -172,6 +174,51 @@ static bool decimate(float in, int16_t *out)
 }
 
 //
+// --lpf: 5.5 kHz low-pass at the capture rate (windowed sinc, Blackman, 255 taps,
+// about 1 kHz transition): removes the images of the baseband's 12 kHz audio at
+// 6-11 kHz ("sizzle" on AM) from the recording
+//
+
+#define LPF_TAPS	255
+#define LPF_HZ		5500.0
+
+static float g_lpf[LPF_TAPS];
+static float g_lpf_hist[2][LPF_TAPS];
+static int g_lpf_pos[2];
+
+static void lpf_init(double rate)
+{
+	double fc = LPF_HZ / rate, sum = 0.0;
+
+	for (int i = 0; i < LPF_TAPS; i++) {
+		double n = i - (LPF_TAPS - 1) / 2.0;
+		double sinc = n == 0.0 ? 2.0 * fc : sin(2.0 * M_PI * fc * n) / (M_PI * n);
+		double win = 0.42 - 0.5 * cos(2.0 * M_PI * i / (LPF_TAPS - 1)) + 0.08 * cos(4.0 * M_PI * i / (LPF_TAPS - 1));
+
+		g_lpf[i] = (float) (sinc * win);
+		sum += g_lpf[i];
+	}
+
+	for (int i = 0; i < LPF_TAPS; i++)
+		g_lpf[i] /= (float) sum;
+}
+
+static int16_t lpf_run(int ch, int16_t in)
+{
+	float *h = g_lpf_hist[ch];
+	float acc = 0.0f;
+
+	h[g_lpf_pos[ch]] = in;
+	g_lpf_pos[ch] = (g_lpf_pos[ch] + 1) % LPF_TAPS;
+
+	for (int i = 0; i < LPF_TAPS; i++)
+		acc += g_lpf[i] * h[(g_lpf_pos[ch] + i) % LPF_TAPS];
+
+	acc = acc > 32767.0f ? 32767.0f : acc < -32768.0f ? -32768.0f : acc;
+	return (int16_t) lrintf(acc);
+}
+
+//
 // Sleep until the next 15 s UTC boundary
 //
 
@@ -194,7 +241,7 @@ static void wait_slot(void)
 
 static void usage(const char *argv0)
 {
-	fprintf(stderr, "usage: %s <freq_hz> <usb|lsb|cw|cwr|am|nfm> <seconds> <out.wav> [--iq] [--rate N] [--ft8] [--boost 0-7] [--agc off|slow|fast|auto] [--rfg 0-100]\n", argv0);
+	fprintf(stderr, "usage: %s <freq_hz> <usb|lsb|cw|cwr|am|nfm> <seconds> <out.wav> [--iq] [--rate N] [--ft8] [--boost 0-7] [--agc off|slow|fast|auto] [--rfg 0-100] [--lpf]\n", argv0);
 }
 
 int main(int argc, char **argv)
@@ -213,6 +260,7 @@ int main(int argc, char **argv)
 	unsigned rate = DEF_RATE;
 	bool iq = false;
 	bool ft8 = false;
+	bool lpf = false;
 	uint32_t freq;
 	int seconds;
 	int rc;
@@ -228,6 +276,8 @@ int main(int argc, char **argv)
 	for (int i = 5; i < argc; i++) {
 		if (strcmp(argv[i], "--iq") == 0)
 			iq = true;
+		else if (strcmp(argv[i], "--lpf") == 0)
+			lpf = true;
 		else if (strcmp(argv[i], "--ft8") == 0)
 			ft8 = true;
 		else if (strcmp(argv[i], "--agc") == 0 && i + 1 < argc)
@@ -335,6 +385,11 @@ int main(int argc, char **argv)
 		fir_init(pcm.rate);
 	}
 
+	if (lpf && !ft8) {
+		lpf_init(pcm.rate);
+		printf("low-pass %.1f kHz on\n", LPF_HZ / 1000.0);
+	}
+
 	wav_header(wav, out_rate, out_ch, 0);
 
 	uint32_t data_bytes = 0;
@@ -375,6 +430,11 @@ int main(int argc, char **argv)
 				}
 			}
 		} else {
+			if (lpf) {
+				for (ssize_t i = 0; i < got * (ssize_t) pcm.channels; i++)
+					buf[i] = lpf_run((int) (i % pcm.channels) & 1, buf[i]);
+			}
+
 			fwrite(buf, (size_t) got * pcm.channels * 2, 1, wav);
 			data_bytes += (uint32_t) got * pcm.channels * 2;
 		}
