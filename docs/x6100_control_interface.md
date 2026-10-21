@@ -403,6 +403,7 @@ BASE 1.1.9, GUI stopped, own code only:
 | Birdie | 7.309300 MHz, no antenna |
 | ATT | 2026-10-20: flow IQ level -58.3 dB without, -70.1 dB with ATT: about 12 dB |
 | AM capture level | 2026-10-21: with the stock Mic1 Boost (+24 dB) AM saturates the codec input: RMS -3 dBFS, crest factor 2 dB, harmonics to 24 kHz, DC -2.9 %. Boost 0: RMS -22.6 dBFS, crest about 13 dB, 6-8 kHz down 31 dB, DC 0.1 %. `x6100_mixer_rx_setup(card, 0)` for AM / FM |
+| AM and AGC | 2026-10-21, 7215 kHz: AGC AUTO holds AM at near-constant loudness (50 ms RMS range p1-p99 4 dB), which pulls noise up between words ("sandpaper"); AGC SLOW gives 26 dB range, pauses 15 dB under the median. AGC OFF at RF gain 40: no usable audio. x6100_trx defaults AM / FM to SLOW |
 
 ## 10. Front panel input (from stock DTB `sun8i-r16-x6100.dtb`)
 

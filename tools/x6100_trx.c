@@ -21,7 +21,7 @@
  *                  MFK long = DEF; F5 = next FIL; F5 long, another key or 10 s idle closes;
  *                  per mode group (SSB, SSB-D, CW, AM, FM), saved in /etc/x6100/filters.conf
  *                  (F1-F5 do not drop a latched TX)
- *   AGC            off / slow / fast / auto
+ *   AGC            off / slow / fast / auto, kept per mode group (default AUTO; AM / FM SLOW)
  *   PTT            hold: transmit while held; tap (< 400 ms): latch TX on,
  *                  next press drops it
  *   ATU            tuner in/out; long press: tune (keys TX at baseband tune power)
@@ -108,6 +108,20 @@ typedef struct
 } band_t;
 
 //
+// Mode groups for filters and AGC: SSB, SSB-D, CW (+CWR), AM, FM
+//
+
+typedef enum
+{
+	FG_SSB = 0,
+	FG_SSBD,
+	FG_CW,
+	FG_AM,
+	FG_FM,
+	FG_COUNT
+} fgroup_t;
+
+//
 // Spectrum scope modes (Icom style)
 //   CENTER     VFO in the middle, waterfall rows stay where they were drawn
 //   CENTER_S   VFO in the middle, waterfall shifts with tuning (stays frequency aligned)
@@ -170,6 +184,13 @@ typedef struct
 	// Receive filter FIL1-3 (F5), 0-2
 	//
 	int fil;
+
+	//
+	// AGC per mode group, as on Icom: switching mode recalls that group's AGC;
+	// defaults AUTO, AM / FM SLOW (AUTO squashes AM to ~4 dB dynamic range)
+	//
+	x6100_agc_t agc_group[FG_COUNT];
+	int agc_last_group;
 	bool fedit;		/* filter panel open (F5 long) */
 	int fedit_par;		/* 0 BW, 1 SFT */
 	uint64_t fedit_since;	/* last panel activity, for the idle close */
@@ -278,18 +299,8 @@ static int band_of(uint32_t freq)
 //
 // Receive filters, IC-705 style: five mode groups x FIL1 / FIL2 / FIL3, each an
 // audio passband low / high in Hz (registers 44-47). Edited with F5 long + MFK as
-// bandwidth (BW) and shift (SFT); kept in G_FIL_PATH.
+// bandwidth (BW) and shift (SFT); kept in FIL_PATH.
 //
-
-typedef enum
-{
-	FG_SSB = 0,
-	FG_SSBD,
-	FG_CW,
-	FG_AM,
-	FG_FM,
-	FG_COUNT
-} fgroup_t;
 
 #define FIL_PATH	"/etc/x6100/filters.conf"
 #define FIL_MAX_HZ	4500
@@ -2394,7 +2405,7 @@ int main(int argc, char **argv)
 	char cmd[128];
 	size_t cmd_len = 0;
 	int stdin_slot = -1;
-	rx_t rx = { .vol = 20, .rfg = 100, .step = 100, .agc = X6100_AGC_AUTO, .mode = X6100_MODE_USB,
+	rx_t rx = { .vol = 20, .rfg = 100, .step = 100, .agc = (x6100_agc_t) -1, .mode = X6100_MODE_USB,
 		.txpwr = TXPWR_DEF, .scope = SCOPE_CENTER, .span = SPAN_HZ };
 	int rc;
 
@@ -2417,6 +2428,19 @@ int main(int argc, char **argv)
 			return 1;
 		}
 	}
+
+	//
+	// AGC per mode group; an AGC given on the command line applies to the start mode
+	//
+	for (int g = 0; g < FG_COUNT; g++)
+		rx.agc_group[g] = g == FG_AM || g == FG_FM ? X6100_AGC_SLOW : X6100_AGC_AUTO;
+
+	rx.agc_last_group = mode_group(rx.mode);
+
+	if ((int) rx.agc < 0)
+		rx.agc = rx.agc_group[rx.agc_last_group];
+	else
+		rx.agc_group[rx.agc_last_group] = rx.agc;
 
 	signal(SIGINT, on_signal);
 	signal(SIGTERM, on_signal);
@@ -2529,6 +2553,20 @@ int main(int argc, char **argv)
 		}
 
 		if (changed) {
+			//
+			// Mode group changed: recall its AGC; otherwise remember the current one
+			//
+			{
+				int g = mode_group(rx.mode);
+
+				if (g != rx.agc_last_group) {
+					rx.agc = rx.agc_group[g];
+					rx.agc_last_group = g;
+				} else {
+					rx.agc_group[g] = rx.agc;
+				}
+			}
+
 			scope_follow(&rx);
 			apply(&ctl, &cal, &rx);
 			show(&rx);
