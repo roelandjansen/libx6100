@@ -138,6 +138,7 @@ void x6100_set_freq(x6100_ctl_t *ctl, int vfo, uint32_t freq);
 void x6100_set_mode(x6100_ctl_t *ctl, int vfo, x6100_mode_t mode);
 void x6100_set_ptt(x6100_ctl_t *ctl, bool on);
 void x6100_set_codec_tx(x6100_ctl_t *ctl, bool on);
+void x6100_set_filter(x6100_ctl_t *ctl, x6100_mode_t mode, uint32_t low, uint32_t high);
 void x6100_set_txpwr(x6100_ctl_t *ctl, float watts);
 
 //

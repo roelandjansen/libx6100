@@ -404,6 +404,7 @@ BASE 1.1.9, GUI stopped, own code only:
 | ATT | 2026-10-20: flow IQ level -58.3 dB without, -70.1 dB with ATT: about 12 dB |
 | AM capture level | 2026-10-21: with the stock Mic1 Boost (+24 dB) AM saturates the codec input: RMS -3 dBFS, crest factor 2 dB, harmonics to 24 kHz, DC -2.9 %. Boost 0: RMS -22.6 dBFS, crest about 13 dB, 6-8 kHz down 31 dB, DC 0.1 %. `x6100_mixer_rx_setup(card, 0)` for AM / FM |
 | AM and AGC | 2026-10-21, 7215 kHz: AGC AUTO holds AM at near-constant loudness (50 ms RMS range p1-p99 4 dB), which pulls noise up between words ("sandpaper"); AGC SLOW gives 26 dB range, pauses 15 dB under the median. AGC OFF at RF gain 40: no usable audio. x6100_trx defaults AM / FM to SLOW |
+| AM / FM filter | 2026-10-21: with filter low = 0 an off-tune AM carrier is heard as a beat tone (1 kHz off = 1 kHz tone). The baseband takes the absolute low / high values for the I and Q low-pass filters, so AM / FM need low = -high (as x6100_gui does); filter 2 = filter 1 widened 40 Hz each side. `x6100_set_filter()` |
 
 ## 10. Front panel input (from stock DTB `sun8i-r16-x6100.dtb`)
 

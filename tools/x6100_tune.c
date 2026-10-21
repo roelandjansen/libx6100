@@ -179,10 +179,7 @@ int main(int argc, char **argv)
 	x6100_set_freq(&ctl, 1, freq);
 	x6100_set_mode(&ctl, 0, mode);
 	x6100_set_mode(&ctl, 1, mode);
-	x6100_ctl_set(&ctl, X6100_REG_FILTER1_LOW, low);
-	x6100_ctl_set(&ctl, X6100_REG_FILTER1_HIGH, high);
-	x6100_ctl_set(&ctl, X6100_REG_FILTER2_LOW, low);
-	x6100_ctl_set(&ctl, X6100_REG_FILTER2_HIGH, high);
+	x6100_set_filter(&ctl, mode, low, high);
 	x6100_ctl_set(&ctl, X6100_REG_RXVOL, (uint32_t) rxvol);
 	x6100_cal_apply(&ctl, &cal, band);
 	x6100_ctl_set(&ctl, X6100_REG_FLAGS, 0);

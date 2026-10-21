@@ -269,6 +269,16 @@ int main(int argc, char **argv)
 	x6100_set_freq(&ctl, 1, freq);
 	x6100_set_mode(&ctl, 0, mode);
 	x6100_set_mode(&ctl, 1, mode);
+
+	//
+	// Receive filter per mode (AM / FM symmetric, see x6100_set_filter)
+	//
+	if (mode == X6100_MODE_AM || mode == X6100_MODE_NFM)
+		x6100_set_filter(&ctl, mode, 0, 4000);
+	else if (mode == X6100_MODE_CW || mode == X6100_MODE_CWR)
+		x6100_set_filter(&ctl, mode, 450, 950);
+	else
+		x6100_set_filter(&ctl, mode, 100, 3000);
 	x6100_ctl_set(&ctl, X6100_REG_RXVOL, RXVOL);
 
 	if (agc >= 0) {

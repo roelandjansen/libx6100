@@ -505,10 +505,7 @@ static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 	x6100_ctl_set(ctl, X6100_REG_VFOB_ATT, rx->att);
 	x6100_ctl_set(ctl, X6100_REG_VFOA_PRE, rx->pre);
 	x6100_ctl_set(ctl, X6100_REG_VFOB_PRE, rx->pre);
-	x6100_ctl_set(ctl, X6100_REG_FILTER1_LOW, low);
-	x6100_ctl_set(ctl, X6100_REG_FILTER1_HIGH, high);
-	x6100_ctl_set(ctl, X6100_REG_FILTER2_LOW, low);
-	x6100_ctl_set(ctl, X6100_REG_FILTER2_HIGH, high);
+	x6100_set_filter(ctl, rx->mode, low, high);
 	x6100_ctl_set(ctl, X6100_REG_RXVOL, rx->mute ? 0 : (uint32_t) rx->vol);
 	x6100_ctl_update(ctl, X6100_REG_RFG_TXPWR_FFTDEC, 0xFF, (uint32_t) rx->rfg);
 	x6100_set_txpwr(ctl, rx->txpwr / 10.0f);

@@ -275,6 +275,33 @@ void x6100_set_ptt(x6100_ctl_t *ctl, bool on)
 // TX power in W, 0.1 .. 10.0, register 15 [15:8] in units of 0.1 W
 //
 
+//
+// Receive filter, registers 44-47. low / high are the audio passband in Hz.
+// AM / FM: the baseband takes the absolute low and high values to pick the I and
+// Q low-pass filters, so low must be -high (symmetric); a low of 0 there makes
+// the passband one-sided and an off-tune carrier comes out as a beat tone.
+// Filter 2 is filter 1 widened by 40 Hz each side (as x6100_gui does).
+//
+
+void x6100_set_filter(x6100_ctl_t *ctl, x6100_mode_t mode, uint32_t low, uint32_t high)
+{
+	int32_t lo = (int32_t) low, hi = (int32_t) high, lo2, hi2;
+
+	if (mode == X6100_MODE_AM || mode == X6100_MODE_NFM) {
+		lo = -hi;
+		lo2 = -(hi + 40);
+	} else {
+		lo2 = lo > 40 ? lo - 40 : 0;
+	}
+
+	hi2 = hi + 40;
+
+	x6100_ctl_set(ctl, X6100_REG_FILTER1_LOW, (uint32_t) lo);
+	x6100_ctl_set(ctl, X6100_REG_FILTER1_HIGH, (uint32_t) hi);
+	x6100_ctl_set(ctl, X6100_REG_FILTER2_LOW, (uint32_t) lo2);
+	x6100_ctl_set(ctl, X6100_REG_FILTER2_HIGH, (uint32_t) hi2);
+}
+
 void x6100_set_txpwr(x6100_ctl_t *ctl, float watts)
 {
 	int p = (int) (watts * 10.0f + 0.5f);
