@@ -4,3 +4,7 @@ out/
 .zig-cache/
 zig-cache/
 *.bin
+*.wav
+timer.out
+decoded.txt
+jt9_wisdom.dat
