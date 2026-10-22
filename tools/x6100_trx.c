@@ -35,6 +35,7 @@
  * Console (ssh):
  *   x6100_trx [freq] [mode]           start values, e.g. x6100_trx 7074000 lsb
  *   x6100_trx --oob ...               no band check before TX (test use; legal limits are yours)
+ *   x6100_trx --no-limit ...          tune 10 kHz - 100 MHz instead of 0.5 - 56 MHz (baseband probe)
  *   type a line + Enter while running:
  *     7074000 | 7.074 | 7074k         frequency (Hz, MHz with '.', or kHz with 'k')
  *     usb lsb cw cwr am nfm           mode
@@ -75,8 +76,9 @@
 #include "x6100_keys.h"
 #include "x6100_lcd.h"
 
-#define FREQ_MIN	500000
-#define FREQ_MAX	56000000
+static bool g_no_limit;	/* --no-limit: tune 10 kHz - 100 MHz (test what the baseband accepts) */
+#define FREQ_MIN	(g_no_limit ? 10000u : 500000u)	/* --no-limit: probe the baseband */
+#define FREQ_MAX	(g_no_limit ? 100000000u : 56000000u)
 #define POLL_MS		5
 #define LONG_PRESS_MS	600
 #define REFRESH_MS	1000
@@ -2421,6 +2423,12 @@ int main(int argc, char **argv)
 	set_freq(&rx, 14074000);
 
 	for (int i = 1; i < argc; i++) {
+		if (strcmp(argv[i], "--no-limit") == 0) {
+			g_no_limit = true;
+			fprintf(stderr, "warning: --no-limit, tuning 10 kHz - 100 MHz\n");
+			continue;
+		}
+
 		if (strcmp(argv[i], "--oob") == 0) {
 			g_allow_oob = true;
 			fprintf(stderr, "warning: --oob, band check off: you are responsible for where you transmit\n");
@@ -2428,7 +2436,7 @@ int main(int argc, char **argv)
 		}
 
 		if (!console_token(&rx, argv[i])) {
-			fprintf(stderr, "usage: %s [--oob] [freq] [usb|lsb|cw|cwr|am|nfm] [off|slow|fast|auto] [att|noatt] [pre|nopre]\n", argv[0]);
+			fprintf(stderr, "usage: %s [--oob] [--no-limit] [freq] [usb|lsb|cw|cwr|am|nfm] [off|slow|fast|auto] [att|noatt] [pre|nopre]\n", argv[0]);
 			return 1;
 		}
 	}
