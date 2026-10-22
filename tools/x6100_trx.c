@@ -1994,8 +1994,9 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 		scr->was_meter = rx->meter;
 	}
 
+	static const char *meter_names[] = { "PO", "SWR", "ALC" };
+
 	if (scr->tx) {
-		static const char *names[] = { "PO", "SWR", "ALC" };
 		char l1[16], l2[24];
 		double po = scr->pwr / 10.0;
 		int alc = scr->alc >= 100 ? 0 : scr->alc;	/* 100 = no audio arriving */
@@ -2028,7 +2029,7 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 		draw_sbar(lcd, rx->meter == 0 ? po : rx->meter == 1 ? swr_frac(scr->swr) : alc / 100.0,
 			rx->meter == 2 ? scr->vu_peak / 0.34 : scr->vu_peak, true, scr->swr, rx->meter);
 		draw_vu(lcd, scr->needle, marker, scale, l1, l2);
-		x6100_lcd_text(lcd, VU_X + 8, VU_Y + VU_H - 20, 2, names[rx->meter], SCR_ACCENT);
+		x6100_lcd_text(lcd, VU_X + 8, VU_Y + VU_H - 20, 2, meter_names[rx->meter], SCR_ACCENT);
 	} else {
 		char l1[16], l2[16];
 
@@ -2037,6 +2038,8 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 		s_reading(scr->sig_dbm, l1, sizeof(l1));
 		snprintf(l2, sizeof(l2), "%4.0fdBm", scr->sig_dbm);
 		draw_vu(lcd, scr->needle, scr->vu_peak, VU_SCALE_S, l1, l2);
+		// TX meter selection (F4) shown dimmed, so RX already tells what TX will show
+		x6100_lcd_text(lcd, VU_X + 8, VU_Y + VU_H - 20, 2, meter_names[rx->meter], SCR_DIM);
 	}
 
 	if (!scr->spec_valid)
