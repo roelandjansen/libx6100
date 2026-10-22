@@ -1028,7 +1028,7 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 //
 #define SMETER_CAL_DB	-15.0
 #define VU_ATTACK_MS	40.0
-#define VU_RELEASE_MS	400.0
+#define VU_RELEASE_MS	650.0	/* arc needle only; the bar follows the reading directly */
 #define VU_ANGLE	33.0
 #define VU_PEAK_HOLD_MS	1500.0
 #define VU_PEAK_FALL	0.0006
@@ -1988,7 +1988,7 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 	// while the ALC is working, else on Po
 	//
 	if (scr->tx != scr->was_tx || rx->meter != scr->was_meter) {
-		scr->needle = 0.0;
+		// no needle reset: it glides to the new reading (release time), no flick to 0
 		scr->vu_peak = 0.0;
 		scr->was_tx = scr->tx;
 		scr->was_meter = rx->meter;
