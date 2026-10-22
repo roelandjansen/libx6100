@@ -1363,7 +1363,14 @@ static void s_reading(double dbm, char *buf, size_t len)
 	} else {
 		int over = (int) (dbm + 73.0 + 0.5);
 
-		snprintf(buf, len, "S9+%-2d", over > 99 ? 99 : over);
+		// 10 dB steps like Icom: S9 until +10, then S9+10, S9+20 .. S9+60
+		over = over / 10 * 10;
+		over = over > 60 ? 60 : over;
+
+		if (over < 10)
+			snprintf(buf, len, "S9   ");
+		else
+			snprintf(buf, len, "S9+%d", over);
 	}
 }
 
