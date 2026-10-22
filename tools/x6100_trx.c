@@ -1967,18 +1967,18 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 	//
 	snprintf(s, sizeof(s), "STEP %4d", rx->step);
 	x6100_lcd_text(lcd, INFO_COL_STEP, INFO_Y, 2, s, SCR_DIM);
-	snprintf(s, sizeof(s), "VOL %d", rx->vol);
+	snprintf(s, sizeof(s), "VOL %3d", rx->vol);
 	x6100_lcd_text(lcd, INFO_COL_VOL, INFO_Y, 2, s, rx->mute ? SCR_WARN : SCR_DIM);
 
 	if (rx->mfk_pwr) {
-		snprintf(s, sizeof(s), "PWR %d.%dW", rx->txpwr / 10, rx->txpwr % 10);
+		snprintf(s, sizeof(s), "PWR %2d.%dW", rx->txpwr / 10, rx->txpwr % 10);
 		x6100_lcd_text(lcd, INFO_COL_RFG, INFO_Y, 2, s, SCR_ACCENT);
 	} else {
-		snprintf(s, sizeof(s), "RFG %d", rx->rfg);
+		snprintf(s, sizeof(s), "RFG %3d", rx->rfg);
 		x6100_lcd_text(lcd, INFO_COL_RFG, INFO_Y, 2, s, SCR_DIM);
 	}
 
-	snprintf(s, sizeof(s), "%.1fV", scr->vbat);
+	snprintf(s, sizeof(s), "%4.1fV", scr->vbat);
 	x6100_lcd_text(lcd, INFO_COL_VBAT, INFO_Y, 2, s, SCR_DIM);
 	snprintf(s, sizeof(s), "FIL%d", rx->fil + 1);
 	x6100_lcd_text(lcd, INFO_COL_FIL, INFO_Y, 2, s, SCR_DIM);
