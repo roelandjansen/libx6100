@@ -1359,9 +1359,11 @@ static void s_reading(double dbm, char *buf, size_t len)
 	if (dbm <= -73.0) {
 		int su = (int) ((dbm + 127.0) / 6.0 + 0.5);
 
-		snprintf(buf, len, "S%d", su < 0 ? 0 : su);
+		snprintf(buf, len, "S%-4d", su < 0 ? 0 : su);	/* fixed 5 chars: "S" does not move */
 	} else {
-		snprintf(buf, len, "S9+%d", (int) (dbm + 73.0 + 0.5));
+		int over = (int) (dbm + 73.0 + 0.5);
+
+		snprintf(buf, len, "S9+%-2d", over > 99 ? 99 : over);
 	}
 }
 
@@ -2009,7 +2011,7 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 		vu_update(scr, meter_frac(scr->sig_dbm), now_ms());
 		draw_sbar(lcd, meter_frac(scr->sig_dbm), scr->vu_peak, false, 1.0, 0);
 		s_reading(scr->sig_dbm, l1, sizeof(l1));
-		snprintf(l2, sizeof(l2), "%.0fdBm", scr->sig_dbm);
+		snprintf(l2, sizeof(l2), "%4.0fdBm", scr->sig_dbm);
 		draw_vu(lcd, scr->needle, scr->vu_peak, VU_SCALE_S, l1, l2);
 	}
 
