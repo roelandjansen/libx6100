@@ -1363,8 +1363,8 @@ static void s_reading(double dbm, char *buf, size_t len)
 	} else {
 		int over = (int) (dbm + 73.0 + 0.5);
 
-		// 10 dB steps like Icom: S9 until +10, then S9+10, S9+20 .. S9+60
-		over = over / 10 * 10;
+		// 10 dB steps, rounded: +0..5 = S9, +6..15 = S9+10, .. S9+60
+		over = (over + 4) / 10 * 10;
 		over = over > 60 ? 60 : over;
 
 		if (over < 10)
@@ -2526,6 +2526,8 @@ int main(int argc, char **argv)
 #endif
 	show(&rx);
 
+	uint64_t i2c_fail_since = 0;	/* first failed I2C write of a run, 0 = none */
+	unsigned i2c_fails = 0;
 	uint64_t last_refresh = now_ms();
 	uint64_t last_meter = last_refresh;
 	uint64_t last_disp = last_refresh;
@@ -2640,9 +2642,21 @@ int main(int argc, char **argv)
 			rc = x6100_ctl_sync(&ctl);
 		}
 
+		//
+		// A single NAK happens (seen on a band change); the registers stay pending
+		// and go out on the next pass. Give up only after 2 s of failures.
+		//
 		if (rc < 0) {
-			fprintf(stderr, "\ni2c: %s\n", strerror(-rc));
-			break;
+			if (i2c_fails++ == 0)
+				i2c_fail_since = t;
+
+			if (t - i2c_fail_since >= 2000) {
+				fprintf(stderr, "\ni2c: %s, %u failures in 2 s, giving up\n", strerror(-rc), i2c_fails);
+				break;
+			}
+		} else if (i2c_fails > 0) {
+			fprintf(stderr, "\ni2c: recovered after %u failed write(s)\n", i2c_fails);
+			i2c_fails = 0;
 		}
 
 		while ((rc = x6100_flow_read(&flow, &frame)) > 0) {
