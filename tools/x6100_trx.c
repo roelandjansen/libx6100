@@ -12,9 +12,10 @@
  *   BAND- / BAND+  previous / next band, last frequency per band kept
  *   SSB / CW / AM-FM   USB<->LSB / CW<->CWR / AM<->NFM
  *   PRE            preamp on/off; long press: attenuator on/off
- *   F1             scope CENTER <-> SCROLL-C (waterfall follows tuning)
- *   F2             scope FIX <-> SCROLL-F (fixed window; SCROLL-F slides at the edges)
- *   F3             scope span +-48 / 24 / 12 / 6 / 3 / 1.5 kHz
+ *   F1             scope CENTER <-> SCROLL-C, or FIX <-> SCROLL-F when in FIX
+ *   F1 long        scope CENTER family <-> FIX family (fixed window; SCROLL-F slides at the edges)
+ *   F2             scope span +-48 / 24 / 12 / 6 / 3 / 1.5 kHz
+ *   F3             free
  *   F4             TX meter on dial and bar: PO / SWR / ALC
  *   F5             receive filter FIL1 / FIL2 / FIL3 (wide / mid / narrow per mode)
  *   F5 long        filter panel (IC-705 style): MFK turn = BW or SFT, MFK push = BW <-> SFT,
@@ -41,7 +42,7 @@
  *     usb lsb cw cwr am nfm           mode
  *     off slow fast auto              AGC
  *     att noatt pre nopre             attenuator / preamp
- *     center scrollc fix scrollf      spectrum scope mode (also F1 / F2)
+ *     center scrollc fix scrollf      spectrum scope mode (also F1 / F1 long)
  *     fil1 fil2 fil3                  receive filter
  *     step 1|10|100|1000|5000         tuning step
  *     pwr 0.1-10                      TX power in W
@@ -757,18 +758,24 @@ static bool on_key(rx_t *rx, int key)
 		rx->atu_on = !rx->atu_on;
 		break;
 	case X6100_KEY_F1:
-		rx->scope = rx->scope == SCOPE_CENTER ? SCOPE_CENTER_S : SCOPE_CENTER;
-		break;
-	case X6100_KEY_F2:
-		if (rx->scope != SCOPE_FIX && rx->scope != SCOPE_FIX_S) {
-			scope_fix_start(rx);
+		// Short: toggle scroll within the current family (long press switches family)
+		switch (rx->scope) {
+		case SCOPE_CENTER:
+			rx->scope = SCOPE_CENTER_S;
+			break;
+		case SCOPE_CENTER_S:
+			rx->scope = SCOPE_CENTER;
+			break;
+		case SCOPE_FIX:
+			rx->scope = SCOPE_FIX_S;
+			break;
+		case SCOPE_FIX_S:
 			rx->scope = SCOPE_FIX;
-		} else {
-			rx->scope = rx->scope == SCOPE_FIX ? SCOPE_FIX_S : SCOPE_FIX;
+			break;
 		}
 
 		break;
-	case X6100_KEY_F3:
+	case X6100_KEY_F2:
 		scope_span_next(rx);
 		break;
 	case X6100_KEY_F4:
@@ -805,7 +812,7 @@ typedef struct
 static bool has_long(int key)
 {
 	return key == X6100_KEY_PRE || key == X6100_KEY_FST || key == X6100_KEY_ATU || key == X6100_KEY_MFK_PUSH
-		|| key == X6100_KEY_F5;
+		|| key == X6100_KEY_F1 || key == X6100_KEY_F5;
 }
 
 static bool on_long_key(rx_t *rx, int key)
@@ -816,6 +823,16 @@ static bool on_long_key(rx_t *rx, int key)
 	switch (key) {
 	case X6100_KEY_PRE:
 		rx->att = !rx->att;
+		return true;
+	case X6100_KEY_F1:
+		// Long: CENTER family <-> FIX family
+		if (rx->scope == SCOPE_FIX || rx->scope == SCOPE_FIX_S) {
+			rx->scope = SCOPE_CENTER;
+		} else {
+			scope_fix_start(rx);
+			rx->scope = SCOPE_FIX;
+		}
+
 		return true;
 	case X6100_KEY_F5:
 		rx->fedit = !rx->fedit;
