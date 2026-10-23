@@ -12,6 +12,10 @@ independent, documented library, as the base for a new front end.
 `x6100_trx` receive screen (rendered by its own drawing code with synthetic signals;
 key reference in `docs/x6100_trx_quickref.md`).
 
+![x6100_trx filter panel](docs/images/x6100_trx_filter.png)
+
+Filter panel (hold F5), IC-705 style: MFK sets BW or SFT, per mode group and FIL1-3.
+
 ## Status
 
 Verified on hardware (BASE 1.1.9), see `docs/x6100_control_interface.md` §9:
