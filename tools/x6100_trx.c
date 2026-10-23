@@ -71,9 +71,11 @@
 #include <string.h>
 #include <strings.h>
 #include <sys/stat.h>
+#include <termios.h>
 #include <time.h>
 #include <unistd.h>
 
+#include "x6100_civ.h"
 #include "x6100_keys.h"
 #include "x6100_lcd.h"
 
@@ -2426,6 +2428,401 @@ static bool console_read(rx_t *rx, char *buf, size_t size, size_t *len)
 	return changed;
 }
 
+//
+// CAT: CI-V over the USB serial port (IC-705 identity, see docs/x6100_civ.md).
+// The engine (x6100_civ.c) calls back into the receiver state; a change sets
+// cat.changed, and the main loop applies it like a key press.
+//
+
+#define CAT_DEV		"/dev/ttyS2"	/* rear USB serial, as used by x6100_gui */
+#define CAT_BAUD_DEF	115200
+
+typedef struct
+{
+	rx_t *rx;
+	const screen_t *scr;
+	int fd;
+	x6100_civ_t civ;
+	x6100_civ_framer_t framer;
+	bool changed;
+
+	//
+	// VFO B: shadow only, the baseband runs one VFO; 07 / B0 swaps it in
+	//
+	uint32_t b_freq;
+	x6100_mode_t b_mode;
+	int b_fil;
+	bool on_b;
+
+	//
+	// Last state announced (transceive 00 / 01)
+	//
+	uint32_t ann_freq;
+	int ann_mode;
+	int ann_fil;
+} cat_t;
+
+static int civ_scale(double v, const double (*pts)[2], int n)
+{
+	if (v <= pts[0][0])
+		return (int) pts[0][1];
+
+	for (int i = 1; i < n; i++) {
+		if (v <= pts[i][0])
+			return (int) lround(pts[i - 1][1] + (v - pts[i - 1][0]) * (pts[i][1] - pts[i - 1][1])
+				/ (pts[i][0] - pts[i - 1][0]));
+	}
+
+	return (int) pts[n - 1][1];
+}
+
+// IC-705 meter scales (CI-V reference, command 15)
+static const double g_s_pts[][2] = { { -127, 0 }, { -73, 120 }, { -13, 241 }, { 0, 255 } };
+static const double g_po_pts[][2] = { { 0, 0 }, { 5, 143 }, { 10, 213 }, { 12, 255 } };
+static const double g_swr_pts[][2] = { { 1.0, 0 }, { 1.5, 48 }, { 2.0, 80 }, { 3.0, 120 }, { 6.0, 255 } };
+static const double g_volt_pts[][2] = { { 0, 0 }, { 5, 75 }, { 16, 241 }, { 17, 255 } };
+
+#define PTS(a)	a, (int) (sizeof(a) / sizeof((a)[0]))
+
+static int fil_width(const rx_t *rx)
+{
+	fgroup_t g = mode_group(rx->mode);
+	uint32_t lo = g_fil[g][rx->fil][0], hi = g_fil[g][rx->fil][1];
+
+	return g == FG_AM || g == FG_FM ? (int) (2 * hi) : (int) (hi - lo);
+}
+
+// Width set by CI-V: BW steps around the current centre, saved like the panel
+static void fil_set_width(rx_t *rx, int hz)
+{
+	fgroup_t g = mode_group(rx->mode);
+	int step = g == FG_CW ? 50 : 100;
+	int cur = fil_width(rx);
+
+	if (g == FG_AM || g == FG_FM)
+		fil_bw(g, rx->fil, (hz - cur) / 2 / step);
+	else
+		fil_bw(g, rx->fil, (hz - cur) / step);
+
+	fil_save();
+}
+
+static void cat_swap(cat_t *cat)
+{
+	rx_t *rx = cat->rx;
+	uint32_t f = rx->freq;
+	x6100_mode_t m = rx->mode;
+	int fil = rx->fil;
+
+	set_freq(rx, cat->b_freq);
+	rx->mode = cat->b_mode;
+	rx->fil = cat->b_fil;
+	cat->b_freq = f;
+	cat->b_mode = m;
+	cat->b_fil = fil;
+	cat->on_b = !cat->on_b;
+}
+
+static bool cat_get(void *ctx, x6100_civ_item_t item, int vfo, int32_t *v)
+{
+	cat_t *cat = ctx;
+	const rx_t *rx = cat->rx;
+	const screen_t *scr = cat->scr;
+
+	switch (item) {
+	case X6100_CIV_FREQ:
+		*v = (int32_t) (vfo ? cat->b_freq : rx->freq);
+		return true;
+	case X6100_CIV_MODE:
+		*v = vfo ? cat->b_mode : rx->mode;
+		return true;
+	case X6100_CIV_FIL:
+		*v = (vfo ? cat->b_fil : rx->fil) + 1;
+		return true;
+	case X6100_CIV_FIL_WIDTH:
+		*v = fil_width(rx);
+		return true;
+	case X6100_CIV_SPLIT:
+		*v = 0;
+		return true;
+	case X6100_CIV_STEP:
+		*v = rx->step;
+		return true;
+	case X6100_CIV_ATT:
+		*v = rx->att;
+		return true;
+	case X6100_CIV_PRE:
+		*v = rx->pre;
+		return true;
+	case X6100_CIV_AGC:
+		// AUTO reads as MID, OFF as 0 (outside 01-03: the IC-705 has no AGC off here)
+		*v = rx->agc == X6100_AGC_FAST ? 1 : rx->agc == X6100_AGC_SLOW ? 3 : rx->agc == X6100_AGC_AUTO ? 2 : 0;
+		return true;
+	case X6100_CIV_LOCK:
+		*v = rx->lock;
+		return true;
+	case X6100_CIV_LVL_AF:
+		*v = rx->vol * 255 / 100;
+		return true;
+	case X6100_CIV_LVL_RF:
+		*v = rx->rfg * 255 / 100;
+		return true;
+	case X6100_CIV_LVL_PWR:
+		*v = rx->txpwr * 255 / TXPWR_MAX;
+		return true;
+	case X6100_CIV_MTR_S:
+		*v = civ_scale(scr->sig_dbm, PTS(g_s_pts));
+		return true;
+	case X6100_CIV_MTR_PWR:
+		*v = scr->tx ? civ_scale(scr->pwr, PTS(g_po_pts)) : 0;
+		return true;
+	case X6100_CIV_MTR_SWR:
+		*v = scr->tx ? civ_scale(scr->swr, PTS(g_swr_pts)) : 0;
+		return true;
+	case X6100_CIV_MTR_ALC:
+		*v = scr->tx && scr->alc < 100 ? scr->alc * 120 / 100 : 0;
+		return true;
+	case X6100_CIV_MTR_VOLT:
+		*v = civ_scale(scr->vbat, PTS(g_volt_pts));
+		return true;
+	case X6100_CIV_SQL_OPEN:
+		*v = 1;		/* no squelch */
+		return true;
+	case X6100_CIV_TX:
+		*v = scr->tx || rx->ptt;
+		return true;
+	case X6100_CIV_ATU:
+		*v = rx->tuning ? 2 : rx->atu_on;
+		return true;
+	default:
+		return false;	/* NB, NR, DNF, COMP, VOX, MONI, RIT, other levels */
+	}
+}
+
+static bool cat_set(void *ctx, x6100_civ_item_t item, int vfo, int32_t v)
+{
+	cat_t *cat = ctx;
+	rx_t *rx = cat->rx;
+
+	switch (item) {
+	case X6100_CIV_FREQ:
+		if (v < (int32_t) FREQ_MIN || v > (int32_t) FREQ_MAX)
+			return false;
+
+		if (vfo)
+			cat->b_freq = (uint32_t) v;
+		else
+			set_freq(rx, v);
+
+		break;
+	case X6100_CIV_MODE:
+		if (vfo)
+			cat->b_mode = (x6100_mode_t) v;
+		else
+			rx->mode = (x6100_mode_t) v;
+
+		break;
+	case X6100_CIV_FIL:
+		if (v < 1 || v > 3)
+			return false;
+
+		if (vfo)
+			cat->b_fil = v - 1;
+		else
+			rx->fil = v - 1;
+
+		break;
+	case X6100_CIV_FIL_WIDTH:
+		fil_set_width(rx, v);
+		break;
+	case X6100_CIV_VFO:
+		if ((v == 1) != cat->on_b)
+			cat_swap(cat);
+
+		break;
+	case X6100_CIV_VFO_SWAP:
+		cat_swap(cat);
+		break;
+	case X6100_CIV_VFO_EQUAL:
+		cat->b_freq = rx->freq;
+		cat->b_mode = rx->mode;
+		cat->b_fil = rx->fil;
+		break;
+	case X6100_CIV_SPLIT:
+		return v == 0;	/* no split yet */
+	case X6100_CIV_STEP:
+		if (v < 1 || v > 100000)
+			return false;
+
+		rx->step = v;
+		break;
+	case X6100_CIV_ATT:
+		rx->att = v != 0;
+		break;
+	case X6100_CIV_PRE:
+		rx->pre = v != 0;
+		break;
+	case X6100_CIV_AGC:
+		rx->agc = v == 1 ? X6100_AGC_FAST : v == 3 ? X6100_AGC_SLOW : X6100_AGC_AUTO;
+		rx->agc_group[mode_group(rx->mode)] = rx->agc;
+		break;
+	case X6100_CIV_LOCK:
+		rx->lock = v != 0;
+		break;
+	case X6100_CIV_LVL_AF:
+		rx->vol = v * 100 / 255;
+		break;
+	case X6100_CIV_LVL_RF:
+		rx->rfg = v * 100 / 255;
+		break;
+	case X6100_CIV_LVL_PWR:
+		rx->txpwr = clampi((v * TXPWR_MAX + 127) / 255, 1, TXPWR_MAX);
+		break;
+	case X6100_CIV_PTT:
+		// CAT PTT latches like a PTT tap; same band check, timeout and SWR trip
+		if (v) {
+			if (rx->ptt || rx->tuning)
+				return true;
+
+			if (!tx_allowed(rx))
+				return false;
+
+			rx->ptt = true;
+			rx->ptt_latch = true;
+			rx->ptt_since = now_ms();
+			rx->warn = NULL;
+		} else {
+			tx_drop(rx, NULL);
+		}
+
+		break;
+	case X6100_CIV_ATU:
+		if (v == 2) {
+			if (rx->ptt || rx->tuning || !tx_allowed(rx))
+				return false;
+
+			rx->atu_on = true;
+			rx->tuning = true;
+			rx->tune_since = now_ms();
+			rx->tune_seen_tx = false;
+			rx->warn = NULL;
+		} else {
+			rx->atu_on = v != 0;
+		}
+
+		break;
+	default:
+		return false;
+	}
+
+	cat->changed = true;
+
+	return true;
+}
+
+static speed_t cat_speed(int baud)
+{
+	switch (baud) {
+	case 4800:
+		return B4800;
+	case 9600:
+		return B9600;
+	case 19200:
+		return B19200;
+	case 38400:
+		return B38400;
+	case 57600:
+		return B57600;
+	default:
+		return B115200;
+	}
+}
+
+static int cat_open(cat_t *cat, rx_t *rx, const screen_t *scr, int baud)
+{
+	struct termios tio;
+	x6100_civ_ops_t ops = { .ctx = cat, .get = cat_get, .set = cat_set };
+
+	memset(cat, 0, sizeof(*cat));
+	cat->rx = rx;
+	cat->scr = scr;
+	cat->b_freq = rx->freq;
+	cat->b_mode = rx->mode;
+	cat->b_fil = rx->fil;
+	cat->ann_mode = -1;
+	x6100_civ_init(&cat->civ, &ops);
+	x6100_civ_framer_reset(&cat->framer);
+
+	cat->fd = open(CAT_DEV, O_RDWR | O_NOCTTY | O_NONBLOCK);
+
+	if (cat->fd < 0)
+		return -errno;
+
+	if (tcgetattr(cat->fd, &tio) < 0) {
+		int e = errno;
+
+		close(cat->fd);
+		cat->fd = -1;
+		return -e;
+	}
+
+	cfmakeraw(&tio);
+	cfsetispeed(&tio, cat_speed(baud));
+	cfsetospeed(&tio, cat_speed(baud));
+	tio.c_cflag |= CLOCAL | CREAD;
+	tio.c_cc[VMIN] = 0;
+	tio.c_cc[VTIME] = 0;
+	tcsetattr(cat->fd, TCSANOW, &tio);
+	tcflush(cat->fd, TCIOFLUSH);
+
+	return 0;
+}
+
+static void cat_write(cat_t *cat, const uint8_t *buf, size_t n)
+{
+	if (n > 0 && write(cat->fd, buf, n) != (ssize_t) n) {
+		// non-blocking port: a full buffer drops the frame; the client retries
+	}
+}
+
+// Read what is pending, answer each frame; true when the radio state changed
+static bool cat_poll(cat_t *cat)
+{
+	uint8_t buf[256], frame[X6100_CIV_FRAME_MAX], reply[X6100_CIV_FRAME_MAX];
+	ssize_t n;
+
+	cat->changed = false;
+
+	while ((n = read(cat->fd, buf, sizeof(buf))) > 0) {
+		for (ssize_t i = 0; i < n; i++) {
+			size_t len = x6100_civ_framer_feed(&cat->framer, buf[i], frame, sizeof(frame));
+
+			if (len > 0)
+				cat_write(cat, reply, x6100_civ_process(&cat->civ, frame, len, reply, sizeof(reply)));
+		}
+	}
+
+	return cat->changed;
+}
+
+// Transceive: announce frequency and mode changes, whatever made them
+static void cat_announce(cat_t *cat)
+{
+	uint8_t out[X6100_CIV_FRAME_MAX];
+	const rx_t *rx = cat->rx;
+
+	if (rx->freq != cat->ann_freq) {
+		cat->ann_freq = rx->freq;
+		cat_write(cat, out, x6100_civ_announce_freq(&cat->civ, rx->freq, out, sizeof(out)));
+	}
+
+	if ((int) rx->mode != cat->ann_mode || rx->fil != cat->ann_fil) {
+		cat->ann_mode = rx->mode;
+		cat->ann_fil = rx->fil;
+		cat_write(cat, out, x6100_civ_announce_mode(&cat->civ, rx->mode, rx->fil + 1, out, sizeof(out)));
+	}
+}
+
 int main(int argc, char **argv)
 {
 	x6100_i2c_t i2c;
@@ -2434,12 +2831,15 @@ int main(int argc, char **argv)
 	x6100_flow_t flow;
 	x6100_flow_frame_t frame;
 	int fds[IN_COUNT];
-	struct pollfd pfd[IN_COUNT + 1];
+	struct pollfd pfd[IN_COUNT + 2];
 	int npfd = 0;
-	input_t pmap[IN_COUNT + 1];
+	input_t pmap[IN_COUNT + 2];
 	char cmd[128];
 	size_t cmd_len = 0;
 	int stdin_slot = -1;
+	int cat_slot = -1;
+	int cat_baud = 0;	/* 0 = no CAT */
+	static cat_t cat = { .fd = -1 };
 	rx_t rx = { .vol = 20, .rfg = 100, .step = 100, .agc = (x6100_agc_t) -1, .mode = X6100_MODE_USB,
 		.txpwr = TXPWR_DEF, .scope = SCOPE_CENTER, .span = SPAN_HZ };
 	int rc;
@@ -2458,6 +2858,11 @@ int main(int argc, char **argv)
 			continue;
 		}
 
+		if (strcmp(argv[i], "--cat") == 0 || strncmp(argv[i], "--cat=", 6) == 0) {
+			cat_baud = argv[i][5] == '=' ? atoi(argv[i] + 6) : CAT_BAUD_DEF;
+			continue;
+		}
+
 		if (strcmp(argv[i], "--oob") == 0) {
 			g_allow_oob = true;
 			fprintf(stderr, "warning: --oob, band check off: you are responsible for where you transmit\n");
@@ -2465,7 +2870,7 @@ int main(int argc, char **argv)
 		}
 
 		if (!console_token(&rx, argv[i])) {
-			fprintf(stderr, "usage: %s [--oob] [--no-limit] [freq] [usb|lsb|cw|cwr|am|nfm] [off|slow|fast|auto] [att|noatt] [pre|nopre]\n", argv[0]);
+			fprintf(stderr, "usage: %s [--oob] [--no-limit] [--cat[=baud]] [freq] [usb|lsb|cw|cwr|am|nfm] [off|slow|fast|auto] [att|noatt] [pre|nopre]\n", argv[0]);
 			return 1;
 		}
 	}
@@ -2539,6 +2944,22 @@ int main(int argc, char **argv)
 		x6100_lcd_flush(&scr.lcd);
 	}
 
+	//
+	// CAT on the USB serial port (--cat)
+	//
+	if (cat_baud > 0) {
+		if ((rc = cat_open(&cat, &rx, &scr, cat_baud)) < 0) {
+			fprintf(stderr, "warning: CAT %s: %s\n", CAT_DEV, strerror(-rc));
+		} else {
+			printf("CAT: CI-V on %s, %d baud, address %02X (IC-705)\n", CAT_DEV, cat_baud, cat.civ.addr);
+			pfd[npfd].fd = cat.fd;
+			pfd[npfd].events = POLLIN;
+			pmap[npfd] = IN_COUNT;
+			cat_slot = npfd;
+			npfd++;
+		}
+	}
+
 #ifdef X6100_RX_ONLY
 	printf("x6100_rx (receive only): PWR or Ctrl-C to quit\n");
 #else
@@ -2580,6 +3001,11 @@ int main(int argc, char **argv)
 				continue;
 			}
 
+			if (p == cat_slot) {
+				changed |= cat_poll(&cat);
+				continue;
+			}
+
 			while (read(pfd[p].fd, &ev, sizeof(ev)) == (ssize_t) sizeof(ev)) {
 				if (pmap[p] == IN_POWER && ev.type == EV_KEY && ev.code == KEY_POWER && ev.value == 1)
 					g_stop = 1;
@@ -2614,6 +3040,9 @@ int main(int argc, char **argv)
 			apply(&ctl, &cal, &rx);
 			show(&rx);
 			dirty = true;
+
+			if (cat.fd >= 0)
+				cat_announce(&cat);
 		}
 
 		uint64_t t = now_ms();

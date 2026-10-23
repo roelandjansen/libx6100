@@ -8,7 +8,7 @@ panel. `x6100_rx` is the same program, receive only (PTT and tune refused).
 Stop the stock GUI first (`scripts/x6100_ui.sh stop`).
 
 ```
-x6100_trx [--oob] [--no-limit] [freq] [mode] [agc] [att|noatt] [pre|nopre]
+x6100_trx [--oob] [--no-limit] [--cat[=baud]] [freq] [mode] [agc] [att|noatt] [pre|nopre]
 x6100_trx 7074000 lsb
 x6100_trx --oob 5450000 usb slow
 ```
@@ -17,6 +17,7 @@ x6100_trx --oob 5450000 usb slow
 |---|---|
 | `--oob` | no band check before TX, baseband TX enabled everywhere (transverter, tests; legal limits are yours) |
 | `--no-limit` | tune 10 kHz - 100 MHz instead of 0.5 - 56 MHz (baseband probe); put it before the frequency |
+| `--cat[=baud]` | CI-V on the rear USB serial port (/dev/ttyS2, default 115200), as an IC-705: see `docs/x6100_civ.md` |
 
 Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
 

@@ -30,14 +30,16 @@
 //   FREQ               Hz
 //   MODE               x6100_mode_t (data mode is the _DIG mode)
 //   FIL                filter group 1-3
-//   FIL_WIDTH          passband width in Hz (read only)
-//   VFO                0 = A, 1 = B (set); VFO_SWAP: any value swaps
+//   FIL_WIDTH          passband width of the selected filter in Hz
+//   VFO                0 = A, 1 = B (set); VFO_SWAP / VFO_EQUAL: A <-> B / A = B
 //   SPLIT, ATT, PRE, NB, NR, DNF, COMP, VOX, MONI, LOCK, RIT, XIT   0 / 1
-//   AGC                CI-V code: 0 off, 1 fast, 2 mid, 3 slow
+//   AGC                CI-V code 1 fast, 2 mid, 3 slow (set 1-3; get may report 0 = off)
 //   STEP               Hz
 //   RIT_HZ             signed Hz
-//   LVL_*, MTR_*       0-255 (meters read only; MTR_S on the Icom scale:
-//                      0 = S0, 120 = S9, 241 = S9+60)
+//   LVL_*, MTR_*       0-255 (meters read only), IC-705 scales: MTR_S 0 = S0,
+//                      120 = S9, 241 = S9+60; MTR_PWR 143 = 50 %, 213 = 100 %;
+//                      MTR_SWR 0 = 1.0, 48 = 1.5, 80 = 2.0, 120 = 3.0;
+//                      MTR_ALC 0-120; MTR_VOLT 75 = 5 V, 241 = 16 V
 //   SQL_OPEN           0 / 1 (read only)
 //   TX                 0 RX, 1 TX (read); PTT 0 / 1 (write)
 //   ATU                0 off, 1 on, 2 start tuning
@@ -53,6 +55,7 @@ typedef enum
 	X6100_CIV_FIL_WIDTH,
 	X6100_CIV_VFO,
 	X6100_CIV_VFO_SWAP,
+	X6100_CIV_VFO_EQUAL,
 	X6100_CIV_SPLIT,
 	X6100_CIV_STEP,
 	X6100_CIV_ATT,

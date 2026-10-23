@@ -136,9 +136,9 @@ int main(void)
 	// Mode: data kept, filter given
 	check(&civ, "04", "04 01 02");
 	check(&civ, "06 00 03", "FB");
-	check(&civ, "1A 06", "1A 06 01 03");
+	check(&civ, "1A 06", "1A 06 00 00");		/* 06 clears data mode */
 	check(&civ, "06 02", "FB");
-	check(&civ, "04", "04 02 03");
+	check(&civ, "04", "04 02 01");			/* filter skipped: FIL1 */
 	check(&civ, "1A 06 01 01", "FA");		/* data not allowed on AM */
 	check(&civ, "06 01 01", "FB");
 	check(&civ, "1A 06 01 01", "FB");
@@ -158,7 +158,9 @@ int main(void)
 	check(&civ, "10", "10 01");
 	check(&civ, "10 04", "FB");
 	check(&civ, "10", "10 04");
-	check(&civ, "10 09", "FA");
+	check(&civ, "10 09", "FB");			/* 12.5 kHz */
+	check(&civ, "10", "10 09");
+	check(&civ, "10 14", "FA");
 
 	// ATT, levels, meters, switches
 	check(&civ, "11 20", "FB");
@@ -171,16 +173,23 @@ int main(void)
 	check(&civ, "15 02", "15 02 01 20");
 	check(&civ, "16 12", "16 12 03");
 	check(&civ, "16 12 04", "FA");
+	check(&civ, "16 12 00", "FA");		/* AGC 01-03 only */
+	check(&civ, "15 07", "15 07 00");
 	check(&civ, "16 02 02", "FB");
 	check(&civ, "16 02", "16 02 01");
 
 	// ID, lock, IF width, TX, ATU, RIT
 	check(&civ, "19 00", "19 00 A4");
 	check(&civ, "1D 19", "1D 19 61 00");
-	check(&civ, "1A 05 00 62 01", "FB");
-	check(&civ, "1A 05 00 62", "1A 05 00 62 01");
-	check(&civ, "1A 05 00 01", "FA");
-	check(&civ, "1A 03", "1A 03 11");		/* NFM (swapped in), 2400 Hz: index 11 */
+	check(&civ, "1A 05 00 62 01", "FA");		/* IC-705 menu: not supported */
+	check(&civ, "1A 03", "FA");			/* NFM: no IF width */
+	check(&civ, "06 01", "FB");
+	check(&civ, "1A 03 15", "FB");		/* 1100 Hz */
+	check(&civ, "1A 03", "1A 03 15");
+	check(&civ, "07 A0", "FB");
+	check(&civ, "1C 03", "1C 03 00 40 07 14 00");
+	check(&civ, "26 00 03", "FB");
+	check(&civ, "26 00", "26 00 03 00 01");
 	check(&civ, "1C 00", "1C 00 00");
 	check(&civ, "1C 00 01", "FB");
 	check(&civ, "1C", "1C 00 01");

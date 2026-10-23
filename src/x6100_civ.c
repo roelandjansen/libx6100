@@ -198,10 +198,11 @@ static uint8_t width_index(int mode, int32_t hz)
 }
 
 //
-// Tuning step codes (command 10, IC-705 / x6100_gui)
+// Tuning step codes (command 10, IC-705): 00 = OFF (10 Hz or 1 Hz)
 //
 
-static const int32_t g_steps[] = { 10, 100, 500, 1000, 5000 };
+static const int32_t g_steps[] = { 10, 100, 500, 1000, 5000, 6250, 8330, 9000, 10000, 12500, 20000, 25000,
+	50000, 100000 };
 
 //
 // Tables: level (14 xx) and switch (16 xx) subcommands
@@ -401,7 +402,9 @@ static size_t cmd_mode(req_t *r)
 		if (r->n < 1)
 			return r->cmd == 0x01 ? 0 : reply_ng(r);
 
-		bool ok = set_mode(r, 0, r->d[0], -1, r->n >= 2 ? r->d[1] : 0);
+		// IC-705: filter may be skipped, then FIL1 (01) / the mode's default
+		// filter (06) is selected; we use FIL1 for both. Data mode goes off.
+		bool ok = set_mode(r, 0, r->d[0], 0, r->n >= 2 ? r->d[1] : 1);
 
 		return r->cmd == 0x01 ? 0 : reply_ok(r, ok);
 	}
@@ -429,6 +432,8 @@ static size_t cmd_vfo(req_t *r)
 	case 0x00:
 	case 0x01:
 		return reply_ok(r, set(r, X6100_CIV_VFO, 0, r->d[0]));
+	case 0xA0:
+		return reply_ok(r, set(r, X6100_CIV_VFO_EQUAL, 0, 1));
 	case 0xB0:
 		return reply_ok(r, set(r, X6100_CIV_VFO_SWAP, 0, 1));
 	default:
@@ -458,23 +463,30 @@ static size_t cmd_step(req_t *r)
 {
 	int32_t v;
 
-	if (r->n >= 1)
-		return reply_ok(r, r->d[0] < COUNT(g_steps) && set(r, X6100_CIV_STEP, 0, g_steps[r->d[0]]));
+	if (r->n >= 1) {
+		int code = bcd_val(r->d[0]);	/* codes are BCD 00-13 */
+
+		return reply_ok(r, code >= 0 && (size_t) code < COUNT(g_steps)
+			&& set(r, X6100_CIV_STEP, 0, g_steps[code]));
+	}
 
 	if (!get(r, X6100_CIV_STEP, 0, &v))
 		return reply_ng(r);
+
+	if (v < 10)
+		v = 10;		/* 00 = OFF covers 10 Hz and 1 Hz */
 
 	for (size_t i = 0; i < COUNT(g_steps); i++) {
 		if (g_steps[i] == v) {
 			reply_head(r);
 			out_byte(r->o, 0x10);
-			out_byte(r->o, (uint8_t) i);
+			out_byte(r->o, bcd_byte((unsigned) i));
 
 			return out_end(r->o);
 		}
 	}
 
-	return reply_ng(r);	/* 1 Hz has no code */
+	return reply_ng(r);
 }
 
 // 11: ATT. Set: 00 off, any other value on (IC-705 sends 20). Get: 00 / 20.
@@ -528,13 +540,18 @@ static size_t cmd_meter(req_t *r)
 	if (r->n < 1)
 		return reply_ng(r);
 
-	if (r->d[0] == 0x01) {
-		if (!get(r, X6100_CIV_SQL_OPEN, 0, &v))
+	// 01 noise / S-meter squelch, 05 various squelch: both the squelch gate here;
+	// 07 OVF: the baseband reports no overflow, always 00
+	if (r->d[0] == 0x01 || r->d[0] == 0x05 || r->d[0] == 0x07) {
+		if (r->d[0] == 0x07) {
+			v = 0;
+		} else if (!get(r, X6100_CIV_SQL_OPEN, 0, &v)) {
 			return reply_ng(r);
+		}
 
 		reply_head(r);
 		out_byte(r->o, 0x15);
-		out_byte(r->o, 0x01);
+		out_byte(r->o, r->d[0]);
 		out_byte(r->o, v ? 0x01 : 0x00);
 
 		return out_end(r->o);
@@ -564,7 +581,7 @@ static size_t cmd_switch(req_t *r)
 
 		if (item == X6100_CIV_PRE)
 			val = val != 0;		/* 01 or 02 = on */
-		else if (item == X6100_CIV_AGC ? val > 3 : val > 1)
+		else if (item == X6100_CIV_AGC ? val < 1 || val > 3 : val > 1)	/* AGC 01-03 */
 			return reply_ng(r);
 
 		return reply_ok(r, set(r, item, 0, val));
@@ -609,6 +626,21 @@ static size_t cmd_xiegu_id(req_t *r)
 	return out_end(r->o);
 }
 
+// IF filter width index -> Hz (Table 1A 03); -1 = invalid for the mode
+static int32_t width_hz(int mode, int i)
+{
+	if (mode == X6100_MODE_AM)
+		return i >= 0 && i <= 49 ? 200 + i * 200 : -1;
+
+	if (mode == X6100_MODE_NFM)
+		return -1;
+
+	if (i >= 0 && i <= 9)
+		return 50 + i * 50;
+
+	return i >= 10 && i <= 40 ? 600 + (i - 10) * 100 : -1;
+}
+
 static size_t cmd_misc(req_t *r)
 {
 	int32_t v, m;
@@ -619,35 +651,24 @@ static size_t cmd_misc(req_t *r)
 		return reply_ng(r);
 
 	switch (r->d[0]) {
-	case 0x03:	/* IF filter width; set accepted and ignored (Xiegu: not used) */
-		if (r->n >= 2)
-			return reply_ok(r, true);
+	case 0x03:	/* IF filter width of the selected filter, BCD index */
+		if (!get(r, X6100_CIV_MODE, 0, &m) || m == X6100_MODE_NFM)
+			return reply_ng(r);
 
-		if (!get(r, X6100_CIV_FIL_WIDTH, 0, &v) || !get(r, X6100_CIV_MODE, 0, &m))
+		if (r->n >= 2) {
+			int i = bcd_val(r->d[1]);
+			int32_t hz = i < 0 ? -1 : width_hz(m, i);
+
+			return reply_ok(r, hz > 0 && set(r, X6100_CIV_FIL_WIDTH, 0, hz));
+		}
+
+		if (!get(r, X6100_CIV_FIL_WIDTH, 0, &v))
 			return reply_ng(r);
 
 		reply_head(r);
 		out_byte(r->o, 0x1A);
 		out_byte(r->o, 0x03);
-		out_byte(r->o, bcd_byte(width_index(m, v)));	/* BCD 00-49 */
-
-		return out_end(r->o);
-	case 0x05:	/* only 00 62: lock */
-		if (r->n < 3 || r->d[1] != 0x00 || r->d[2] != 0x62)
-			return reply_ng(r);
-
-		if (r->n >= 4)
-			return reply_ok(r, set(r, X6100_CIV_LOCK, 0, r->d[3] != 0));
-
-		if (!get(r, X6100_CIV_LOCK, 0, &v))
-			return reply_ng(r);
-
-		reply_head(r);
-		out_byte(r->o, 0x1A);
-		out_byte(r->o, 0x05);
-		out_byte(r->o, 0x00);
-		out_byte(r->o, 0x62);
-		out_byte(r->o, v ? 0x01 : 0x00);
+		out_byte(r->o, bcd_byte(width_index(m, v)));
 
 		return out_end(r->o);
 	case 0x06:	/* data mode + filter group */
@@ -658,6 +679,7 @@ static size_t cmd_misc(req_t *r)
 			if (r->d[1] != 0 && civ != 0x00 && civ != 0x01)
 				return reply_ng(r);	/* data only on LSB / USB */
 
+			// Data off is sent with filter 00: keep the filter
 			return reply_ok(r, set_mode(r, 0, civ, r->d[1] != 0, r->d[2]));
 		}
 
@@ -672,7 +694,9 @@ static size_t cmd_misc(req_t *r)
 
 		return out_end(r->o);
 	default:
-		return reply_ng(r);	/* 01 band stacking register: not yet */
+		// 00 memory, 01 band stacking, 02 keyer, 04 AGC time constant,
+		// 05 menu settings: not supported
+		return reply_ng(r);
 	}
 }
 
@@ -708,6 +732,21 @@ static size_t cmd_tx(req_t *r)
 		out_byte(r->o, (uint8_t) v);
 
 		return out_end(r->o);
+	case 0x03: {	/* read transmit frequency: unselected VFO when split */
+		int32_t split = 0;
+
+		get(r, X6100_CIV_SPLIT, 0, &split);
+
+		if (!get(r, X6100_CIV_FREQ, split ? 1 : 0, &v))
+			return reply_ng(r);
+
+		reply_head(r);
+		out_byte(r->o, 0x1C);
+		out_byte(r->o, 0x03);
+		out_freq(r->o, (uint32_t) v);
+
+		return out_end(r->o);
+	}
 	default:
 		return reply_ng(r);
 	}
@@ -801,11 +840,14 @@ static size_t cmd_vfo_mode(req_t *r)
 	uint8_t civ, fil;
 	bool data;
 
-	if (r->n >= 4) {
-		if (r->d[2] != 0 && r->d[1] != 0x00 && r->d[1] != 0x01)
+	// Set: data and filter may be skipped: data off, FIL1 (IC-705)
+	if (r->n >= 2) {
+		uint8_t dm = r->n >= 3 ? r->d[2] : 0, fl = r->n >= 4 ? r->d[3] : 1;
+
+		if (dm != 0 && r->d[1] != 0x00 && r->d[1] != 0x01)
 			return reply_ng(r);
 
-		return reply_ok(r, set_mode(r, vfo, r->d[1], r->d[2] != 0, r->d[3]));
+		return reply_ok(r, set_mode(r, vfo, r->d[1], dm != 0, fl));
 	}
 
 	if (!get_mode(r, vfo, &civ, &data, &fil))
