@@ -490,10 +490,12 @@ C definitions in `include/x6100_keys.h`.
 
 ## Overload (2026-10-23)
 
-`x6100_trx --probe`, carrier into 14.100 MHz stepped from noise to overload, PRE and
-ATT off: the flow flag word stayed `0x0000000C` throughout (b2, b3); there is no
-overflow bit. The flow IQ peak rises with the input and then stops hard at
+`x6100_trx --probe`, PRE and ATT off, small telescope antenna on the X6100; a nearby
+transceiver on its own antenna as the source, varied low / high a few times. The
+flow flag word stayed `0x0000000C` throughout (b2, b3); there is no
+overflow bit. The flow IQ peak rises with the signal and then stops hard at
 -6.2 to -6.5 dB (|IQ| about 0.48). x6100_trx shows OVF (and CI-V 15 07 reports it)
 when any flow IQ sample comes within about 1 dB of that ceiling.
 
 Note: b2 ("ATU tune done") was set in RX without any tune in this run.
+Input level in dBm unknown (no signal generator yet): calibrate later.
