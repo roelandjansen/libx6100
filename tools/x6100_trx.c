@@ -2441,8 +2441,8 @@ static bool console_read(rx_t *rx, char *buf, size_t size, size_t *len)
 // cat.changed, and the main loop applies it like a key press.
 //
 
-#define CAT_DEV		"/dev/ttyS2"	/* rear USB serial, as used by x6100_gui */
-#define CAT_BAUD_DEF	115200
+#define CAT_DEV		"/dev/ttyS2"	/* "DEV" USB-C: CH342 port 2 (PC ttyACM1); port 1 is the console */
+#define CAT_BAUD_DEF	19200	/* stock / IU1WXY default; verified 2026-10-23 */
 
 typedef struct
 {
