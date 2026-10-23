@@ -7,6 +7,11 @@ APP 1.2.0 / BASE 1.1.9 interface; contains no R1CBU, Aether or Xiegu code.
 Goal: replace the R1CBU control layer and the patched baseband dependency with an
 independent, documented library, as the base for a new front end.
 
+![x6100_trx receive screen](docs/images/x6100_trx.png)
+
+`x6100_trx` receive screen (rendered by its own drawing code with synthetic signals;
+key reference in `docs/x6100_trx_quickref.md`).
+
 ## Status
 
 Verified on hardware (BASE 1.1.9), see `docs/x6100_control_interface.md` §9:
