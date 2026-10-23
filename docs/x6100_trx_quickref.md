@@ -17,7 +17,7 @@ x6100_trx --oob 5450000 usb slow
 |---|---|
 | `--oob` | no band check before TX, baseband TX enabled everywhere (transverter, tests; legal limits are yours) |
 | `--no-limit` | tune 10 kHz - 100 MHz instead of 0.5 - 56 MHz (baseband probe); put it before the frequency |
-| `--cat[=baud]` | CI-V on the rear USB serial port (/dev/ttyS2, default 115200), as an IC-705: see `docs/x6100_civ.md` |
+| `--cat[=baud]` | CI-V on /dev/ttyS2 (DEV USB-C, PC side the second CH342 port, e.g. ttyACM1), default 19200, as an IC-705: see `docs/x6100_civ.md` |
 | `--probe` | print the flow flag word on change, and every second the IQ peak and all flag bits seen (overflow hunt) |
 
 Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
