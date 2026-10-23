@@ -46,8 +46,9 @@ build_lib() {
 	zcc -c -o "${C_OUT}/x6100_lcd.o" src/x6100_lcd.c
 	zcc -c -o "${C_OUT}/x6100_font_freq.o" src/x6100_font_freq.c
 	zcc -c -o "${C_OUT}/x6100_pcm.o" src/x6100_pcm.c
+	zcc -c -o "${C_OUT}/x6100_civ.o" src/x6100_civ.c
 	"${G_ZIG}" ar rcs "${C_OUT}/libx6100.a" "${C_OUT}/x6100.o" "${C_OUT}/x6100_lcd.o" "${C_OUT}/x6100_font_freq.o" \
-		"${C_OUT}/x6100_pcm.o"
+		"${C_OUT}/x6100_pcm.o" "${C_OUT}/x6100_civ.o"
 	printf 'built %s\n' "${C_OUT}/libx6100.a"
 }
 

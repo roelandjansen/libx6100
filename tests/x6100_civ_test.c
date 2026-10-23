@@ -1,0 +1,231 @@
+/*
+ * x6100_civ_test.c - host test of the CI-V engine against a mock radio
+ *
+ *   cc -std=c11 -Wall -Wextra -Iinclude -o civ_test tests/x6100_civ_test.c src/x6100_civ.c
+ *   ./civ_test
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+#include "x6100_civ.h"
+
+#include <stdio.h>
+#include <string.h>
+
+#include "x6100_regs.h"
+
+//
+// Mock radio
+//
+
+typedef struct
+{
+	int32_t v[X6100_CIV_ITEM_COUNT][2];
+	bool supported[X6100_CIV_ITEM_COUNT];
+} mock_t;
+
+static bool mock_get(void *ctx, x6100_civ_item_t item, int vfo, int32_t *value)
+{
+	mock_t *m = ctx;
+
+	if (!m->supported[item])
+		return false;
+
+	*value = m->v[item][vfo];
+
+	return true;
+}
+
+static bool mock_set(void *ctx, x6100_civ_item_t item, int vfo, int32_t value)
+{
+	mock_t *m = ctx;
+
+	if (!m->supported[item])
+		return false;
+
+	if (item == X6100_CIV_VFO_SWAP) {
+		static const x6100_civ_item_t per_vfo[] = { X6100_CIV_FREQ, X6100_CIV_MODE, X6100_CIV_FIL };
+
+		for (size_t i = 0; i < sizeof(per_vfo) / sizeof(per_vfo[0]); i++) {
+			int32_t t = m->v[per_vfo[i]][0];
+
+			m->v[per_vfo[i]][0] = m->v[per_vfo[i]][1];
+			m->v[per_vfo[i]][1] = t;
+		}
+
+		return true;
+	}
+
+	if (item == X6100_CIV_PTT)
+		m->v[X6100_CIV_TX][0] = value;	/* the radio follows PTT */
+
+	m->v[item][vfo] = value;
+
+	return true;
+}
+
+static int g_fail;
+static int g_run;
+
+//
+// Send a request (hex string without FE FE / FD), compare the reply
+//
+
+static void check(x6100_civ_t *civ, const char *req, const char *want)
+{
+	uint8_t in[64] = { 0xFE, 0xFE, 0xA4, 0xE0 }, out[64];
+	size_t n = 4;
+	char got[200] = "";
+	unsigned b;
+	int pos;
+
+	for (const char *p = req; sscanf(p, "%2x%n", &b, &pos) == 1; p += pos)
+		in[n++] = (uint8_t) b;
+
+	in[n++] = 0xFD;
+
+	size_t r = x6100_civ_process(civ, in, n, out, sizeof(out));
+
+	// Reply without FE FE E0 A4 ... FD
+	for (size_t i = 4; r > 5 && i < r - 1; i++)
+		snprintf(got + strlen(got), sizeof(got) - strlen(got), "%s%02X", i > 4 ? " " : "", out[i]);
+
+	if (r > 0 && (out[2] != 0xE0 || out[3] != 0xA4 || out[r - 1] != 0xFD))
+		snprintf(got, sizeof(got), "bad header");
+
+	g_run++;
+
+	if (strcmp(got, want) != 0) {
+		g_fail++;
+		printf("FAIL %-22s want [%s] got [%s]\n", req, want, got);
+	}
+}
+
+int main(void)
+{
+	static mock_t m;
+	x6100_civ_ops_t ops = { .ctx = &m, .get = mock_get, .set = mock_set };
+	x6100_civ_t civ;
+
+	for (int i = 0; i < X6100_CIV_ITEM_COUNT; i++)
+		m.supported[i] = true;
+
+	m.supported[X6100_CIV_LVL_BACKLIGHT] = false;
+	m.v[X6100_CIV_FREQ][0] = 14074000;
+	m.v[X6100_CIV_FREQ][1] = 7074000;
+	m.v[X6100_CIV_MODE][0] = X6100_MODE_USB_DIG;
+	m.v[X6100_CIV_MODE][1] = X6100_MODE_LSB;
+	m.v[X6100_CIV_FIL][0] = 2;
+	m.v[X6100_CIV_FIL][1] = 1;
+	m.v[X6100_CIV_FIL_WIDTH][0] = 2400;
+	m.v[X6100_CIV_STEP][0] = 100;
+	m.v[X6100_CIV_LVL_AF][0] = 51;
+	m.v[X6100_CIV_MTR_S][0] = 120;
+	m.v[X6100_CIV_AGC][0] = 3;
+	m.v[X6100_CIV_RIT_HZ][0] = -150;
+
+	x6100_civ_init(&civ, &ops);
+
+	// Frequency
+	check(&civ, "03", "03 00 40 07 14 00");
+	check(&civ, "05 00 50 07 14 00", "FB");
+	check(&civ, "03", "03 00 50 07 14 00");
+	check(&civ, "05 00 5A 07 14 00", "FA");
+	check(&civ, "00 00 40 07 14 00", "");		/* transceive: no reply */
+
+	// Mode: data kept, filter given
+	check(&civ, "04", "04 01 02");
+	check(&civ, "06 00 03", "FB");
+	check(&civ, "1A 06", "1A 06 01 03");
+	check(&civ, "06 02", "FB");
+	check(&civ, "04", "04 02 03");
+	check(&civ, "1A 06 01 01", "FA");		/* data not allowed on AM */
+	check(&civ, "06 01 01", "FB");
+	check(&civ, "1A 06 01 01", "FB");
+	check(&civ, "1A 06", "1A 06 01 01");
+
+	// VFO, split, step
+	check(&civ, "25 01", "25 01 00 40 07 07 00");
+	check(&civ, "26 01", "26 01 00 00 01");
+	check(&civ, "25 01 00 50 07 07 00", "FB");
+	check(&civ, "25 01", "25 01 00 50 07 07 00");
+	check(&civ, "26 01 05 00 02", "FB");
+	check(&civ, "26 01", "26 01 05 00 02");
+	check(&civ, "07 B0", "FB");
+	check(&civ, "03", "03 00 50 07 07 00");
+	check(&civ, "0F 01", "FB");
+	check(&civ, "0F", "0F 01");
+	check(&civ, "10", "10 01");
+	check(&civ, "10 04", "FB");
+	check(&civ, "10", "10 04");
+	check(&civ, "10 09", "FA");
+
+	// ATT, levels, meters, switches
+	check(&civ, "11 20", "FB");
+	check(&civ, "11", "11 20");
+	check(&civ, "14 01", "14 01 00 51");
+	check(&civ, "14 01 02 55", "FB");
+	check(&civ, "14 01", "14 01 02 55");
+	check(&civ, "14 19", "14 19 00 00");		/* unsupported level reads 0000 */
+	check(&civ, "14 20", "FA");
+	check(&civ, "15 02", "15 02 01 20");
+	check(&civ, "16 12", "16 12 03");
+	check(&civ, "16 12 04", "FA");
+	check(&civ, "16 02 02", "FB");
+	check(&civ, "16 02", "16 02 01");
+
+	// ID, lock, IF width, TX, ATU, RIT
+	check(&civ, "19 00", "19 00 A4");
+	check(&civ, "1D 19", "1D 19 61 00");
+	check(&civ, "1A 05 00 62 01", "FB");
+	check(&civ, "1A 05 00 62", "1A 05 00 62 01");
+	check(&civ, "1A 05 00 01", "FA");
+	check(&civ, "1A 03", "1A 03 11");		/* NFM (swapped in), 2400 Hz: index 11 */
+	check(&civ, "1C 00", "1C 00 00");
+	check(&civ, "1C 00 01", "FB");
+	check(&civ, "1C", "1C 00 01");
+	check(&civ, "1C 01 02", "FB");
+	check(&civ, "21 00", "21 00 50 01 01");
+	check(&civ, "21 00 34 12 00", "FB");
+	check(&civ, "21 00", "21 00 34 12 00");
+	check(&civ, "21 01 01", "FB");
+	check(&civ, "21 01", "21 01 01");
+	check(&civ, "27 10", "FA");
+
+	// Announcements and framer
+	{
+		uint8_t out[32], frame[64];
+		size_t n = x6100_civ_announce_freq(&civ, 7074000, out, sizeof(out));
+		static const uint8_t want[] = { 0xFE, 0xFE, 0x00, 0xA4, 0x00, 0x00, 0x40, 0x07, 0x07, 0x00, 0xFD };
+		x6100_civ_framer_t f;
+		static const uint8_t stream[] = { 0x12, 0xFE, 0xFE, 0xA4, 0xFE, 0xFE, 0xFE, 0xA4, 0xE0, 0x03, 0xFD, 0x00 };
+		size_t got = 0;
+
+		g_run++;
+
+		if (n != sizeof(want) || memcmp(out, want, n) != 0) {
+			g_fail++;
+			printf("FAIL announce_freq\n");
+		}
+
+		x6100_civ_framer_reset(&f);
+
+		for (size_t i = 0; i < sizeof(stream); i++) {
+			size_t k = x6100_civ_framer_feed(&f, stream[i], frame, sizeof(frame));
+
+			if (k)
+				got = k;
+		}
+
+		g_run++;
+
+		if (got != 6 || frame[4] != 0x03) {
+			g_fail++;
+			printf("FAIL framer (got %zu)\n", got);
+		}
+	}
+
+	printf("%d / %d passed\n", g_run - g_fail, g_run);
+
+	return g_fail ? 1 : 0;
+}
