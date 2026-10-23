@@ -219,6 +219,8 @@ static const sub_map_t g_levels[] = {
 	{ 0x02, X6100_CIV_LVL_RF },
 	{ 0x03, X6100_CIV_LVL_SQL },
 	{ 0x06, X6100_CIV_LVL_NR },
+	{ 0x07, X6100_CIV_LVL_PBT1 },
+	{ 0x08, X6100_CIV_LVL_PBT2 },
 	{ 0x09, X6100_CIV_LVL_CW_PITCH },
 	{ 0x0A, X6100_CIV_LVL_PWR },
 	{ 0x0B, X6100_CIV_LVL_MIC },
@@ -522,7 +524,7 @@ static size_t cmd_level(req_t *r)
 	}
 
 	if (!get(r, item, 0, &v))
-		v = 0;	/* Xiegu: unsupported levels read 0000 */
+		v = r->d[0] == 0x07 || r->d[0] == 0x08 ? 128 : 0;	/* unsupported: 0000, PBT centre 0128 */
 
 	reply_head(r);
 	out_byte(r->o, 0x14);
@@ -589,7 +591,7 @@ static size_t cmd_switch(req_t *r)
 	}
 
 	if (!get(r, item, 0, &v))
-		return reply_ng(r);
+		v = 0;	/* functions we do not have read OFF (IC-705 clients expect a value) */
 
 	reply_head(r);
 	out_byte(r->o, 0x16);
@@ -625,6 +627,56 @@ static size_t cmd_xiegu_id(req_t *r)
 	out_byte(r->o, 0x00);
 
 	return out_end(r->o);
+}
+
+// 18: power. 18 01 (on) is accepted, we are on; 18 00 (off) is refused
+static size_t cmd_power(req_t *r)
+{
+	return reply_ok(r, r->n >= 1 && r->d[0] == 0x01);
+}
+
+//
+// 1A 05 menu items IC-705 clients read at connect; fixed values, a set to the
+// same value is accepted
+//
+
+typedef struct
+{
+	uint16_t item;
+	uint8_t value;
+} menu_t;
+
+static const menu_t g_menu[] = {
+	{ 0x0045, 0x00 },	/* Quick SPLIT: OFF */
+	{ 0x0118, 0x00 },	/* DATA OFF MOD: MIC */
+	{ 0x0119, 0x01 },	/* DATA MOD: USB (rear USB sound card) */
+};
+
+static size_t cmd_menu(req_t *r)
+{
+	if (r->n < 3)
+		return reply_ng(r);
+
+	uint16_t item = (uint16_t) (r->d[1] << 8 | r->d[2]);
+
+	for (size_t i = 0; i < COUNT(g_menu); i++) {
+		if (g_menu[i].item != item)
+			continue;
+
+		if (r->n >= 4)
+			return reply_ok(r, r->d[3] == g_menu[i].value);
+
+		reply_head(r);
+		out_byte(r->o, 0x1A);
+		out_byte(r->o, 0x05);
+		out_byte(r->o, r->d[1]);
+		out_byte(r->o, r->d[2]);
+		out_byte(r->o, g_menu[i].value);
+
+		return out_end(r->o);
+	}
+
+	return reply_ng(r);
 }
 
 // IF filter width index -> Hz (Table 1A 03); -1 = invalid for the mode
@@ -734,6 +786,8 @@ static size_t cmd_misc(req_t *r)
 
 		return out_end(r->o);
 	}
+	case 0x05:
+		return cmd_menu(r);
 	case 0x06:	/* data mode + filter group */
 		if (r->n >= 3) {
 			if (!get_mode(r, 0, &civ, &data, &fil))
@@ -1135,6 +1189,9 @@ size_t x6100_civ_process(x6100_civ_t *civ, const uint8_t *frame, size_t len, uin
 		break;
 	case 0x26:
 		n = cmd_vfo_mode(&r);
+		break;
+	case 0x18:
+		n = cmd_power(&r);
 		break;
 	case 0x27:
 		n = cmd_scope(&r);

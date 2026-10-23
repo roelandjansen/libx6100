@@ -3086,6 +3086,12 @@ int main(int argc, char **argv)
 
 		if (strcmp(argv[i], "--cat") == 0 || strncmp(argv[i], "--cat=", 6) == 0) {
 			cat_baud = argv[i][5] == '=' ? atoi(argv[i] + 6) : CAT_BAUD_DEF;
+
+			if (cat_baud != 4800 && cat_baud != 9600 && cat_baud != 19200 && cat_baud != 38400
+				&& cat_baud != 57600 && cat_baud != 115200) {
+				fprintf(stderr, "%s: baud 4800, 9600, 19200, 38400, 57600 or 115200\n", argv[i]);
+				return 1;
+			}
 			continue;
 		}
 

@@ -115,6 +115,8 @@ int main(void)
 		m.supported[i] = true;
 
 	m.supported[X6100_CIV_LVL_BACKLIGHT] = false;
+	m.supported[X6100_CIV_LVL_PBT1] = false;
+	m.supported[X6100_CIV_NB] = false;
 	m.v[X6100_CIV_FREQ][0] = 14074000;
 	m.v[X6100_CIV_FREQ][1] = 7074000;
 	m.v[X6100_CIV_MODE][0] = X6100_MODE_USB_DIG;
@@ -214,6 +216,14 @@ int main(void)
 	check(&civ, "27 19", "27 19 00 10 50 01");
 	check(&civ, "27 12", "27 12 00");
 	check(&civ, "27 00", "FA");
+	check(&civ, "14 07", "14 07 01 28");		/* PBT centre */
+	check(&civ, "16 22", "16 22 00");		/* unsupported function reads OFF */
+	check(&civ, "16 22 01", "FA");
+	check(&civ, "18 01", "FB");
+	check(&civ, "18 00", "FA");
+	check(&civ, "1A 05 01 19", "1A 05 01 19 01");
+	check(&civ, "1A 05 01 18 00", "FB");
+	check(&civ, "1A 05 00 01", "FA");
 	check(&civ, "1A 01 05 01 00 00 25 07 00 00 01 00 00 00 00 08 85 00 08 85 00 00 23 00 00 00 00 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20", "FB");
 	check(&civ, "1A 01 05 01", "1A 01 05 01 00 00 25 07 00 00 01 00 00 00 00 08 85 00 08 85 00 00 23 00 00 00 00 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20");
 	check(&civ, "1A 01 16 01", "FA");
