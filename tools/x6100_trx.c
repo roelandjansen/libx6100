@@ -2984,7 +2984,9 @@ static bool cat_poll(cat_t *cat)
 
 			size_t rn = x6100_civ_process(&cat->civ, frame, len, reply, sizeof(reply));
 
-			if (g_cat_log) {
+			// Log commands and refusals only (reply OK / NG); the steady stream of
+			// polls with data replies would drown them
+			if (g_cat_log && (rn == 0 || (rn == 6 && (reply[4] == 0xFB || reply[4] == 0xFA)))) {
 				cat_log(">", frame, len);
 				cat_log("<", reply, rn);
 			}
