@@ -865,6 +865,132 @@ static size_t cmd_vfo_mode(req_t *r)
 }
 
 //
+// 27: scope settings (IC-705). Most subcommands carry a leading 00 (main scope).
+//
+
+typedef struct
+{
+	uint8_t sub;
+	x6100_civ_item_t item;
+	bool selector;		/* data starts with 00 (main scope) */
+} scope_map_t;
+
+static const scope_map_t g_scope[] = {
+	{ 0x10, X6100_CIV_SCOPE_ON, false },
+	{ 0x11, X6100_CIV_SCOPE_OUT, false },
+	{ 0x14, X6100_CIV_SCOPE_MODE, true },
+	{ 0x16, X6100_CIV_SCOPE_EDGE, true },
+	{ 0x17, X6100_CIV_SCOPE_HOLD, true },
+	{ 0x1A, X6100_CIV_SCOPE_SPEED, true },
+	{ 0x1D, X6100_CIV_SCOPE_VBW, true },
+};
+
+static size_t cmd_scope(req_t *r)
+{
+	int32_t v;
+
+	if (r->n < 1)
+		return reply_ng(r);
+
+	uint8_t sub = r->d[0];
+	const uint8_t *a = r->d + 1;
+	size_t m = r->n - 1;
+
+	switch (sub) {
+	case 0x12:	/* main / sub: main only */
+	case 0x13:	/* single / dual: single only */
+		if (m >= 1)
+			return reply_ok(r, a[0] == 0x00);
+
+		reply_head(r);
+		out_byte(r->o, 0x27);
+		out_byte(r->o, sub);
+		out_byte(r->o, 0x00);
+
+		return out_end(r->o);
+	case 0x15: {	/* span: 00 + 5 bytes frequency format (half span) */
+		uint32_t hz;
+
+		if (m >= 6)
+			return reply_ok(r, a[0] == 0x00 && get_freq_bcd(a + 1, &hz)
+				&& set(r, X6100_CIV_SCOPE_SPAN, 0, (int32_t) hz));
+
+		if (!get(r, X6100_CIV_SCOPE_SPAN, 0, &v))
+			return reply_ng(r);
+
+		reply_head(r);
+		out_byte(r->o, 0x27);
+		out_byte(r->o, 0x15);
+		out_byte(r->o, 0x00);
+		out_freq(r->o, (uint32_t) v);
+
+		return out_end(r->o);
+	}
+	case 0x19: {	/* reference level: 00, dB (BCD), 0.1 dB << 4, sign */
+		if (m >= 4) {
+			int db = bcd_val(a[1]), tenth = a[2] >> 4;
+
+			if (a[0] != 0x00 || db < 0 || tenth > 9)
+				return reply_ng(r);
+
+			v = db * 10 + tenth;
+
+			return reply_ok(r, set(r, X6100_CIV_SCOPE_REF, 0, a[3] ? -v : v));
+		}
+
+		if (!get(r, X6100_CIV_SCOPE_REF, 0, &v))
+			return reply_ng(r);
+
+		int abs10 = v < 0 ? -v : v;
+
+		reply_head(r);
+		out_byte(r->o, 0x27);
+		out_byte(r->o, 0x19);
+		out_byte(r->o, 0x00);
+		out_byte(r->o, bcd_byte((unsigned) abs10 / 10));
+		out_byte(r->o, (uint8_t) ((abs10 % 10) << 4));
+		out_byte(r->o, v < 0 ? 0x01 : 0x00);
+
+		return out_end(r->o);
+	}
+	default:
+		break;
+	}
+
+	for (size_t i = 0; i < COUNT(g_scope); i++) {
+		const scope_map_t *s = &g_scope[i];
+
+		if (s->sub != sub)
+			continue;
+
+		if (m >= (s->selector ? 2u : 1u)) {
+			if (s->selector && a[0] != 0x00)
+				return reply_ng(r);
+
+			int val = bcd_val(a[s->selector ? 1 : 0]);
+
+			return reply_ok(r, val >= 0 && set(r, s->item, 0, val));
+		}
+
+		if (!get(r, s->item, 0, &v))
+			return reply_ng(r);
+
+		reply_head(r);
+		out_byte(r->o, 0x27);
+		out_byte(r->o, sub);
+
+		if (s->selector)
+			out_byte(r->o, 0x00);
+
+		out_byte(r->o, bcd_byte((unsigned) v));
+
+		return out_end(r->o);
+	}
+
+	return reply_ng(r);	/* 00 (read only, streamed), 1B, 1C, 1E, 20 */
+}
+
+//
 // Public
 //
 
@@ -872,6 +998,7 @@ void x6100_civ_init(x6100_civ_t *civ, const x6100_civ_ops_t *ops)
 {
 	memset(civ, 0, sizeof(*civ));
 	civ->addr = X6100_CIV_ADDR_IC705;
+	civ->ctrl = X6100_CIV_ADDR_CTRL;
 
 	if (ops)
 		civ->ops = *ops;
@@ -886,6 +1013,9 @@ size_t x6100_civ_process(x6100_civ_t *civ, const uint8_t *frame, size_t len, uin
 
 	if ((to != civ->addr && to != X6100_CIV_ADDR_ALL) || from == civ->addr)
 		return 0;	/* not for us, or our own echo */
+
+	if (to == civ->addr)
+		civ->ctrl = from;
 
 	out_t o = { .buf = reply, .max = max };
 	req_t r = { .civ = civ, .o = &o, .to = from, .cmd = frame[4], .d = frame + 5, .n = len - 6 };
@@ -944,8 +1074,11 @@ size_t x6100_civ_process(x6100_civ_t *civ, const uint8_t *frame, size_t len, uin
 	case 0x26:
 		n = cmd_vfo_mode(&r);
 		break;
+	case 0x27:
+		n = cmd_scope(&r);
+		break;
 	default:
-		n = reply_ng(&r);	/* 02, 27 scope, memories, ...: not yet */
+		n = reply_ng(&r);	/* 02, memories, ...: not yet */
 		break;
 	}
 
@@ -1026,4 +1159,56 @@ size_t x6100_civ_framer_feed(x6100_civ_framer_t *f, uint8_t byte, uint8_t *frame
 	memcpy(frame, f->buf, n);
 
 	return n;
+}
+
+size_t x6100_civ_scope_frames(const x6100_civ_t *civ, const x6100_civ_scope_t *s, uint8_t *out, size_t max)
+{
+	const size_t chunk = 50;
+	size_t len = s->out_of_range || !s->wave ? 0 : s->len;
+	unsigned divs = 1 + (unsigned) ((len + chunk - 1) / chunk);
+	out_t o = { .buf = out, .max = max };
+	bool center = s->mode == 0 || s->mode == 2;
+
+	if (divs > 99)
+		return 0;
+
+	// Frame 1: wave information, no data
+	o.len = 0;
+	out_byte(&o, CIV_PRE);
+	out_byte(&o, CIV_PRE);
+	out_byte(&o, civ->ctrl);
+	out_byte(&o, civ->addr);
+	out_byte(&o, 0x27);
+	out_byte(&o, 0x00);
+	out_byte(&o, 0x00);
+	out_byte(&o, 0x01);
+	out_byte(&o, bcd_byte(divs));
+	out_byte(&o, (uint8_t) s->mode);
+	out_freq(&o, center ? s->centre : s->lo);
+	out_freq(&o, center ? s->half_span : s->hi);
+	out_byte(&o, s->out_of_range ? 0x01 : 0x00);
+	out_byte(&o, CIV_END);
+
+	// Frames 2..: waveform, 50 points each (points are binary 0-160)
+	for (unsigned d = 2; d <= divs; d++) {
+		size_t from = (d - 2) * chunk;
+		size_t to = from + chunk < len ? from + chunk : len;
+
+		out_byte(&o, CIV_PRE);
+		out_byte(&o, CIV_PRE);
+		out_byte(&o, civ->ctrl);
+		out_byte(&o, civ->addr);
+		out_byte(&o, 0x27);
+		out_byte(&o, 0x00);
+		out_byte(&o, 0x00);
+		out_byte(&o, bcd_byte(d));
+		out_byte(&o, bcd_byte(divs));
+
+		for (size_t i = from; i < to; i++)
+			out_byte(&o, s->wave[i] > 160 ? 160 : s->wave[i]);
+
+		out_byte(&o, CIV_END);
+	}
+
+	return o.overflow ? 0 : o.len;
 }

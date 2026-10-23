@@ -44,6 +44,12 @@
 //   TX                 0 RX, 1 TX (read); PTT 0 / 1 (write)
 //   ATU                0 off, 1 on, 2 start tuning
 //   OVF                0 / 1 overload (read only; unsupported reads 0)
+//   SCOPE_ON, _OUT     scope on, wave data output on (27 10 / 27 11), 0 / 1
+//   SCOPE_MODE         0 CENTER, 1 FIX, 2 SCROLL-C, 3 SCROLL-F (IC-705 order)
+//   SCOPE_SPAN         half span in Hz (IC-705: 2500 = +-2.5 kHz)
+//   SCOPE_EDGE         fixed edge set 1-4; SCOPE_HOLD 0 / 1
+//   SCOPE_REF          reference level in 0.1 dB, -200 .. +200
+//   SCOPE_SPEED        0 fast, 1 mid, 2 slow; SCOPE_VBW 0 narrow, 1 wide
 //
 // The vfo argument: 0 = foreground (selected), 1 = background (unselected).
 //
@@ -98,6 +104,15 @@ typedef enum
 	X6100_CIV_PTT,
 	X6100_CIV_ATU,
 	X6100_CIV_OVF,
+	X6100_CIV_SCOPE_ON,
+	X6100_CIV_SCOPE_OUT,
+	X6100_CIV_SCOPE_MODE,
+	X6100_CIV_SCOPE_SPAN,
+	X6100_CIV_SCOPE_EDGE,
+	X6100_CIV_SCOPE_HOLD,
+	X6100_CIV_SCOPE_REF,
+	X6100_CIV_SCOPE_SPEED,
+	X6100_CIV_SCOPE_VBW,
 	X6100_CIV_ITEM_COUNT
 } x6100_civ_item_t;
 
@@ -116,6 +131,7 @@ typedef struct
 typedef struct
 {
 	uint8_t addr;		/* our address, X6100_CIV_ADDR_IC705 by default */
+	uint8_t ctrl;		/* last controller that addressed us (scope data goes there) */
 	x6100_civ_ops_t ops;
 } x6100_civ_t;
 
@@ -149,3 +165,25 @@ size_t x6100_civ_announce_mode(const x6100_civ_t *civ, int mode, int fil, uint8_
 
 void x6100_civ_framer_reset(x6100_civ_framer_t *f);
 size_t x6100_civ_framer_feed(x6100_civ_framer_t *f, uint8_t byte, uint8_t *frame, size_t max);
+
+//
+// Scope waveform (27 00), IC-705 serial format: one information frame, then the
+// waveform in 50-point frames (475 points: 11 frames in all). Center modes send
+// centre + half span, fixed modes the lower and upper edge. Points 0-160.
+//
+
+#define X6100_CIV_SCOPE_POINTS	475
+
+typedef struct
+{
+	int mode;		/* 0 CENTER, 1 FIX, 2 SCROLL-C, 3 SCROLL-F */
+	uint32_t centre;	/* center modes */
+	uint32_t half_span;
+	uint32_t lo;		/* fixed modes */
+	uint32_t hi;
+	bool out_of_range;
+	const uint8_t *wave;
+	size_t len;
+} x6100_civ_scope_t;
+
+size_t x6100_civ_scope_frames(const x6100_civ_t *civ, const x6100_civ_scope_t *s, uint8_t *out, size_t max);

@@ -199,8 +199,50 @@ int main(void)
 	check(&civ, "21 00", "21 00 34 12 00");
 	check(&civ, "21 01 01", "FB");
 	check(&civ, "21 01", "21 01 01");
-	check(&civ, "27 10", "FA");
+	check(&civ, "27 10 01", "FB");
+	check(&civ, "27 10", "27 10 01");
+	check(&civ, "27 14 00 02", "FB");
+	check(&civ, "27 14", "27 14 00 02");
+	check(&civ, "27 14 01 02", "FA");		/* sub scope */
+	check(&civ, "27 15 00 00 00 05 00 00", "FB");	/* +-50 kHz */
+	check(&civ, "27 15", "27 15 00 00 00 05 00 00");
+	check(&civ, "27 19 00 10 50 01", "FB");	/* -10.5 dB */
+	check(&civ, "27 19", "27 19 00 10 50 01");
+	check(&civ, "27 12", "27 12 00");
+	check(&civ, "27 00", "FA");
 
+
+	// Scope frames: 475 points = 1 info + 10 data frames (9 x 50 + 25)
+	{
+		static uint8_t wave[X6100_CIV_SCOPE_POINTS], out[1024];
+		x6100_civ_scope_t s = { .mode = 0, .centre = 14074000, .half_span = 48000, .wave = wave,
+			.len = X6100_CIV_SCOPE_POINTS };
+		size_t n, frames = 0, first_len = 0, last_len = 0, start = 0;
+
+		for (int i = 0; i < X6100_CIV_SCOPE_POINTS; i++)
+			wave[i] = (uint8_t) (i % 200);
+
+		n = x6100_civ_scope_frames(&civ, &s, out, sizeof(out));
+
+		for (size_t i = 0; i < n; i++) {
+			if (out[i] == 0xFD) {
+				if (frames == 0)
+					first_len = i + 1 - start;
+
+				last_len = i + 1 - start;
+				frames++;
+				start = i + 1;
+			}
+		}
+
+		g_run++;
+
+		// info: 4 head + 27 00 + 00 01 11 mode + 10 + oor + FD = 22; last: 9 + 25 + 1 = 35
+		if (frames != 11 || first_len != 22 || last_len != 35 || out[8] != 0x11 || out[2] != 0xE0) {
+			g_fail++;
+			printf("FAIL scope frames: %zu frames, first %zu, last %zu\n", frames, first_len, last_len);
+		}
+	}
 	// Announcements and framer
 	{
 		uint8_t out[32], frame[64];

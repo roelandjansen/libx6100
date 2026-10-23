@@ -70,6 +70,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <termios.h>
 #include <time.h>
@@ -2467,7 +2468,25 @@ typedef struct
 	uint32_t ann_freq;
 	int ann_mode;
 	int ann_fil;
+
+	//
+	// Scope data (27): client settings and pacing
+	//
+	bool scope_on;
+	bool scope_out;
+	bool scope_hold;
+	bool scope_vbw;
+	int scope_edge;
+	int scope_ref;		/* 0.1 dB */
+	int scope_speed;	/* 0 fast, 1 mid, 2 slow */
+	uint64_t scope_ms;
 } cat_t;
+
+// Our scope modes to the IC-705 order (0 CENTER, 1 FIX, 2 SCROLL-C, 3 SCROLL-F)
+static int civ_scope_mode(scope_mode_t m)
+{
+	return m == SCOPE_FIX ? 1 : m == SCOPE_CENTER_S ? 2 : m == SCOPE_FIX_S ? 3 : 0;
+}
 
 static int civ_scale(double v, const double (*pts)[2], int n)
 {
@@ -2601,6 +2620,33 @@ static bool cat_get(void *ctx, x6100_civ_item_t item, int vfo, int32_t *v)
 	case X6100_CIV_TX:
 		*v = scr->tx || rx->ptt;
 		return true;
+	case X6100_CIV_SCOPE_ON:
+		*v = cat->scope_on;
+		return true;
+	case X6100_CIV_SCOPE_OUT:
+		*v = cat->scope_out;
+		return true;
+	case X6100_CIV_SCOPE_MODE:
+		*v = civ_scope_mode(rx->scope);
+		return true;
+	case X6100_CIV_SCOPE_SPAN:
+		*v = rx->span / 2;
+		return true;
+	case X6100_CIV_SCOPE_EDGE:
+		*v = cat->scope_edge;
+		return true;
+	case X6100_CIV_SCOPE_HOLD:
+		*v = cat->scope_hold;
+		return true;
+	case X6100_CIV_SCOPE_REF:
+		*v = cat->scope_ref;
+		return true;
+	case X6100_CIV_SCOPE_SPEED:
+		*v = cat->scope_speed;
+		return true;
+	case X6100_CIV_SCOPE_VBW:
+		*v = cat->scope_vbw;
+		return true;
 	case X6100_CIV_ATU:
 		*v = rx->tuning ? 2 : rx->atu_on;
 		return true;
@@ -2706,6 +2752,67 @@ static bool cat_set(void *ctx, x6100_civ_item_t item, int vfo, int32_t v)
 		}
 
 		break;
+	case X6100_CIV_SCOPE_ON:
+		cat->scope_on = v != 0;
+		break;
+	case X6100_CIV_SCOPE_OUT:
+		cat->scope_out = v != 0;
+		break;
+	case X6100_CIV_SCOPE_MODE: {
+		if (v < 0 || v > 3)
+			return false;
+
+		static const scope_mode_t ours[4] = { SCOPE_CENTER, SCOPE_FIX, SCOPE_CENTER_S, SCOPE_FIX_S };
+		bool was_fix = rx->scope == SCOPE_FIX || rx->scope == SCOPE_FIX_S;
+
+		rx->scope = ours[v];
+
+		if (!was_fix && (rx->scope == SCOPE_FIX || rx->scope == SCOPE_FIX_S))
+			scope_fix_start(rx);
+
+		break;
+	}
+	case X6100_CIV_SCOPE_SPAN: {
+		// Nearest of our spans that covers the request (IC-705 spans are wider)
+		int span = g_spans[0];
+		int64_t centre = rx->fix_lo + rx->span / 2;
+
+		for (int i = 0; i < SPAN_COUNT; i++) {
+			if (g_spans[i] / 2 >= v)
+				span = g_spans[i];
+		}
+
+		rx->span = span;
+
+		if (rx->scope == SCOPE_FIX || rx->scope == SCOPE_FIX_S)
+			rx->fix_lo = centre - rx->span / 2;
+
+		break;
+	}
+	case X6100_CIV_SCOPE_EDGE:
+		if (v < 1 || v > 4)
+			return false;
+
+		cat->scope_edge = v;
+		break;
+	case X6100_CIV_SCOPE_HOLD:
+		cat->scope_hold = v != 0;
+		break;
+	case X6100_CIV_SCOPE_REF:
+		if (v < -200 || v > 200)
+			return false;
+
+		cat->scope_ref = v;
+		break;
+	case X6100_CIV_SCOPE_SPEED:
+		if (v < 0 || v > 2)
+			return false;
+
+		cat->scope_speed = v;
+		break;
+	case X6100_CIV_SCOPE_VBW:
+		cat->scope_vbw = v != 0;
+		break;
 	case X6100_CIV_ATU:
 		if (v == 2) {
 			if (rx->ptt || rx->tuning || !tx_allowed(rx))
@@ -2760,6 +2867,7 @@ static int cat_open(cat_t *cat, rx_t *rx, const screen_t *scr, int baud)
 	cat->b_mode = rx->mode;
 	cat->b_fil = rx->fil;
 	cat->ann_mode = -1;
+	cat->scope_edge = 1;
 	x6100_civ_init(&cat->civ, &ops);
 	x6100_civ_framer_reset(&cat->framer);
 
@@ -2831,6 +2939,53 @@ static void cat_announce(cat_t *cat)
 		cat->ann_fil = rx->fil;
 		cat_write(cat, out, x6100_civ_announce_mode(&cat->civ, rx->mode, rx->fil + 1, out, sizeof(out)));
 	}
+}
+
+//
+// Scope data for CAT (27 00), when the client turned scope and wave output on.
+// Paced by the sweep speed and by the serial port: a sweep goes out only when
+// the previous one has left (about 600 bytes: ~0.3 s at 19200 baud).
+//
+
+static void cat_scope(cat_t *cat, uint64_t t)
+{
+	static const int pace_ms[3] = { 100, 250, 500 };	/* FAST, MID, SLOW */
+	const rx_t *rx = cat->rx;
+	const screen_t *scr = cat->scr;
+	uint8_t wave[X6100_CIV_SCOPE_POINTS];
+	static uint8_t out[1024];
+	int queued = 0;
+
+	if (!cat->scope_on || !cat->scope_out || cat->scope_hold || !scr->spec_valid)
+		return;
+
+	if (t - cat->scope_ms < (uint64_t) pace_ms[cat->scope_speed])
+		return;
+
+	if (ioctl(cat->fd, TIOCOUTQ, &queued) == 0 && queued > 0)
+		return;
+
+	view_t v = scope_view(rx, X6100_CIV_SCOPE_POINTS);
+
+	for (int x = 0; x < X6100_CIV_SCOPE_POINTS; x++) {
+		float n = spec_norm(spec_at(scr, &v, x) - cat->scope_ref / 10.0f);
+
+		n = n < 0.0f || n != n ? 0.0f : n > 1.0f ? 1.0f : n;
+		wave[x] = (uint8_t) lroundf(n * 160.0f);
+	}
+
+	x6100_civ_scope_t s = {
+		.mode = civ_scope_mode(rx->scope),
+		.centre = rx->freq,
+		.half_span = (uint32_t) rx->span / 2,
+		.lo = (uint32_t) v.lo,
+		.hi = (uint32_t) (v.lo + rx->span),
+		.wave = wave,
+		.len = X6100_CIV_SCOPE_POINTS,
+	};
+
+	cat_write(cat, out, x6100_civ_scope_frames(&cat->civ, &s, out, sizeof(out)));
+	cat->scope_ms = t;
 }
 
 int main(int argc, char **argv)
@@ -3095,6 +3250,9 @@ int main(int argc, char **argv)
 		}
 
 		apply_flags(&ctl, &rx);
+
+		if (cat.fd >= 0)
+			cat_scope(&cat, t);
 
 		//
 		// Full refresh resends register 17 too: not while the tuner is searching
