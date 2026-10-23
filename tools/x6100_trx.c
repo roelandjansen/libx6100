@@ -2928,7 +2928,19 @@ static int cat_open(cat_t *cat, rx_t *rx, const screen_t *scr, int baud)
 	tio.c_cflag |= CLOCAL | CREAD;
 	tio.c_cc[VMIN] = 0;
 	tio.c_cc[VTIME] = 0;
-	tcsetattr(cat->fd, TCSANOW, &tio);
+	//
+	// Apply and read back: the speed must be what the PC uses
+	//
+	if (tcsetattr(cat->fd, TCSANOW, &tio) < 0 || tcgetattr(cat->fd, &tio) < 0
+		|| cfgetospeed(&tio) != cat_speed(baud)) {
+		int e = errno ? errno : EINVAL;
+
+		fprintf(stderr, "CAT: %s refused %d baud\n", CAT_DEV, baud);
+		close(cat->fd);
+		cat->fd = -1;
+		return -e;
+	}
+
 	tcflush(cat->fd, TCIOFLUSH);
 
 	return 0;
