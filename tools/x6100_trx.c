@@ -1013,6 +1013,7 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 #define TOP_H		176
 #define VU_X		500
 #define VU_Y		4
+#define OVF_POWER	0.178f	/* |IQ|^2 at -7.5 dB: flow IQ clips at about -6.3 dB */
 #define VU_W		296
 #define VU_H		168
 #define SPEC_Y		180
@@ -1072,6 +1073,7 @@ typedef struct
 	double pwr;
 	double swr;
 	int alc;		/* 0-100; 100 = no audio arriving */
+	uint64_t ovf_until;	/* OVF shown until (ms), flow IQ at its clip level */
 	bool was_tx;
 	int was_meter;
 
@@ -2041,6 +2043,10 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 		s_reading(scr->sig_dbm, l1, sizeof(l1));
 		snprintf(l2, sizeof(l2), "%4.0fdBm", scr->sig_dbm);
 		draw_vu(lcd, scr->needle, scr->vu_peak, VU_SCALE_S, l1, l2);
+
+		// Overload (flow IQ at its ceiling), top left of the dial
+		if (now_ms() < scr->ovf_until)
+			x6100_lcd_text(lcd, VU_X + 8, VU_Y + 6, 2, "OVF", SCR_WARN);
 		// TX meter selection (F4) shown dimmed, so RX already tells what TX will show
 		x6100_lcd_text(lcd, VU_X + 8, VU_Y + VU_H - 20, 2, meter_names[rx->meter], SCR_DIM);
 	}
@@ -2586,6 +2592,9 @@ static bool cat_get(void *ctx, x6100_civ_item_t item, int vfo, int32_t *v)
 	case X6100_CIV_MTR_VOLT:
 		*v = civ_scale(scr->vbat, PTS(g_volt_pts));
 		return true;
+	case X6100_CIV_OVF:
+		*v = now_ms() < scr->ovf_until;
+		return true;
 	case X6100_CIV_SQL_OPEN:
 		*v = 1;		/* no squelch */
 		return true;
@@ -3126,6 +3135,20 @@ int main(int argc, char **argv)
 			scr.swr = swr < 1.0 ? 1.0 : swr;
 			scr.alc = frame.alc_level;
 			scr.vbat = frame.vbat * 0.1;
+
+			//
+			// Overload: the flow IQ clips hard at about -6.3 dB (|IQ| ~0.48); no
+			// overflow flag exists. Any sample within ~1 dB of that holds OVF 500 ms.
+			//
+			for (int i = 0; i < X6100_FLOW_SAMPLES; i++) {
+				if (frame.iq[i][0] * frame.iq[i][0] + frame.iq[i][1] * frame.iq[i][1] >= OVF_POWER) {
+					if (scr.ovf_until < t)
+						dirty = true;
+
+					scr.ovf_until = t + 500;
+					break;
+				}
+			}
 
 			//
 			// --probe: full flag word on change, and once a second the peak IQ

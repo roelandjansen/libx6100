@@ -43,6 +43,7 @@
 //   SQL_OPEN           0 / 1 (read only)
 //   TX                 0 RX, 1 TX (read); PTT 0 / 1 (write)
 //   ATU                0 off, 1 on, 2 start tuning
+//   OVF                0 / 1 overload (read only; unsupported reads 0)
 //
 // The vfo argument: 0 = foreground (selected), 1 = background (unselected).
 //
@@ -96,6 +97,7 @@ typedef enum
 	X6100_CIV_TX,
 	X6100_CIV_PTT,
 	X6100_CIV_ATU,
+	X6100_CIV_OVF,
 	X6100_CIV_ITEM_COUNT
 } x6100_civ_item_t;
 

@@ -541,10 +541,11 @@ static size_t cmd_meter(req_t *r)
 		return reply_ng(r);
 
 	// 01 noise / S-meter squelch, 05 various squelch: both the squelch gate here;
-	// 07 OVF: the baseband reports no overflow, always 00
+	// 07 OVF: from the OVF item, 00 when not supported
 	if (r->d[0] == 0x01 || r->d[0] == 0x05 || r->d[0] == 0x07) {
 		if (r->d[0] == 0x07) {
-			v = 0;
+			if (!get(r, X6100_CIV_OVF, 0, &v))
+				v = 0;
 		} else if (!get(r, X6100_CIV_SQL_OPEN, 0, &v)) {
 			return reply_ng(r);
 		}

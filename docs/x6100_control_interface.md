@@ -487,3 +487,13 @@ C definitions in `include/x6100_keys.h`.
 - Diff against gdyuldin/x6100_gui for registers added with newer base firmware.
 - Front-panel keys/encoders: not in this library (likely evdev/input on the SoC).
 - Kernel/device tree: AetherRadio/X6100Buildroot and panel-jinglitai-jlt4013a.
+
+## Overload (2026-10-23)
+
+`x6100_trx --probe`, carrier into 14.100 MHz stepped from noise to overload, PRE and
+ATT off: the flow flag word stayed `0x0000000C` throughout (b2, b3); there is no
+overflow bit. The flow IQ peak rises with the input and then stops hard at
+-6.2 to -6.5 dB (|IQ| about 0.48). x6100_trx shows OVF (and CI-V 15 07 reports it)
+when any flow IQ sample comes within about 1 dB of that ceiling.
+
+Note: b2 ("ATU tune done") was set in RX without any tune in this run.
