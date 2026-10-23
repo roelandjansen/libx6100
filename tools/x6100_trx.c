@@ -80,6 +80,7 @@
 #include "x6100_lcd.h"
 
 static bool g_no_limit;	/* --no-limit: tune 10 kHz - 100 MHz (test what the baseband accepts) */
+static bool g_probe;	/* --probe: print flow flags and peak IQ (overflow hunt) */
 #define FREQ_MIN	(g_no_limit ? 10000u : 500000u)	/* --no-limit: probe the baseband */
 #define FREQ_MAX	(g_no_limit ? 100000000u : 56000000u)
 #define POLL_MS		5
@@ -2863,6 +2864,11 @@ int main(int argc, char **argv)
 			continue;
 		}
 
+		if (strcmp(argv[i], "--probe") == 0) {
+			g_probe = true;
+			continue;
+		}
+
 		if (strcmp(argv[i], "--oob") == 0) {
 			g_allow_oob = true;
 			fprintf(stderr, "warning: --oob, band check off: you are responsible for where you transmit\n");
@@ -2870,7 +2876,7 @@ int main(int argc, char **argv)
 		}
 
 		if (!console_token(&rx, argv[i])) {
-			fprintf(stderr, "usage: %s [--oob] [--no-limit] [--cat[=baud]] [freq] [usb|lsb|cw|cwr|am|nfm] [off|slow|fast|auto] [att|noatt] [pre|nopre]\n", argv[0]);
+			fprintf(stderr, "usage: %s [--oob] [--no-limit] [--cat[=baud]] [--probe] [freq] [usb|lsb|cw|cwr|am|nfm] [off|slow|fast|auto] [att|noatt] [pre|nopre]\n", argv[0]);
 			return 1;
 		}
 	}
@@ -3120,6 +3126,37 @@ int main(int argc, char **argv)
 			scr.swr = swr < 1.0 ? 1.0 : swr;
 			scr.alc = frame.alc_level;
 			scr.vbat = frame.vbat * 0.1;
+
+			//
+			// --probe: full flag word on change, and once a second the peak IQ
+			// magnitude and every flag bit seen (looking for an overflow bit)
+			//
+			if (g_probe) {
+				static uint32_t last_flags = 0xFFFFFFFFu, flags_or;
+				static float peak;
+				static uint64_t probe_t;
+
+				for (int i = 0; i < X6100_FLOW_SAMPLES; i++) {
+					float m = frame.iq[i][0] * frame.iq[i][0] + frame.iq[i][1] * frame.iq[i][1];
+
+					peak = m > peak ? m : peak;
+				}
+
+				flags_or |= frame.flags;
+
+				if (frame.flags != last_flags) {
+					printf("\nprobe: flags %08X -> %08X\n", last_flags, frame.flags);
+					last_flags = frame.flags;
+				}
+
+				if (t - probe_t >= 1000) {
+					printf("\nprobe: IQ peak %.1f dB  flags seen %08X\n",
+						10.0 * log10(peak > 1e-20f ? peak : 1e-20f), flags_or);
+					peak = 0.0f;
+					flags_or = 0;
+					probe_t = t;
+				}
+			}
 
 			//
 			// SWR trip on our own TX (not while tuning, where it sweeps)
