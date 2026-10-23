@@ -82,6 +82,7 @@
 
 static bool g_no_limit;	/* --no-limit: tune 10 kHz - 100 MHz (test what the baseband accepts) */
 static bool g_probe;	/* --probe: print flow flags and peak IQ (overflow hunt) */
+static bool g_cat_log;	/* --cat-log: print CI-V frames in and out */
 #define FREQ_MIN	(g_no_limit ? 10000u : 500000u)	/* --no-limit: probe the baseband */
 #define FREQ_MAX	(g_no_limit ? 100000000u : 56000000u)
 #define POLL_MS		5
@@ -2482,6 +2483,14 @@ typedef struct
 	uint64_t scope_ms;
 } cat_t;
 
+// IC-705 band code (1A 01) to our band index; 60 m has no code
+static int civ_band(int code)
+{
+	static const int map[11] = { -1, 0, 1, 3, 4, 5, 6, 7, 8, 9, 10 };
+
+	return code >= 1 && code <= 10 ? map[code] : -1;
+}
+
 // Our scope modes to the IC-705 order (0 CENTER, 1 FIX, 2 SCROLL-C, 3 SCROLL-F)
 static int civ_scope_mode(scope_mode_t m)
 {
@@ -2647,6 +2656,23 @@ static bool cat_get(void *ctx, x6100_civ_item_t item, int vfo, int32_t *v)
 	case X6100_CIV_SCOPE_VBW:
 		*v = cat->scope_vbw;
 		return true;
+	case X6100_CIV_BAND_FREQ:
+	case X6100_CIV_BAND_MODE:
+	case X6100_CIV_BAND_FIL: {
+		int b = civ_band(vfo);
+
+		if (b < 0)
+			return false;
+
+		if (item == X6100_CIV_BAND_FREQ)
+			*v = (int32_t) rx->band_freq[b];
+		else if (item == X6100_CIV_BAND_MODE)
+			*v = b == rx->band ? rx->mode : rx->band_freq[b] < 10000000 ? X6100_MODE_LSB : X6100_MODE_USB;
+		else
+			*v = rx->fil + 1;
+
+		return true;
+	}
 	case X6100_CIV_ATU:
 		*v = rx->tuning ? 2 : rx->atu_on;
 		return true;
@@ -2813,6 +2839,18 @@ static bool cat_set(void *ctx, x6100_civ_item_t item, int vfo, int32_t v)
 	case X6100_CIV_SCOPE_VBW:
 		cat->scope_vbw = v != 0;
 		break;
+	case X6100_CIV_BAND_FREQ: {
+		int b = civ_band(vfo);
+
+		if (b < 0 || (uint32_t) v < g_bands[b].low || (uint32_t) v > g_bands[b].high)
+			return false;
+
+		rx->band_freq[b] = (uint32_t) v;
+		return true;	/* stored only, the current frequency does not change */
+	}
+	case X6100_CIV_BAND_MODE:
+	case X6100_CIV_BAND_FIL:
+		return civ_band(vfo) >= 0;	/* no per-band mode / filter memory */
 	case X6100_CIV_ATU:
 		if (v == 2) {
 			if (rx->ptt || rx->tuning || !tx_allowed(rx))
@@ -2903,6 +2941,20 @@ static void cat_write(cat_t *cat, const uint8_t *buf, size_t n)
 	}
 }
 
+// --cat-log: one line per frame, "> " from the client, "< " our reply
+static void cat_log(const char *dir, const uint8_t *b, size_t n)
+{
+	if (n == 0)
+		return;
+
+	fprintf(stderr, "\ncat %s", dir);
+
+	for (size_t i = 0; i < n; i++)
+		fprintf(stderr, " %02X", b[i]);
+
+	fputc('\n', stderr);
+}
+
 // Read what is pending, answer each frame; true when the radio state changed
 static bool cat_poll(cat_t *cat)
 {
@@ -2915,8 +2967,17 @@ static bool cat_poll(cat_t *cat)
 		for (ssize_t i = 0; i < n; i++) {
 			size_t len = x6100_civ_framer_feed(&cat->framer, buf[i], frame, sizeof(frame));
 
-			if (len > 0)
-				cat_write(cat, reply, x6100_civ_process(&cat->civ, frame, len, reply, sizeof(reply)));
+			if (len == 0)
+				continue;
+
+			size_t rn = x6100_civ_process(&cat->civ, frame, len, reply, sizeof(reply));
+
+			if (g_cat_log) {
+				cat_log(">", frame, len);
+				cat_log("<", reply, rn);
+			}
+
+			cat_write(cat, reply, rn);
 		}
 	}
 
@@ -3028,6 +3089,12 @@ int main(int argc, char **argv)
 			continue;
 		}
 
+		if (strcmp(argv[i], "--cat-log") == 0) {
+			g_cat_log = true;
+			cat_baud = cat_baud ? cat_baud : CAT_BAUD_DEF;
+			continue;
+		}
+
 		if (strcmp(argv[i], "--probe") == 0) {
 			g_probe = true;
 			continue;
@@ -3040,7 +3107,7 @@ int main(int argc, char **argv)
 		}
 
 		if (!console_token(&rx, argv[i])) {
-			fprintf(stderr, "usage: %s [--oob] [--no-limit] [--cat[=baud]] [--probe] [freq] [usb|lsb|cw|cwr|am|nfm] [off|slow|fast|auto] [att|noatt] [pre|nopre]\n", argv[0]);
+			fprintf(stderr, "usage: %s [--oob] [--no-limit] [--cat[=baud]] [--cat-log] [--probe] [freq] [usb|lsb|cw|cwr|am|nfm] [off|slow|fast|auto] [att|noatt] [pre|nopre]\n", argv[0]);
 			return 1;
 		}
 	}

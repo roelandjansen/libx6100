@@ -28,6 +28,8 @@ static bool mock_get(void *ctx, x6100_civ_item_t item, int vfo, int32_t *value)
 {
 	mock_t *m = ctx;
 
+	vfo = vfo > 1 ? 0 : vfo;	/* band items carry a band code */
+
 	if (!m->supported[item])
 		return false;
 
@@ -39,6 +41,8 @@ static bool mock_get(void *ctx, x6100_civ_item_t item, int vfo, int32_t *value)
 static bool mock_set(void *ctx, x6100_civ_item_t item, int vfo, int32_t value)
 {
 	mock_t *m = ctx;
+
+	vfo = vfo > 1 ? 0 : vfo;	/* band items carry a band code */
 
 	if (!m->supported[item])
 		return false;
@@ -210,6 +214,9 @@ int main(void)
 	check(&civ, "27 19", "27 19 00 10 50 01");
 	check(&civ, "27 12", "27 12 00");
 	check(&civ, "27 00", "FA");
+	check(&civ, "1A 01 05 01 00 00 25 07 00 00 01 00 00 00 00 08 85 00 08 85 00 00 23 00 00 00 00 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20", "FB");
+	check(&civ, "1A 01 05 01", "1A 01 05 01 00 00 25 07 00 00 01 00 00 00 00 08 85 00 08 85 00 00 23 00 00 00 00 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20");
+	check(&civ, "1A 01 16 01", "FA");
 
 
 	// Scope frames: 475 points = 1 info + 10 data frames (9 x 50 + 25)

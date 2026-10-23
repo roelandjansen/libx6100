@@ -50,6 +50,8 @@
 //   SCOPE_EDGE         fixed edge set 1-4; SCOPE_HOLD 0 / 1
 //   SCOPE_REF          reference level in 0.1 dB, -200 .. +200
 //   SCOPE_SPEED        0 fast, 1 mid, 2 slow; SCOPE_VBW 0 narrow, 1 wide
+//   BAND_FREQ / _MODE / _FIL   band stacking register (1A 01); the vfo argument
+//                      carries the IC-705 band code 1-15 (01 = 1.9 .. 10 = 50 MHz)
 //
 // The vfo argument: 0 = foreground (selected), 1 = background (unselected).
 //
@@ -113,6 +115,9 @@ typedef enum
 	X6100_CIV_SCOPE_REF,
 	X6100_CIV_SCOPE_SPEED,
 	X6100_CIV_SCOPE_VBW,
+	X6100_CIV_BAND_FREQ,
+	X6100_CIV_BAND_MODE,
+	X6100_CIV_BAND_FIL,
 	X6100_CIV_ITEM_COUNT
 } x6100_civ_item_t;
 

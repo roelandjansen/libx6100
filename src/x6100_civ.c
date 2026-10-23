@@ -672,6 +672,68 @@ static size_t cmd_misc(req_t *r)
 		out_byte(r->o, bcd_byte(width_index(m, v)));
 
 		return out_end(r->o);
+	case 0x01: {	/* band stacking register: band code, register code (BCD) */
+		int band = r->n >= 3 ? bcd_val(r->d[1]) : -1, reg = r->n >= 3 ? bcd_val(r->d[2]) : -1;
+		int32_t hz, mode, f = 1;
+
+		if (band < 1 || band > 15 || reg < 1 || reg > 3)
+			return reply_ng(r);
+
+		// Set: content from byte 4 on (frequency, mode, filter, data, ...)
+		if (r->n >= 3 + 8) {
+			uint32_t fhz;
+			const uint8_t *c = r->d + 3;
+			int m = mode_from_civ(c[5], c[7] != 0);
+
+			if (!get_freq_bcd(c, &fhz) || m < 0)
+				return reply_ng(r);
+
+			bool ok = set(r, X6100_CIV_BAND_FREQ, band, (int32_t) fhz)
+				&& set(r, X6100_CIV_BAND_MODE, band, m);
+
+			if (ok && c[6] >= 1 && c[6] <= 3)
+				set(r, X6100_CIV_BAND_FIL, band, c[6]);
+
+			return reply_ok(r, ok);
+		}
+
+		if (!get(r, X6100_CIV_BAND_FREQ, band, &hz) || !get(r, X6100_CIV_BAND_MODE, band, &mode))
+			return reply_ng(r);
+
+		get(r, X6100_CIV_BAND_FIL, band, &f);
+
+		uint8_t civ_mode;
+		bool data;
+
+		if (!mode_to_civ(mode, &civ_mode, &data))
+			return reply_ng(r);
+
+		reply_head(r);
+		out_byte(r->o, 0x1A);
+		out_byte(r->o, 0x01);
+		out_byte(r->o, r->d[1]);
+		out_byte(r->o, r->d[2]);
+		out_freq(r->o, (uint32_t) hz);			/* 6-10 frequency */
+		out_byte(r->o, civ_mode);			/* 11 mode */
+		out_byte(r->o, (uint8_t) (f >= 1 && f <= 3 ? f : 1));	/* 12 filter */
+		out_byte(r->o, data ? 0x01 : 0x00);		/* 13 data mode */
+		out_byte(r->o, 0x00);				/* 14 duplex, tone off */
+		out_byte(r->o, 0x00);				/* 15 digital squelch off */
+
+		// 16-21 repeater / TSQL tone 88.5 Hz, 22-24 DTCS 023, 25 DV CSQL,
+		// 26-28 duplex offset, 29-52 UR / R1 / R2 call signs (blank)
+		static const uint8_t rest[] = {
+			0x00, 0x08, 0x85, 0x00, 0x08, 0x85, 0x00, 0x00, 0x23, 0x00, 0x00, 0x00, 0x00,
+		};
+
+		for (size_t i = 0; i < sizeof(rest); i++)
+			out_byte(r->o, rest[i]);
+
+		for (int i = 0; i < 24; i++)
+			out_byte(r->o, ' ');
+
+		return out_end(r->o);
+	}
 	case 0x06:	/* data mode + filter group */
 		if (r->n >= 3) {
 			if (!get_mode(r, 0, &civ, &data, &fil))
@@ -695,7 +757,7 @@ static size_t cmd_misc(req_t *r)
 
 		return out_end(r->o);
 	default:
-		// 00 memory, 01 band stacking, 02 keyer, 04 AGC time constant,
+		// 00 memory, 02 keyer, 04 AGC time constant,
 		// 05 menu settings: not supported
 		return reply_ng(r);
 	}
