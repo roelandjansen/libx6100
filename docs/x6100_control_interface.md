@@ -507,4 +507,6 @@ Input level in dBm unknown (no signal generator yet): calibrate later.
 and no input event reaches x6100_trx. The mic PTT goes to the baseband directly,
 so Linux cannot tell it from any other TX, and during an ATU tune (TX already set)
 it cannot be seen at all: hand mic PTT does not abort a tune. Not checked yet:
-other input devices (evtest) and GPIO state; parked.
+other input devices (evtest) and GPIO state; parked. Split / XIT still work with the
+hand mic: x6100_trx follows the TX flag (b1) and moves the baseband to the TX
+frequency within a few ms (verified 2026-10-24).

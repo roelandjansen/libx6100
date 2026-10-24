@@ -10,8 +10,9 @@ Status: 2026-10-24 (v0.8.0).
 
 - TX ranges config file and transverter profile (frequency offset, TX enable).
 - 10 m repeater split (FM, -100 kHz shift, CTCSS) on top of split.
-- Split with the hand mic PTT: test the baseband split flag (register 12 b1, VFO A RX /
-  VFO B TX) so the baseband itself switches; now front panel / CAT PTT only.
+- Hand mic PTT with split: x6100_trx follows the baseband TX flag (verified), the first
+  ms go out on the RX side; the baseband split flag (register 12 b1, VFO A RX / VFO B TX)
+  could make that clean: to test.
 - S-meter calibration (signal generator): SMETER_CAL_DB is provisional (-21: -15 from
   an IC-7851 comparison, then 6 dB lower); also the overload point with PRE / ATT.
 - Codec level vs ALC test (x6100_tx codec at -40 / -30 / -20 dBFS).

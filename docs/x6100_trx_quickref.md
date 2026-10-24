@@ -221,7 +221,8 @@ Type a line + Enter while running; tokens can be combined (`14074000 usb`).
   until the PTT drop has gone out. Front panel PTT, CAT PTT and tune follow split;
   the hand mic PTT keys the baseband directly: x6100_trx moves to the TX side as soon
   as the baseband reports TX, so the first few ms go out on the RX frequency (avoid
-  the hand mic PTT with split across a band edge).
+  the hand mic PTT with split across a band edge). Verified on the radio 2026-10-24:
+  PTT key and hand mic both transmit on the split TX frequency.
 - CI-V: 0F (split), 21 00 / 01 / 02 (offset, RIT, XIT).
 
 ## 60 m channels (FST: CH)
