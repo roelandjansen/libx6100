@@ -111,7 +111,7 @@ Two files in `/etc/x6100`, both in console tokens (`#` = comment):
 
 | File | Written by | Holds |
 |---|---|---|
-| `x6100_trx.state` | x6100_trx, at exit | last state: frequency, mode, filter, volume, gains, DSP, scope, REF, band memories |
+| `x6100_trx.state` | x6100_trx, at exit | last state: frequency, mode, filter, volume / mute, gains, AGC per mode group, DSP, scope, REF, band memories, tuned ATU networks |
 | `x6100_trx.conf` | you, never x6100_trx | what must be the same at every start (example: `docs/x6100_trx.conf.example`) |
 | `filters.conf` | filter panel | filter widths and shifts per mode group |
 
@@ -150,6 +150,10 @@ Type a line + Enter while running; tokens can be combined (`14074000 usb`).
 | `rf af split`, `af3 af6` | scope view, audio range |
 | `span 96000-3000` | scope span in Hz |
 | `band 40m 7074000` | remembered frequency of a band |
+| `agc ssb|ssbd|cw|am|fm off|slow|fast|auto` | AGC of a mode group |
+| `atunet 40m L C S` | tuned network of a band |
+| `mute nomute` | audio mute |
+| `cat 19200`, `cat off` | CI-V at start (settings file; `--cat` overrides) |
 
 ## TX safety
 

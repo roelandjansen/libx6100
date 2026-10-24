@@ -25,9 +25,17 @@
 #   rf af split  af3 af6            scope view, audio range 0-3 / 0-6 kHz
 #   ref -30-30 aref -30-30          RF / audio scope reference level (dB)
 #   band 40m 7074000                remembered frequency of a band
+#   agc ssb|ssbd|cw|am|fm <agc>     AGC of a mode group
+#   atunet 40m L C S                tuned network of a band
+#   mute nomute                     audio mute
+#   cat 19200 | cat off             CI-V on ttyS2 (DEV USB-C), as an IC-705; start only
 
 # Examples (remove the # to use):
 # vol 20
 # pwr 5
 # ref -10
 # nrl 20 nbl 10 nbw 10
+
+# CI-V: the stock image runs ttyS2 at 19200 only (2026-10-23). Raise this
+# when the CI-V rate is fixed (own kernel / device tree). --cat=baud overrides.
+cat 19200

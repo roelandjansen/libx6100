@@ -260,6 +260,7 @@ static const char *g_input_names[IN_COUNT] = {
 
 static volatile sig_atomic_t g_stop;
 static bool g_poweroff;	/* PWR held 4 s: power the radio off after the clean exit */
+static int g_cat_baud;		/* CI-V baud, 0 = no CAT: conf token cat, or --cat */
 
 static void on_signal(int sig)
 {
@@ -3037,6 +3038,11 @@ static bool console_token(rx_t *rx, const char *t)
 		return true;
 	}
 
+	if (strcasecmp(t, "mute") == 0 || strcasecmp(t, "nomute") == 0) {
+		rx->mute = strcasecmp(t, "mute") == 0;
+		return true;
+	}
+
 	if (strcasecmp(t, "atu") == 0 || strcasecmp(t, "noatu") == 0) {
 		rx->atu_on = strcasecmp(t, "atu") == 0;
 		return true;
@@ -3234,6 +3240,68 @@ static bool console_line(rx_t *rx, char *line)
 			continue;
 		}
 
+		// cat 19200 | cat off: CI-V on ttyS2 (read at start only)
+		if (strcasecmp(t, "cat") == 0) {
+			const char *v = strtok(NULL, " \t\r\n");
+			int b = v == NULL ? -1 : strcasecmp(v, "off") == 0 ? 0 : atoi(v);
+
+			if (b == 0 || b == 4800 || b == 9600 || b == 19200 || b == 38400 || b == 57600 || b == 115200)
+				g_cat_baud = b;
+			else
+				fprintf(stderr, "\ncat: off, 4800, 9600, 19200, 38400, 57600 or 115200\n");
+
+			continue;
+		}
+
+		// agc ssb|ssbd|cw|am|fm off|slow|fast|auto: AGC of a mode group
+		if (strcasecmp(t, "agc") == 0) {
+			static const char *agcs[] = { [X6100_AGC_OFF] = "off", [X6100_AGC_SLOW] = "slow",
+				[X6100_AGC_FAST] = "fast", [X6100_AGC_AUTO] = "auto" };
+			const char *gs = strtok(NULL, " \t\r\n"), *as = strtok(NULL, " \t\r\n");
+			int g = -1, a = -1;
+
+			for (int i = 0; gs != NULL && i < FG_COUNT; i++)
+				g = strcasecmp(gs, g_fg_name[i]) == 0 ? i : g;
+
+			for (int i = 0; as != NULL && i < 4; i++)
+				a = strcasecmp(as, agcs[i]) == 0 ? i : a;
+
+			if (g < 0 || a < 0) {
+				fprintf(stderr, "\nagc: ssb|ssbd|cw|am|fm off|slow|fast|auto\n");
+				continue;
+			}
+
+			rx->agc_group[g] = (x6100_agc_t) a;
+
+			if (g == (int) mode_group(rx->mode))
+				rx->agc = (x6100_agc_t) a;
+
+			changed = true;
+			continue;
+		}
+
+		// atunet 40m L C S: tuned network of a band (as the tuner found it)
+		if (strcasecmp(t, "atunet") == 0) {
+			const char *bs = strtok(NULL, " \t\r\n");
+			const char *ls = strtok(NULL, " \t\r\n"), *cs = strtok(NULL, " \t\r\n"), *ss = strtok(NULL, " \t\r\n");
+			int b = -1;
+
+			for (int i = 0; bs != NULL && i < BAND_COUNT; i++)
+				b = strcasecmp(bs, g_bands[i].name) == 0 ? i : b;
+
+			if (b < 0 || ls == NULL || cs == NULL || ss == NULL) {
+				fprintf(stderr, "\natunet: <band> <L> <C> <S>\n");
+				continue;
+			}
+
+			rx->atu_net[b].l = (uint8_t) atoi(ls);
+			rx->atu_net[b].c = (uint8_t) atoi(cs);
+			rx->atu_net[b].s = (uint8_t) atoi(ss);
+			rx->atu_valid[b] = true;
+			changed = true;
+			continue;
+		}
+
 		if (strcasecmp(t, "rfg") == 0) {
 			want_lvl = &rx->rfg;
 			lvl_min = 0;
@@ -3328,8 +3396,18 @@ static void state_save(const rx_t *rx)
 	for (int i = 0; i < BAND_COUNT; i++)
 		fprintf(fp, "band %s %u\n", g_bands[i].name, (unsigned) rx->band_freq[i]);
 
+	for (int i = 0; i < BAND_COUNT; i++) {
+		if (rx->atu_valid[i])
+			fprintf(fp, "atunet %s %u %u %u\n", g_bands[i].name, rx->atu_net[i].l, rx->atu_net[i].c, rx->atu_net[i].s);
+	}
+
+	fprintf(fp, "\n");
+
+	for (int g = 0; g < FG_COUNT; g++)
+		fprintf(fp, "agc %s %s\n", g_fg_name[g], agcs[rx->agc_group[g]]);
+
 	fprintf(fp, "\n%u %s %s fil%d step %d\n", (unsigned) rx->freq, modes[rx->mode], agcs[rx->agc], rx->fil + 1, rx->step);
-	fprintf(fp, "vol %d rfg %d pwr %.1f\n", rx->vol, rx->rfg, rx->txpwr / 10.0);
+	fprintf(fp, "vol %d %s rfg %d pwr %.1f\n", rx->vol, rx->mute ? "mute" : "nomute", rx->rfg, rx->txpwr / 10.0);
 	fprintf(fp, "%s %s %s\n", rx->att ? "att" : "noatt", rx->pre ? "pre" : "nopre", rx->atu_on ? "atu" : "noatu");
 	fprintf(fp, "%s %s %s\n", rx->nr ? "nr" : "nonr", rx->nb ? "nb" : "nonb", rx->dnf ? "notch" : "nonotch");
 	fprintf(fp, "nrl %d nbl %d nbw %d ntf %d ntw %d\n", rx->nr_lvl, rx->nb_lvl, rx->nb_w, rx->dnf_f, rx->dnf_w);
@@ -4138,7 +4216,6 @@ int main(int argc, char **argv)
 	int apcm_slot = -1;	/* audio scope capture, fd -1 while closed */
 	x6100_pcm_t apcm;
 	bool apcm_open = false;
-	int cat_baud = 0;	/* 0 = no CAT */
 	static cat_t cat = { .fd = -1 };
 	rx_t rx = { .vol = 20, .rfg = 100, .step = 100, .agc = (x6100_agc_t) -1, .mode = X6100_MODE_USB,
 		.txpwr = TXPWR_DEF, .scope = SCOPE_CENTER, .span = SPAN_HZ,
@@ -4149,6 +4226,9 @@ int main(int argc, char **argv)
 
 	for (int i = 0; i < BAND_COUNT; i++)
 		rx.band_freq[i] = g_bands[i].def;
+
+	for (int g = 0; g < FG_COUNT; g++)
+		rx.agc_group[g] = g == FG_AM || g == FG_FM ? X6100_AGC_SLOW : X6100_AGC_AUTO;
 
 	set_freq(&rx, 14074000);
 
@@ -4164,10 +4244,10 @@ int main(int argc, char **argv)
 		}
 
 		if (strcmp(argv[i], "--cat") == 0 || strncmp(argv[i], "--cat=", 6) == 0) {
-			cat_baud = argv[i][5] == '=' ? atoi(argv[i] + 6) : CAT_BAUD_DEF;
+			g_cat_baud = argv[i][5] == '=' ? atoi(argv[i] + 6) : CAT_BAUD_DEF;
 
-			if (cat_baud != 4800 && cat_baud != 9600 && cat_baud != 19200 && cat_baud != 38400
-				&& cat_baud != 57600 && cat_baud != 115200) {
+			if (g_cat_baud != 4800 && g_cat_baud != 9600 && g_cat_baud != 19200 && g_cat_baud != 38400
+				&& g_cat_baud != 57600 && g_cat_baud != 115200) {
 				fprintf(stderr, "%s: baud 4800, 9600, 19200, 38400, 57600 or 115200\n", argv[i]);
 				return 1;
 			}
@@ -4176,7 +4256,7 @@ int main(int argc, char **argv)
 
 		if (strcmp(argv[i], "--cat-log") == 0) {
 			g_cat_log = true;
-			cat_baud = cat_baud ? cat_baud : CAT_BAUD_DEF;
+			g_cat_baud = g_cat_baud ? g_cat_baud : CAT_BAUD_DEF;
 			continue;
 		}
 
@@ -4204,12 +4284,7 @@ int main(int argc, char **argv)
 		}
 	}
 
-	//
-	// AGC per mode group; an AGC given on the command line applies to the start mode
-	//
-	for (int g = 0; g < FG_COUNT; g++)
-		rx.agc_group[g] = g == FG_AM || g == FG_FM ? X6100_AGC_SLOW : X6100_AGC_AUTO;
-
+	// AGC given with a mode (state, conf, command line) belongs to the start mode's group
 	rx.agc_last_group = mode_group(rx.mode);
 
 	if ((int) rx.agc < 0)
@@ -4288,11 +4363,11 @@ int main(int argc, char **argv)
 	//
 	// CAT on the USB serial port (--cat)
 	//
-	if (cat_baud > 0) {
-		if ((rc = cat_open(&cat, &rx, &scr, cat_baud)) < 0) {
+	if (g_cat_baud > 0) {
+		if ((rc = cat_open(&cat, &rx, &scr, g_cat_baud)) < 0) {
 			fprintf(stderr, "warning: CAT %s: %s\n", CAT_DEV, strerror(-rc));
 		} else {
-			printf("CAT: CI-V on %s, %d baud, address %02X (IC-705)\n", CAT_DEV, cat_baud, cat.civ.addr);
+			printf("CAT: CI-V on %s, %d baud, address %02X (IC-705)\n", CAT_DEV, g_cat_baud, cat.civ.addr);
 			pfd[npfd].fd = cat.fd;
 			pfd[npfd].events = POLLIN;
 			pmap[npfd] = IN_COUNT;
