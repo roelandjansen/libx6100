@@ -47,7 +47,8 @@ Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
 | ATU | tuner in / out | tune (keys TX at tune power) |
 | LOCK | lock knobs and keys (PTT still works) | |
 | PWR | display on / off | release after 1.5-4 s: quit; hold 4 s: power off (as the stock UI). TX is dropped and filters saved first |
-| GEN / KEY / MSG / APP | not used yet (see the key plan in `TODO.md`) | |
+| GEN | settings panel: brightness, CAT, NTP (MFK turn = change, push = next row, long = default; GEN, other key or 10 s idle closes) | status page: IP, uptime, battery, CAT, NTP result, build (any key or 30 s closes) |
+| KEY / MSG / APP | not used yet (see the key plan in `TODO.md`) | |
 
 ## Scope modes
 
@@ -106,6 +107,23 @@ Values are kept in the last state (see Settings); defaults NR 20, NB 10 / 10, no
 - Tune panel (ATU long press / CAT): amber TUNING with live PO and SWR bars (SWR green / yellow / red), then green TUNED for 4 s with the time taken and the network (L, C, S in decimal, relay bits and hex)
 - Clock under the filter label: system time, UTC, ISO 8601 (`2026-10-24T10:08:27Z`); hidden behind the filter panel while that is open. At start x6100_trx runs one NTP sync with the image's busybox `ntpd -q` (server: `ntp` in the conf, else /etc/ntp.conf, else pool.ntp.org) and reports the result on the console; skipped when the OS already runs a time daemon, or with `ntp off`
 
+## Settings panel (GEN)
+
+![GEN settings](images/x6100_trx_gen.png)
+
+| Row | Values | When |
+|---|---|---|
+| BRIGHTNESS | 10-100 % in steps of 5 (default 100) | at once |
+| CAT (CI-V) | OFF, 4800 ... 115200 (default 19200; the stock image only runs 19200) | next start |
+| NTP SYNC | AT START / OFF | next start |
+
+Changes go to `x6100_trx.state` at exit. A row set in `x6100_trx.conf` shows CONF and
+cannot be changed here: the conf wins at start, so change it there.
+
+GEN long: status page (IP address, uptime, battery, CAT, last NTP result, build).
+
+![GEN status](images/x6100_trx_status.png)
+
 ## Settings
 
 Two files in `/etc/x6100`, both in console tokens (`#` = comment):
@@ -155,7 +173,8 @@ Type a line + Enter while running; tokens can be combined (`14074000 usb`).
 | `atunet 40m L C S` | tuned network of a band |
 | `mute nomute` | audio mute |
 | `cat 19200`, `cat off` | CI-V at start (settings file; `--cat` overrides) |
-| `ntp <server>`, `ntp off` | NTP sync at start (settings file) |
+| `ntp <server>`, `ntp on`, `ntp off` | NTP sync at start (settings file) |
+| `bright 10-100` | display brightness in % |
 | `oob`, `nolimit` | as `--oob` / `--no-limit` (settings file): warned at every start, red OOB on the dial |
 
 ## TX safety

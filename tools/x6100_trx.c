@@ -59,12 +59,15 @@
 
 #include "x6100.h"
 
+#include <arpa/inet.h>
 #include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <ifaddrs.h>
 #include <linux/input.h>
 #include <math.h>
+#include <netinet/in.h>
 #include <poll.h>
 #include <signal.h>
 #include <stdbool.h>
@@ -83,6 +86,10 @@
 #include "x6100_keys.h"
 #include "x6100_lcd.h"
 #include "x6100_pcm.h"
+
+#ifndef X6100_REV
+#define X6100_REV	"dev"	/* build.sh passes the git revision */
+#endif
 
 static bool g_no_limit;	/* --no-limit: tune 10 kHz - 100 MHz (test what the baseband accepts) */
 static bool g_probe;	/* --probe: print flow flags and peak IQ (overflow hunt) */
@@ -216,6 +223,11 @@ typedef struct
 	bool redit;		/* F2 long: MFK sets the scope reference level */
 	bool redit_af;		/* reference edit acts on the audio scope */
 	uint64_t redit_since;	/* last reference edit activity, for the idle close */
+	bool gedit;		/* GEN: settings panel */
+	int gedit_par;		/* selected row, index into g_gen */
+	uint64_t gedit_since;
+	bool ginfo;		/* GEN long: status page */
+	uint64_t ginfo_since;
 
 	//
 	// Meter shown on the dial during TX (F4): 0 Po, 1 SWR, 2 ALC
@@ -262,6 +274,14 @@ static volatile sig_atomic_t g_stop;
 static bool g_poweroff;	/* PWR held 4 s: power the radio off after the clean exit */
 static int g_cat_baud;		/* CI-V baud, 0 = no CAT: conf token cat, or --cat */
 static char g_ntp_server[64];	/* conf token ntp <server> | off; empty = ntp.conf or pool.ntp.org */
+static int g_bright;		/* backlight level, % (10-100); 0 = leave as the OS set it */
+static unsigned g_conf_set;	/* GEN rows that x6100_trx.conf fixes (bit = row): shown CONF, locked */
+static bool g_conf_reading;	/* conf_load of CONF_PATH in progress */
+static char g_ntp_msg[64] = "not run";	/* last NTP result, for the status page */
+
+enum { GEN_BRIGHT, GEN_CAT, GEN_NTP, GEN_ROWS };	/* GEN settings rows */
+
+static void gen_adjust(int row, int dir, bool def);
 
 static void on_signal(int sig)
 {
@@ -814,6 +834,29 @@ static bool on_key(rx_t *rx, int key)
 	}
 
 	//
+	// GEN settings panel open: MFK push selects the next row; GEN closes it (below),
+	// any other key closes it and does its normal job. The status page closes on any key.
+	//
+	if (rx->gedit) {
+		rx->gedit_since = now_ms();
+
+		if (key == X6100_KEY_MFK_PUSH) {
+			rx->gedit_par = (rx->gedit_par + 1) % GEN_ROWS;
+			return true;
+		}
+
+		if (key != X6100_KEY_GEN)
+			rx->gedit = false;
+	}
+
+	if (rx->ginfo) {
+		rx->ginfo = false;
+
+		if (key == X6100_KEY_GEN)
+			return true;
+	}
+
+	//
 	// Filter panel open: F5 cycles FIL1-3, MFK push switches BW / SFT; any other key
 	// closes the panel (edits are kept) and then does its normal job
 	//
@@ -858,6 +901,10 @@ static bool on_key(rx_t *rx, int key)
 	switch (key) {
 	case X6100_KEY_LOCK:
 		rx->lock = !rx->lock;
+		break;
+	case X6100_KEY_GEN:	/* short: settings panel; long: status page */
+		rx->gedit = !rx->gedit;
+		rx->gedit_since = now_ms();
 		break;
 	case X6100_KEY_DFL:	/* short: notch on / off; long: DSP panel */
 		rx->dnf = !rx->dnf;
@@ -961,7 +1008,8 @@ typedef struct
 static bool has_long(int key)
 {
 	return key == X6100_KEY_PRE || key == X6100_KEY_FST || key == X6100_KEY_ATU || key == X6100_KEY_MFK_PUSH
-		|| key == X6100_KEY_F1 || key == X6100_KEY_F2 || key == X6100_KEY_F3 || key == X6100_KEY_F5 || key == X6100_KEY_DFN || key == X6100_KEY_DFL;
+		|| key == X6100_KEY_F1 || key == X6100_KEY_F2 || key == X6100_KEY_F3 || key == X6100_KEY_F5 || key == X6100_KEY_DFN || key == X6100_KEY_DFL
+		|| key == X6100_KEY_GEN;
 }
 
 static bool on_long_key(rx_t *rx, int key)
@@ -994,6 +1042,12 @@ static bool on_long_key(rx_t *rx, int key)
 
 		return true;
 	case X6100_KEY_MFK_PUSH:
+		if (rx->gedit) {
+			gen_adjust(rx->gedit_par, 0, true);
+			rx->gedit_since = now_ms();
+			return true;
+		}
+
 		if (rx->dedit) {
 			*dsp_value(rx, rx->dedit_par) = g_dsp[rx->dedit_par].def;
 			rx->dedit_since = now_ms();
@@ -1030,6 +1084,11 @@ static bool on_long_key(rx_t *rx, int key)
 	case X6100_KEY_DFL:
 		rx->dedit = !rx->dedit;
 		rx->dedit_since = now_ms();
+		return true;
+	case X6100_KEY_GEN:
+		rx->ginfo = !rx->ginfo;
+		rx->ginfo_since = now_ms();
+		rx->gedit = false;
 		return true;
 	case X6100_KEY_DFN:
 		rx->nb = !rx->nb;
@@ -1116,6 +1175,12 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 		rx->vol = clampi(rx->vol + value * X6100_DIR_VOL, 0, 100);
 		return true;
 	case IN_MFK:
+		if (rx->gedit) {
+			gen_adjust(rx->gedit_par, value * X6100_DIR_MFK > 0 ? 1 : -1, false);
+			rx->gedit_since = now_ms();
+			return true;
+		}
+
 		if (rx->redit) {
 			int *p = rx->redit_af ? &rx->aref : &rx->rref;
 
@@ -2096,6 +2161,164 @@ static void draw_filter_panel(x6100_lcd_t *lcd, const rx_t *rx)
 // OFF state of each function is shown in its group and switched with DFN / DFL.
 //
 
+//
+// GEN: settings panel (short) and status page (long). Rows are kept in the
+// state file; a row that x6100_trx.conf sets is shown CONF and cannot be
+// changed here (the conf always wins at start). Violet, to tell it from the
+// filter (blue), DSP (teal) and tune (amber) panels.
+//
+
+static const char *g_gen_name[GEN_ROWS] = { "BRIGHTNESS", "CAT (CI-V)", "NTP SYNC" };
+static const int g_cat_rates[] = { 0, 4800, 9600, 19200, 38400, 57600, 115200 };
+
+#define CAT_RATES	((int) (sizeof(g_cat_rates) / sizeof(g_cat_rates[0])))
+
+static bool backlight_level(int pct);
+
+static void gen_value(int row, char *s, size_t n)
+{
+	switch (row) {
+	case GEN_BRIGHT:
+		if (g_bright > 0)
+			snprintf(s, n, "%d %%", g_bright);
+		else
+			snprintf(s, n, "AS OS");
+		break;
+	case GEN_CAT:
+		if (g_cat_baud > 0)
+			snprintf(s, n, "%d", g_cat_baud);
+		else
+			snprintf(s, n, "OFF");
+		break;
+	default:
+		snprintf(s, n, "%s", strcmp(g_ntp_server, "off") == 0 ? "OFF" : "AT START");
+		break;
+	}
+}
+
+// MFK turn on a row (dir +-1); def: MFK long, back to the default
+static void gen_adjust(int row, int dir, bool def)
+{
+	if (g_conf_set & (1u << row))
+		return;
+
+	switch (row) {
+	case GEN_BRIGHT:
+		g_bright = def ? 100 : clampi((g_bright > 0 ? g_bright : 100) + dir * 5, 10, 100);
+		backlight_level(g_bright);
+		break;
+	case GEN_CAT: {
+		int i = 0;
+
+		while (i < CAT_RATES - 1 && g_cat_rates[i] != g_cat_baud)
+			i++;
+
+		g_cat_baud = def ? 19200 : g_cat_rates[clampi(i + dir, 0, CAT_RATES - 1)];
+		break;
+	}
+	default:
+		snprintf(g_ntp_server, sizeof(g_ntp_server), "%s", def || strcmp(g_ntp_server, "off") == 0 ? "" : "off");
+		break;
+	}
+}
+
+static void gen_frame(x6100_lcd_t *lcd, int px, int py, int pw, int ph, const char *title, const char *hint)
+{
+	const uint32_t bg = 0x140F1E, violet = 0xB080FF, edge = 0x3A2C55, dim = 0x8A82A0;
+
+	x6100_lcd_fill(lcd, px, py, pw, ph, bg);
+	x6100_lcd_fill(lcd, px, py, 3, ph, violet);
+	x6100_lcd_hline(lcd, px, px + pw - 1, py, edge);
+	x6100_lcd_hline(lcd, px, px + pw - 1, py + ph - 1, edge);
+	x6100_lcd_vline(lcd, px + pw - 1, py, py + ph - 1, edge);
+	x6100_lcd_text(lcd, px + 14, py + 7, 2, title, violet);
+	x6100_lcd_text(lcd, px + 14 + x6100_lcd_text_width(title, 2) + 16, py + 11, 1, hint, dim);
+}
+
+static void draw_gen_panel(x6100_lcd_t *lcd, const rx_t *rx)
+{
+	const int px = LBL_W + 8, py = SPEC_Y + 16, pw = 500, ph = 132;
+	const uint32_t sel = 0x2E2348, dim = 0x8A82A0, white = 0xF0F0F0, violet = 0xB080FF, amber = 0xFFB020;
+
+	gen_frame(lcd, px, py, pw, ph, "SETTINGS", "MFK: ADJUST   PUSH: NEXT   HOLD: DEFAULT   GEN: CLOSE");
+
+	for (int i = 0; i < GEN_ROWS; i++) {
+		int y = py + 30 + i * 22;
+		bool locked = g_conf_set & (1u << i);
+		char v[24];
+
+		if (i == rx->gedit_par)
+			x6100_lcd_fill(lcd, px + 6, y - 3, pw - 12, 20, sel);
+
+		x6100_lcd_text(lcd, px + 14, y, 2, g_gen_name[i], i == rx->gedit_par ? white : dim);
+
+		if (i != GEN_BRIGHT)
+			x6100_lcd_text(lcd, px + 200, y + 4, 1, "APPLIES AT NEXT START", dim);
+
+		gen_value(i, v, sizeof(v));
+		x6100_lcd_text(lcd, px + pw - 12 - x6100_lcd_text_width(v, 2), y, 2, v, locked ? dim : white);
+
+		if (locked)
+			x6100_lcd_text(lcd, px + pw - 22 - x6100_lcd_text_width(v, 2) - x6100_lcd_text_width("CONF", 2), y, 2, "CONF", amber);
+	}
+
+	x6100_lcd_text(lcd, px + 14, py + ph - 16, 1, "KEPT IN THE STATE FILE.  CONF: SET IN THE CONF FILE, CHANGE IT THERE", violet);
+}
+
+static void draw_gen_info(x6100_lcd_t *lcd, const screen_t *scr)
+{
+	const int px = LBL_W + 8, py = SPEC_Y + 16, pw = 500, ph = 136;
+	const uint32_t dim = 0x8A82A0, white = 0xF0F0F0;
+	struct ifaddrs *ifa = NULL;
+	char lines[6][64];
+	int n = 0;
+	double up = 0.0;
+	FILE *fp;
+
+	gen_frame(lcd, px, py, pw, ph, "STATUS", "GEN LONG OR ANY KEY: CLOSE");
+
+	if (getifaddrs(&ifa) == 0) {
+		for (struct ifaddrs *a = ifa; a != NULL && n < 2; a = a->ifa_next) {
+			char ip[INET_ADDRSTRLEN];
+
+			if (a->ifa_addr == NULL || a->ifa_addr->sa_family != AF_INET || strcmp(a->ifa_name, "lo") == 0)
+				continue;
+
+			inet_ntop(AF_INET, &((struct sockaddr_in *) a->ifa_addr)->sin_addr, ip, sizeof(ip));
+			snprintf(lines[n++], sizeof(lines[0]), "IP      %s %s", a->ifa_name, ip);
+		}
+
+		freeifaddrs(ifa);
+	}
+
+	if (n == 0)
+		snprintf(lines[n++], sizeof(lines[0]), "IP      no network");
+
+	if ((fp = fopen("/proc/uptime", "r")) != NULL) {
+		if (fscanf(fp, "%lf", &up) != 1)
+			up = 0.0;
+
+		fclose(fp);
+	}
+
+	snprintf(lines[n++], sizeof(lines[0]), "UPTIME  %dh%02dm   BATTERY %.1f V", (int) up / 3600, (int) up / 60 % 60, scr->vbat);
+
+	if (g_cat_baud > 0)
+		snprintf(lines[n++], sizeof(lines[0]), "CAT     %d BAUD, IC-705, ADDRESS A4", g_cat_baud);
+	else
+		snprintf(lines[n++], sizeof(lines[0]), "CAT     OFF");
+
+	snprintf(lines[n++], sizeof(lines[0]), "NTP     %s", g_ntp_msg);
+	snprintf(lines[n++], sizeof(lines[0]), "BUILD   %s", X6100_REV);
+
+	for (int i = 0; i < n; i++) {
+		for (char *c = lines[i]; *c != '\0'; c++)
+			*c = (char) toupper((unsigned char) *c);	/* the panel font has capitals only */
+
+		x6100_lcd_text(lcd, px + 14, py + 30 + i * 17, 2, lines[i], i == n - 1 ? dim : white);
+	}
+}
+
 static void draw_dsp_panel(x6100_lcd_t *lcd, const rx_t *rx)
 {
 	const int px = LBL_W + 8, py = SPEC_Y + 16, pw = 500, ph = 132;
@@ -2929,6 +3152,12 @@ overlays:
 	if (rx->dedit)
 		draw_dsp_panel(lcd, rx);
 
+	if (rx->gedit)
+		draw_gen_panel(lcd, rx);
+
+	if (rx->ginfo)
+		draw_gen_info(lcd, scr);
+
 	if (rx->tuning || (rx->tune_done && now_ms() - rx->tune_done < TUNE_SHOW_MS))
 		draw_tune_panel(lcd, rx, scr);
 
@@ -3261,10 +3490,12 @@ static bool console_line(rx_t *rx, char *line)
 			const char *v = strtok(NULL, " \t\r\n");
 			int b = v == NULL ? -1 : strcasecmp(v, "off") == 0 ? 0 : atoi(v);
 
-			if (b == 0 || b == 4800 || b == 9600 || b == 19200 || b == 38400 || b == 57600 || b == 115200)
+			if (b == 0 || b == 4800 || b == 9600 || b == 19200 || b == 38400 || b == 57600 || b == 115200) {
 				g_cat_baud = b;
-			else
+				g_conf_set |= g_conf_reading ? 1u << GEN_CAT : 0;
+			} else {
 				fprintf(stderr, "\ncat: off, 4800, 9600, 19200, 38400, 57600 or 115200\n");
+			}
 
 			continue;
 		}
@@ -3273,10 +3504,28 @@ static bool console_line(rx_t *rx, char *line)
 		if (strcasecmp(t, "ntp") == 0) {
 			const char *v = strtok(NULL, " \t\r\n");
 
-			if (v != NULL)
-				snprintf(g_ntp_server, sizeof(g_ntp_server), "%s", v);
-			else
-				fprintf(stderr, "\nntp: <server> or off\n");
+			if (v != NULL) {
+				snprintf(g_ntp_server, sizeof(g_ntp_server), "%s", strcasecmp(v, "on") == 0 ? "" : v);
+				g_conf_set |= g_conf_reading ? 1u << GEN_NTP : 0;
+			} else {
+				fprintf(stderr, "\nntp: <server>, on or off\n");
+			}
+
+			continue;
+		}
+
+		// bright 10-100: display backlight in % (GEN)
+		if (strcasecmp(t, "bright") == 0) {
+			const char *v = strtok(NULL, " \t\r\n");
+			int b = v == NULL ? 0 : atoi(v);
+
+			if (b >= 10 && b <= 100) {
+				g_bright = b;
+				g_conf_set |= g_conf_reading ? 1u << GEN_BRIGHT : 0;
+				backlight_level(b);	/* nothing yet at start: applied again when the display opens */
+			} else {
+				fprintf(stderr, "\nbright: 10 to 100\n");
+			}
 
 			continue;
 		}
@@ -3389,6 +3638,9 @@ static void conf_load(rx_t *rx, const char *path, bool quiet)
 	if ((fp = fopen(path, "r")) == NULL)
 		return;
 
+	g_conf_reading = strcmp(path, CONF_PATH) == 0;
+
+
 	while (fgets(line, sizeof(line), fp) != NULL) {
 		char *hash = strchr(line, '#');
 
@@ -3399,6 +3651,8 @@ static void conf_load(rx_t *rx, const char *path, bool quiet)
 	}
 
 	fclose(fp);
+	g_conf_reading = false;
+
 	if (!quiet)
 		fprintf(stderr, "settings: %s\n", path);
 }
@@ -3440,6 +3694,18 @@ static void state_save(const rx_t *rx)
 	fprintf(fp, "%s %s %s\n", rx->att ? "att" : "noatt", rx->pre ? "pre" : "nopre", rx->atu_on ? "atu" : "noatu");
 	fprintf(fp, "%s %s %s\n", rx->nr ? "nr" : "nonr", rx->nb ? "nb" : "nonb", rx->dnf ? "notch" : "nonotch");
 	fprintf(fp, "nrl %d nbl %d nbw %d ntf %d ntw %d\n", rx->nr_lvl, rx->nb_lvl, rx->nb_w, rx->dnf_f, rx->dnf_w);
+	// GEN settings (a server from the conf is not repeated here: the conf sets it again)
+	if (g_cat_baud > 0)
+		fprintf(fp, "cat %d ", g_cat_baud);
+	else
+		fprintf(fp, "cat off ");
+
+	fprintf(fp, "ntp %s", strcmp(g_ntp_server, "off") == 0 ? "off" : "on");
+
+	if (g_bright > 0)
+		fprintf(fp, " bright %d", g_bright);
+
+	fprintf(fp, "\n");
 	fprintf(fp, "%s span %d %s %s ref %d aref %d\n", scopes[rx->scope], rx->span,
 		rx->asplit ? "split" : rx->ascope ? "af" : "rf", rx->arange ? "af6" : "af3", rx->rref, rx->aref);
 
@@ -4182,6 +4448,54 @@ static bool backlight_set(bool on)
 }
 
 //
+// Backlight level in % of max_brightness (GEN: BRIGHTNESS), first backlight found
+//
+
+static bool backlight_level(int pct)
+{
+	DIR *d = opendir("/sys/class/backlight");
+	struct dirent *e;
+	bool ok = false;
+
+	if (d == NULL)
+		return false;
+
+	while (!ok && (e = readdir(d)) != NULL) {
+		char path[300];
+		FILE *fp;
+		int max = 0;
+
+		if (e->d_name[0] == '.')
+			continue;
+
+		snprintf(path, sizeof(path), "/sys/class/backlight/%s/max_brightness", e->d_name);
+
+		if ((fp = fopen(path, "r")) == NULL)
+			continue;
+
+		if (fscanf(fp, "%d", &max) != 1)
+			max = 0;
+
+		fclose(fp);
+
+		if (max <= 0)
+			continue;
+
+		snprintf(path, sizeof(path), "/sys/class/backlight/%s/brightness", e->d_name);
+
+		if ((fp = fopen(path, "w")) != NULL) {
+			int v = (pct * max + 50) / 100;
+
+			ok = fprintf(fp, "%d\n", v < 1 ? 1 : v) > 0;
+			ok = fclose(fp) == 0 && ok;
+		}
+	}
+
+	closedir(d);
+	return ok;
+}
+
+//
 // One NTP sync at start with the system's busybox ntpd (-q: set once, exit).
 // Skipped when the OS already runs a time daemon (it would hold port 123 and
 // the one-shot fails). Servers: conf token ntp <server>, else /etc/ntp.conf,
@@ -4232,10 +4546,13 @@ static void ntp_start(void)
 		: access("/etc/ntp.conf", R_OK) == 0 ? NULL : "pool.ntp.org";
 	pid_t pid;
 
-	if (strcmp(g_ntp_server, "off") == 0)
+	if (strcmp(g_ntp_server, "off") == 0) {
+		snprintf(g_ntp_msg, sizeof(g_ntp_msg), "off");
 		return;
+	}
 
 	if (proc_running(daemons)) {
+		snprintf(g_ntp_msg, sizeof(g_ntp_msg), "the OS runs a time daemon");
 		printf("ntp: the OS runs a time daemon; clock as the OS has it\n");
 		return;
 	}
@@ -4259,8 +4576,10 @@ static void ntp_start(void)
 		_exit(127);
 	}
 
-	if (pid > 0)
-		printf("ntp: syncing with %s\n", server != NULL ? server : "the servers in /etc/ntp.conf");
+	if (pid > 0) {
+		snprintf(g_ntp_msg, sizeof(g_ntp_msg), "syncing with %s", server != NULL ? server : "ntp.conf servers");
+		printf("ntp: %s\n", g_ntp_msg);
+	}
 
 	g_ntp_pid = pid;
 }
@@ -4275,11 +4594,13 @@ static void ntp_poll(void)
 	g_ntp_pid = -1;
 
 	if (WIFEXITED(st) && WEXITSTATUS(st) == 0)
-		printf("\nntp: clock synced\n");
+		snprintf(g_ntp_msg, sizeof(g_ntp_msg), "synced");
 	else if (WIFEXITED(st) && WEXITSTATUS(st) == 127)
-		printf("\nntp: no ntpd on this image\n");
+		snprintf(g_ntp_msg, sizeof(g_ntp_msg), "no ntpd on this image");
 	else
-		printf("\nntp: sync failed (status %d); clock as the OS has it\n", WIFEXITED(st) ? WEXITSTATUS(st) : -1);
+		snprintf(g_ntp_msg, sizeof(g_ntp_msg), "failed (status %d)", WIFEXITED(st) ? WEXITSTATUS(st) : -1);
+
+	printf("\nntp: %s\n", g_ntp_msg);
 }
 
 int main(int argc, char **argv)
@@ -4449,6 +4770,10 @@ int main(int argc, char **argv)
 	// One NTP sync with the system's own client (runs in the background)
 	//
 	ntp_start();
+
+	// Brightness from the settings (GEN)
+	if (g_bright > 0)
+		backlight_level(g_bright);
 
 	//
 	// CAT on the USB serial port (--cat)
@@ -4646,6 +4971,12 @@ int main(int argc, char **argv)
 		// Reference level edit closes after 10 s without activity
 		if (rx.redit && t - rx.redit_since >= 10000) {
 			rx.redit = false;
+			dirty = true;
+		}
+
+		// GEN panel after 10 s, status page after 30 s
+		if ((rx.gedit && t - rx.gedit_since >= 10000) || (rx.ginfo && t - rx.ginfo_since >= 30000)) {
+			rx.gedit = rx.ginfo = false;
 			dirty = true;
 		}
 

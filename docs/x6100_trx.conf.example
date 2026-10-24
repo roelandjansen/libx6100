@@ -29,7 +29,8 @@
 #   atunet 40m L C S                tuned network of a band
 #   mute nomute                     audio mute
 #   cat 19200 | cat off             CI-V on ttyS2 (DEV USB-C), as an IC-705; start only
-#   ntp pool.ntp.org | ntp off      server for the one NTP sync at start
+#   ntp pool.ntp.org | on | off     server for the one NTP sync at start
+#   bright 10-100                   display brightness, %
 #   oob  nolimit                    band check off / tune 10 kHz-100 MHz, as --oob /
 #                                   --no-limit: warned at every start, OOB on the dial;
 #                                   where you transmit stays your responsibility

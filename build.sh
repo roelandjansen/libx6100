@@ -17,6 +17,7 @@ readonly C_TOOLS=(x6100_audio x6100_info x6100_input x6100_iqcal x6100_lcdtest x
 
 G_ZIG="${ZIG:-zig}"
 G_CFLAGS=(-std=c11 -D_GNU_SOURCE -Wall -Wextra -O2 -Iinclude)
+G_CFLAGS+=("-DX6100_REV=\"$(git -C "$(dirname -- "${BASH_SOURCE[0]}")" rev-parse --short HEAD 2>/dev/null || printf '%s' dev)\"")	# shown on the GEN status page
 
 #
 # Check that zig is available

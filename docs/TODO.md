@@ -7,8 +7,7 @@ Status: 2026-10-24.
 - Clock: own time source / sync check (now: system time, one `ntpd -q` at start).
 - PWR short press = display off: check the backlight sysfs path on the radio, and
   that the power key reports press and release (1.5-4 s quits, 4 s powers off).
-- Brightness: backlight level via /sys/class/backlight/*/brightness (max_brightness),
-  if the image exposes it; in the GEN menu.
+- Brightness (GEN): check /sys/class/backlight/*/brightness and max_brightness on the radio.
 
 ## Radio
 
@@ -41,7 +40,7 @@ Status: 2026-10-24.
 
 | Key | Short | Long | Status |
 |---|---|---|---|
-| GEN | settings menu: network, WiFi, Bluetooth, LAN server (wfview), CAT, NTP / time, display, defaults | status page: IP, versions, battery, temperature | planned |
+| GEN | settings panel: brightness, CAT, NTP (done); next: network, WiFi, Bluetooth, LAN server (wfview), TX panel | status page: IP, uptime, battery, CAT, NTP, build (done); next: temperature, baseband version | partly done |
 | KEY | keyer on / off (straight / iambic) | keyer panel: speed, iambic A / B, sidetone, break-in delay, CW pitch | planned |
 | MSG | message list: play CW / voice memory | record / edit a message | planned |
 | APP | app list: FT8, CW / RTTY decoder, SWR scan, recorder | last app | planned |
