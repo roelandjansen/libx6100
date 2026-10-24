@@ -767,7 +767,7 @@ static void vfo_equal(rx_t *rx)
 	rx->b_freq = rx->freq;
 	rx->b_mode = rx->mode;
 	rx->b_fil = rx->fil;
-	toast(rx->on_b ? "A COPIED FROM B" : "B COPIED FROM A");	/* the font has no = */
+	toast(rx->on_b ? "B COPIED TO A" : "A COPIED TO B");	/* the font has no = */
 }
 
 static void band_step(rx_t *rx, int dir)
@@ -3239,8 +3239,8 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 		x6100_lcd_text(lcd, bx + (bw - x6100_lcd_text_width(s, 2)) / 2, by + bh + 6, 2, s, SCR_FG);
 	}
 
-	// VFO in use, above the TX box
-	x6100_lcd_text(lcd, 14, FREQ_Y - 3, 1, rx->on_b ? "VFO B" : "VFO A", SCR_ACCENT);
+	// VFO in use: A or B right of the TX box
+	x6100_lcd_text(lcd, 72, FREQ_Y + 12, 3, rx->on_b ? "B" : "A", SCR_ACCENT);
 
 	//
 	// Indicators in fixed slots, two rows, so nothing shifts when one changes
