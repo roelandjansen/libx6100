@@ -4872,9 +4872,10 @@ static bool backlight_level(int pct)
 		snprintf(path, sizeof(path), "/sys/class/backlight/%s/brightness", e->d_name);
 
 		if ((fp = fopen(path, "w")) != NULL) {
-			int v = (pct * max + 50) / 100;
+			// This panel's backlight is inverted: 0 = full, max_brightness = darkest
+			int v = ((100 - pct) * max + 50) / 100;
 
-			ok = fprintf(fp, "%d\n", v < 1 ? 1 : v) > 0;
+			ok = fprintf(fp, "%d\n", v) > 0;
 			ok = fclose(fp) == 0 && ok;
 		}
 	}
