@@ -2655,7 +2655,7 @@ static void draw_gen_panel(x6100_lcd_t *lcd, const rx_t *rx)
 
 static void draw_gen_info(x6100_lcd_t *lcd, const screen_t *scr)
 {
-	const int px = LBL_W + 8, py = SPEC_Y + 16, pw = 500, ph = 136;
+	const int px = LBL_W + 8, py = SPEC_Y + 16, pw = 560, ph = 136;	/* as wide as the settings panel */
 	const uint32_t dim = 0x8A82A0, white = 0xF0F0F0;
 	struct ifaddrs *ifa = NULL;
 	char lines[6][64];
@@ -4943,13 +4943,13 @@ static void ntp_start(void)
 
 	// The IU1WXY image syncs at boot itself (S48sntp, S49ntp): leave the clock to it
 	if (access("/etc/init.d/S48sntp", X_OK) == 0 || access("/etc/init.d/S49ntp", X_OK) == 0) {
-		snprintf(g_ntp_msg, sizeof(g_ntp_msg), "left to the OS (init.d sntp / ntp)");
+		snprintf(g_ntp_msg, sizeof(g_ntp_msg), "by the OS at boot");
 		printf("ntp: %s\n", g_ntp_msg);
 		return;
 	}
 
 	if (proc_running(daemons)) {
-		snprintf(g_ntp_msg, sizeof(g_ntp_msg), "the OS runs a time daemon");
+		snprintf(g_ntp_msg, sizeof(g_ntp_msg), "by the OS time daemon");
 		printf("ntp: the OS runs a time daemon; clock as the OS has it\n");
 		return;
 	}
