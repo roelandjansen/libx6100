@@ -2526,7 +2526,7 @@ static void gen_adjust(int row, int dir, bool def)
 
 	switch (row) {
 	case GEN_BRIGHT:
-		g_bright = def ? 100 : clampi((g_bright > 0 ? g_bright : 100) + dir * 5, 10, 100);
+		g_bright = def ? 100 : clampi((g_bright > 0 ? g_bright : 100) + dir * 5, 5, 100);
 		backlight_level(g_bright);
 		break;
 	case GEN_CAT: {
@@ -3907,12 +3907,12 @@ static bool console_line(rx_t *rx, char *line)
 			const char *v = strtok(NULL, " \t\r\n");
 			int b = v == NULL ? 0 : atoi(v);
 
-			if (b >= 10 && b <= 100) {
+			if (b >= 5 && b <= 100) {
 				g_bright = b;
 				g_conf_set |= g_conf_reading ? 1u << GEN_BRIGHT : 0;
 				backlight_level(b);	/* nothing yet at start: applied again when the display opens */
 			} else {
-				fprintf(stderr, "\nbright: 10 to 100\n");
+				fprintf(stderr, "\nbright: 5 to 100\n");
 			}
 
 			continue;
@@ -4872,8 +4872,9 @@ static bool backlight_level(int pct)
 		snprintf(path, sizeof(path), "/sys/class/backlight/%s/brightness", e->d_name);
 
 		if ((fp = fopen(path, "w")) != NULL) {
-			// This panel's backlight is inverted: 0 = full, max_brightness = darkest
-			int v = ((100 - pct) * max + 50) / 100;
+			// This panel's backlight is inverted (1 = full, max_brightness = darkest) and
+			// 0 switches it off: 100 % writes 1
+			int v = 1 + ((100 - pct) * (max - 1) + 50) / 100;
 
 			ok = fprintf(fp, "%d\n", v) > 0;
 			ok = fclose(fp) == 0 && ok;

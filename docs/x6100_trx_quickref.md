@@ -113,7 +113,7 @@ Values are kept in the last state (see Settings); defaults NR 20, NB 10 / 10, no
 
 | Row | Values | When |
 |---|---|---|
-| BRIGHTNESS | 10-100 % in steps of 5 (default 100) | at once |
+| BRIGHTNESS | 5-100 % in steps of 5 (default 100) | at once |
 | CAT (CI-V) | OFF, 4800 ... 115200 (default 19200; the stock image only runs 19200) | next start |
 | NTP SYNC | AT START / OFF | next start |
 | WIFI | ON / OFF (NetworkManager); shows network, IP and signal | at once |
@@ -182,7 +182,7 @@ Type a line + Enter while running; tokens can be combined (`14074000 usb`).
 | `mute nomute` | audio mute |
 | `cat 19200`, `cat off` | CI-V at start (settings file; `--cat` overrides) |
 | `ntp <server>`, `ntp on`, `ntp off` | NTP sync at start (settings file) |
-| `bright 10-100` | display brightness in % |
+| `bright 5-100` | display brightness in % |
 | `oob`, `nolimit` | as `--oob` / `--no-limit` (settings file): warned at every start, red OOB on the dial |
 
 ## TX safety
