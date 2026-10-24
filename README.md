@@ -7,10 +7,15 @@ APP 1.2.0 / BASE 1.1.9 interface; contains no R1CBU, Aether or Xiegu code.
 Goal: replace the R1CBU control layer and the patched baseband dependency with an
 independent, documented library, as the base for a new front end.
 
+![x6100_trx on the radio](docs/images/x6100_trx_photo.jpg)
+
+`x6100_trx` on the X6100 (stock BASE 1.1.9), 20 m SSB, 2026-10-24. Key reference
+in `docs/x6100_trx_quickref.md`.
+
 ![x6100_trx receive screen](docs/images/x6100_trx.png)
 
-`x6100_trx` receive screen (rendered by its own drawing code with synthetic signals;
-key reference in `docs/x6100_trx_quickref.md`).
+The same screen rendered by its own drawing code, with 20 m SSB activity modelled
+on the photo (stations every few kHz, voice in syllables on the waterfall).
 
 ![x6100_trx filter panel](docs/images/x6100_trx_filter.png)
 
