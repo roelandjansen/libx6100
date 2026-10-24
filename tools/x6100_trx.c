@@ -1168,6 +1168,8 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 #define AS_RATE		48000
 #define AS_DB_MIN	-110.0f	/* dBFS */
 #define AS_DB_MAX	-10.0f
+#define AS_RANGE_DB	80.0f		/* normalised window height */
+#define AS_FLOOR_DB	10.0f		/* window bottom under the audio floor */
 #define SPEC_Y		180
 #define SPEC_H		150
 #define WF_Y		(SPEC_Y + SPEC_H + 4)
@@ -2289,9 +2291,14 @@ static float audio_db_at(const float *a, int x, int w, int range_hz)
 	return (float) (a[i] * (1.0 - t) + a[i + 1] * t);
 }
 
+// Audio scope vertical scale, normalised: the bottom follows the audio noise
+// floor (AS_FLOOR_DB under it) and the window is AS_RANGE_DB high, so the
+// picture stays put whatever the volume or band noise; labels stay in dBFS
+static float g_as_bottom = AS_DB_MIN;
+
 static int audio_y(float db)
 {
-	float n = (db - AS_DB_MIN) / (AS_DB_MAX - AS_DB_MIN);
+	float n = (db - g_as_bottom) / AS_RANGE_DB;
 
 	n = n < 0.0f ? 0.0f : n > 1.0f ? 1.0f : n;
 	return SPEC_Y + SPEC_H - 1 - (int) (n * (float) (SPEC_H - 1));
@@ -2309,6 +2316,8 @@ static void draw_audio_spec(screen_t *scr, const rx_t *rx, int x0, int w)
 	const int range = rx->arange ? 6000 : 3000;
 	uint32_t lo, hi;
 	int prev_y = -1;
+
+	g_as_bottom = scr->aspec_valid ? scr->afloor - AS_FLOOR_DB : AS_DB_MIN;
 
 	x6100_lcd_fill(lcd, x0, SPEC_Y, w, SPEC_H, 0x05080C);
 
@@ -2338,7 +2347,7 @@ static void draw_audio_spec(screen_t *scr, const rx_t *rx, int x0, int w)
 		}
 	}
 
-	for (int db = (int) AS_DB_MAX - GRID_DB; db > (int) AS_DB_MIN; db -= GRID_DB)
+	for (int db = (int) ceilf(g_as_bottom / GRID_DB) * GRID_DB; db < g_as_bottom + AS_RANGE_DB; db += GRID_DB)
 		x6100_lcd_hline(lcd, x0, x0 + w - 1, audio_y((float) db), 0x1A2430);
 
 	if (scr->aspec_valid) {
@@ -2356,7 +2365,7 @@ static void draw_audio_spec(screen_t *scr, const rx_t *rx, int x0, int w)
 	}
 
 	// dBFS labels in the left margin of this part, over the trace
-	for (int db = (int) AS_DB_MAX - GRID_DB; db > (int) AS_DB_MIN; db -= GRID_DB) {
+	for (int db = (int) ceilf(g_as_bottom / GRID_DB) * GRID_DB; db < g_as_bottom + AS_RANGE_DB; db += GRID_DB) {
 		char lbl[8];
 		int gy = audio_y((float) db);
 
@@ -2624,7 +2633,7 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 	// AF right). A change of view starts a fresh waterfall.
 	//
 	int view = rx->asplit ? 2 : rx->ascope ? 1 : 0;
-	const int SW = view == 2 ? W / 2 : W;	/* RF scope width */
+	const int SW = view == 2 ? W * 5 / 8 : W;	/* RF scope width; the audio part gets 3 / 8 */
 
 	if (view != scr->wf_view) {
 		x6100_lcd_fill(lcd, 0, WF_Y, W, WF_H(lcd), 0x000000);
