@@ -2395,15 +2395,9 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 		x6100_lcd_text(lcd, W - tw - 6, SPEC_Y + 42, 2, m, rx->fedit ? SCR_WARN : SCR_ACCENT);
 	}
 
-	if (rx->fedit)
-		draw_filter_panel(lcd, rx);
-
-	if (rx->tuning || (rx->tune_done && now_ms() - rx->tune_done < TUNE_SHOW_MS))
-		draw_tune_panel(lcd, rx, scr);
-
 	//
-	// Clock under the filter label, drawn after the filter panel so it stays on
-	// top: system time (kept by the OS / network for now), UTC, ISO 8601
+	// Clock under the filter label: system time (kept by the OS / network for
+	// now), UTC, ISO 8601. Drawn before the panels, which cover it while open.
 	//
 	{
 		time_t now = time(NULL);
@@ -2417,6 +2411,12 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 			x6100_lcd_text(lcd, W - tw - 6, SPEC_Y + 62, 2, m, SCR_DIM);
 		}
 	}
+
+	if (rx->fedit)
+		draw_filter_panel(lcd, rx);
+
+	if (rx->tuning || (rx->tune_done && now_ms() - rx->tune_done < TUNE_SHOW_MS))
+		draw_tune_panel(lcd, rx, scr);
 
 	//
 	// Last TX refusal or trip, until the next TX
