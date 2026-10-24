@@ -5,8 +5,6 @@ Status: 2026-10-24.
 ## Display
 
 - Clock: own time source / sync check (now: system time, one `ntpd -q` at start).
-- PWR short press = display off: check the backlight sysfs path on the radio, and
-  that the power key reports press and release (1.5-4 s quits, 4 s powers off).
 - Brightness (GEN): backlight inverted, 1 = full, 0 = off; check 5 % is still readable.
 
 ## Radio
