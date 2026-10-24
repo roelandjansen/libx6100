@@ -266,6 +266,62 @@ static const band_t g_bands[] = {
 
 #define BAND_COUNT	((int) (sizeof(g_bands) / sizeof(g_bands[0])))
 
+//
+// Transmit allocations per region (Hz). The TX check and the OOB marker use the
+// selected region (conf token region); g_bands above stays the band memory and
+// BAND key range. Sources: ITU RR / IARU band plans; NL: Regeling gebruik van
+// frequentieruimte zonder vergunning en met meldingsplicht (stcrt 2015-3772,
+// 2021-31799) for F registration, 60 m per WRC-15.
+//
+
+typedef struct
+{
+	uint32_t low;
+	uint32_t high;
+} seg_t;
+
+typedef struct
+{
+	const char *name;
+	seg_t seg[12];
+} region_t;
+
+static const region_t g_regions[] = {
+	{ "r1", {
+		{ 1810000, 2000000 }, { 3500000, 3800000 }, { 5351500, 5366500 }, { 7000000, 7200000 },
+		{ 10100000, 10150000 }, { 14000000, 14350000 }, { 18068000, 18168000 }, { 21000000, 21450000 },
+		{ 24890000, 24990000 }, { 28000000, 29700000 }, { 50000000, 52000000 } } },
+	{ "r2", {
+		{ 1800000, 2000000 }, { 3500000, 4000000 }, { 5351500, 5366500 }, { 7000000, 7300000 },
+		{ 10100000, 10150000 }, { 14000000, 14350000 }, { 18068000, 18168000 }, { 21000000, 21450000 },
+		{ 24890000, 24990000 }, { 28000000, 29700000 }, { 50000000, 54000000 } } },
+	{ "r3", {
+		{ 1800000, 2000000 }, { 3500000, 3900000 }, { 5351500, 5366500 }, { 7000000, 7300000 },
+		{ 10100000, 10150000 }, { 14000000, 14350000 }, { 18068000, 18168000 }, { 21000000, 21450000 },
+		{ 24890000, 24990000 }, { 28000000, 29700000 }, { 50000000, 54000000 } } },
+	{ "nl", {
+		{ 1810000, 1880000 }, { 3500000, 3800000 }, { 5351500, 5366500 }, { 7000000, 7200000 },
+		{ 10100000, 10150000 }, { 14000000, 14350000 }, { 18068000, 18168000 }, { 21000000, 21450000 },
+		{ 24890000, 24990000 }, { 28000000, 29700000 }, { 50000000, 52000000 } } },
+};
+
+#define REGION_COUNT	((int) (sizeof(g_regions) / sizeof(g_regions[0])))
+
+static int g_region;	/* index into g_regions; conf token region, default r1 */
+
+// Inside a transmit allocation of the selected region
+static bool in_allocation(uint32_t hz)
+{
+	const region_t *r = &g_regions[g_region];
+
+	for (int i = 0; i < 12 && r->seg[i].high != 0; i++) {
+		if (hz >= r->seg[i].low && hz <= r->seg[i].high)
+			return true;
+	}
+
+	return false;
+}
+
 static const char *g_input_names[IN_COUNT] = {
 	X6100_INPUT_KEYPAD, X6100_INPUT_VFO, X6100_INPUT_VOL, X6100_INPUT_MFK, X6100_INPUT_POWER,
 };
@@ -617,7 +673,8 @@ static bool tx_allowed(rx_t *rx)
 	if (g_allow_oob)
 		return true;
 
-	if (rx->band < 0 || !(x6100_band_index(rx->freq) & 1)) {
+	// Selected region's allocation, and a band the baseband transmits in
+	if (!in_allocation(rx->freq) || rx->band < 0 || !(x6100_band_index(rx->freq) & 1)) {
 		rx->warn = "OUT OF BAND";
 		return false;
 	}
@@ -2697,7 +2754,7 @@ static void draw_gen_info(x6100_lcd_t *lcd, const screen_t *scr)
 		snprintf(lines[n++], sizeof(lines[0]), "CAT     OFF");
 
 	snprintf(lines[n++], sizeof(lines[0]), "NTP     %s", g_ntp_msg);
-	snprintf(lines[n++], sizeof(lines[0]), "BUILD   %s", X6100_REV);
+	snprintf(lines[n++], sizeof(lines[0]), "REGION  %s   BUILD %s", g_regions[g_region].name, X6100_REV);
 
 	for (int i = 0; i < n; i++) {
 		for (char *c = lines[i]; *c != '\0'; c++)
@@ -3268,8 +3325,8 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 		if (now_ms() < scr->ovf_until)
 			x6100_lcd_text(lcd, VU_X + 8, VU_Y + 6, 2, "OVF", SCR_WARN);
 
-		// Band check off (--oob / conf oob): a standing reminder, under OVF
-		if (g_allow_oob)
+		// Band check off (--oob / conf oob) and tuned outside the region's allocations
+		if (g_allow_oob && !in_allocation(rx->freq))
 			x6100_lcd_text(lcd, VU_X + 8, VU_Y + 24, 2, "OOB", SCR_WARN);
 
 		// Baseband noise blanker / reduction on, top right of the dial
@@ -3902,7 +3959,25 @@ static bool console_line(rx_t *rx, char *line)
 			continue;
 		}
 
-		// bright 10-100: display backlight in % (GEN)
+		// region r1|r2|r3|nl: transmit allocations for the TX check and OOB marker
+		if (strcasecmp(t, "region") == 0) {
+			const char *v = strtok(NULL, " \t\r\n");
+			int r = -1;
+
+			for (int i = 0; v != NULL && i < REGION_COUNT; i++)
+				r = strcasecmp(v, g_regions[i].name) == 0 ? i : r;
+
+			if (r >= 0) {
+				g_region = r;
+				changed = true;
+			} else {
+				fprintf(stderr, "\nregion: r1, r2, r3 or nl\n");
+			}
+
+			continue;
+		}
+
+		// bright 5-100: display backlight in % (GEN)
 		if (strcasecmp(t, "bright") == 0) {
 			const char *v = strtok(NULL, " \t\r\n");
 			int b = v == NULL ? 0 : atoi(v);

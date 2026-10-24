@@ -102,7 +102,7 @@ Values are kept in the last state (see Settings); defaults NR 20, NB 10 / 10, no
 - F1-F5 tags along the bottom edge: SCOPE, SPAN, AUDIO, METER, FIL
 - Audio scope (F3; F3 long: next to the RF scope, RF left / AF right): spectrum and waterfall of the demodulated RX audio (codec capture, 48 kHz), 0-3 or 0-6 kHz (F2), normalised dBFS scale (80 dB window, its bottom 10 dB under the noise floor measured inside the receive passband, so the picture stays put with volume and band noise; shifted by the AF reference level), receive passband shaded, MN line at the notch when on. The capture is opened only while the audio scope is shown
 - OVF (red, top left of the dial): flow IQ at its clip level
-- OOB (red, under OVF): band check off (`--oob` or `oob` in the conf); where you transmit is your responsibility
+- OOB (red, under OVF): band check off (`--oob` or `oob` in the conf) and tuned outside the region's allocations; where you transmit is your responsibility
 - NB / NR / MN (blue, top right of the dial) in fixed places, e.g. `NB    MN`, `   NR   `, `NB NR MN`; MN = manual notch, as on Icom radios
 - Tune panel (ATU long press / CAT): amber TUNING with live PO and SWR bars (SWR green / yellow / red), then green TUNED for 4 s with the time taken and the network (L, C, S in decimal, relay bits and hex)
 - Clock under the filter label: system time, UTC, ISO 8601 (`2026-10-24T10:08:27Z`); hidden behind the filter panel while that is open. At start x6100_trx runs one NTP sync with the image's busybox `ntpd -q` (server: `ntp` in the conf, else /etc/ntp.conf, else pool.ntp.org) and reports the result on the console (a failure as a warning); skipped when the image syncs itself (init.d S48sntp / S49ntp, as on IU1WXY), when a time daemon runs, or with `ntp off`
@@ -183,11 +183,12 @@ Type a line + Enter while running; tokens can be combined (`14074000 usb`).
 | `cat 19200`, `cat off` | CI-V at start (settings file; `--cat` overrides) |
 | `ntp <server>`, `ntp on`, `ntp off` | NTP sync at start (settings file) |
 | `bright 5-100` | display brightness in % |
+| `region r1|r2|r3|nl` | transmit allocations for the TX check and the OOB marker (default r1) |
 | `oob`, `nolimit` | as `--oob` / `--no-limit` (settings file): warned at every start, red OOB on the dial |
 
 ## TX safety
 
-- amateur bands only (unless `--oob`); TX timeout
+- TX only inside the allocations of the region (`region` in the conf: r1, r2, r3, nl; default r1) and a band the baseband transmits in, unless `oob`; TX timeout
 - SWR above 3.0 for 300 ms drops TX
 - any key except PTT and F1-F5 drops a latched TX; tune aborts on any key
 - hand mic PTT keys the baseband directly; the display follows the TX flag. It does
@@ -195,3 +196,16 @@ Type a line + Enter while running; tokens can be combined (`14074000 usb`).
   Abort a tune with the PTT key, any other key or CAT PTT
 - transient I2C errors are retried; quits after 2 s of failures
   (the baseband keeps its last state, so audio continues)
+
+## Regions (TX allocations)
+
+| | 160 m | 80 m | 60 m | 40 m | 30-10 m | 6 m |
+|---|---|---|---|---|---|---|
+| r1 | 1810-2000 | 3500-3800 | 5351.5-5366.5 | 7000-7200 | 10100-10150, 14000-14350, 18068-18168, 21000-21450, 24890-24990, 28000-29700 | 50-52 MHz |
+| r2 | 1800-2000 | 3500-4000 | 5351.5-5366.5 | 7000-7300 | as r1 | 50-54 MHz |
+| r3 | 1800-2000 | 3500-3900 | 5351.5-5366.5 | 7000-7300 | as r1 | 50-54 MHz |
+| nl | 1810-1880 | 3500-3800 | 5351.5-5366.5 | 7000-7200 | as r1 | 50-52 MHz |
+
+kHz unless stated. The dial frequency is checked, not the edges of the signal. nl: F
+registration (stcrt 2015-3772, 2021-31799; 60 m per WRC-15). National rules and power
+limits are the operator's to know; national 60 m channels (e.g. US) are not in r2.
