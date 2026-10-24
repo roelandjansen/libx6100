@@ -38,6 +38,11 @@ Indicators on the S-meter dial (2x): NB, NR and MN (manual notch, as on Icom) ea
 the top right, so none moves when another switches; OVF in red at the top left when
 the flow IQ reaches its clip level.
 
+![x6100_trx audio scope](docs/images/x6100_trx_audio.png)
+
+Audio scope (F3): the demodulated RX audio, 0-3 or 0-6 kHz (F2), with the receive
+passband and the manual notch (render with synthetic speech and a CW tone).
+
 ## Status
 
 Verified on hardware (BASE 1.1.9), see `docs/x6100_control_interface.md` §9:

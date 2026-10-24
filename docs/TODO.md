@@ -7,9 +7,6 @@ Status: 2026-10-24.
 - Clock: own time source / sync check (now: system time, one `ntpd -q` at start).
 - PWR short press = display off: check the backlight sysfs path on the radio, and
   that the power key reports press and release (hold 1.5 s quits).
-- Audio scope: spectrum / waterfall of the demodulated RX audio (codec capture,
-  0-6 kHz), e.g. on F3 (the free key) or as a scope mode. Shows the passband, notch
-  and CW / digital signals inside it.
 
 ## Radio
 
@@ -48,7 +45,7 @@ Status: 2026-10-24.
 | DFL | notch on / off | DSP panel (NR, NB, notch values) | done |
 
 Rules: short = the one thing used most, long = its panel; a panel is closed by its
-own long press, another key or 10 s idle; F1-F5 stay scope / span / - / meter /
+own long press, another key or 10 s idle; F1-F5 stay scope / span / audio / meter /
 filter. TX-side settings (mic, compressor, VOX, monitor, TX EQ) go in a TX panel
 under GEN until a better key turns up.
 

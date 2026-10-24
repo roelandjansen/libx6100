@@ -82,6 +82,7 @@
 #include "x6100_civ.h"
 #include "x6100_keys.h"
 #include "x6100_lcd.h"
+#include "x6100_pcm.h"
 
 static bool g_no_limit;	/* --no-limit: tune 10 kHz - 100 MHz (test what the baseband accepts) */
 static bool g_probe;	/* --probe: print flow flags and peak IQ (overflow hunt) */
@@ -207,6 +208,8 @@ typedef struct
 	scope_mode_t scope;
 	int64_t fix_lo;		/* left edge of the fixed window, Hz */
 	int span;		/* window width, Hz */
+	bool ascope;		/* F3: audio scope instead of the RF scope */
+	int arange;		/* audio scope range: 0 = 0-3 kHz, 1 = 0-6 kHz */
 
 	//
 	// Meter shown on the dial during TX (F4): 0 Po, 1 SWR, 2 ALC
@@ -888,8 +891,14 @@ static bool on_key(rx_t *rx, int key)
 		}
 
 		break;
+	case X6100_KEY_F3:	/* audio scope on / off */
+		rx->ascope = !rx->ascope;
+		break;
 	case X6100_KEY_F2:
-		scope_span_next(rx);
+		if (rx->ascope)
+			rx->arange = !rx->arange;	/* audio scope: 0-3 / 0-6 kHz */
+		else
+			scope_span_next(rx);
 		break;
 	case X6100_KEY_F4:
 		rx->meter = (rx->meter + 1) % 3;
@@ -1148,6 +1157,10 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 #define OVF_POWER	0.178f	/* |IQ|^2 at -7.5 dB: flow IQ clips at about -6.3 dB */
 #define VU_W		296
 #define VU_H		168
+#define AS_N		2048		/* audio scope FFT: 23.4 Hz bins at 48 kHz */
+#define AS_RATE		48000
+#define AS_DB_MIN	-110.0f	/* dBFS */
+#define AS_DB_MAX	-10.0f
 #define SPEC_Y		180
 #define SPEC_H		150
 #define WF_Y		(SPEC_Y + SPEC_H + 4)
@@ -1226,6 +1239,15 @@ typedef struct
 	//
 	scope_mode_t wf_scope;
 	int wf_span;
+
+	//
+	// Audio scope (F3): FFT of the codec capture
+	//
+	float aspec[AS_N / 2];	/* dB, smoothed */
+	float apeak[AS_N / 2];
+	float afloor;
+	bool aspec_valid;
+	bool wf_ascope;		/* waterfall currently holds audio lines */
 	double wf_ref;		/* window left edge the waterfall rows are aligned to, Hz */
 } screen_t;
 
@@ -2183,6 +2205,184 @@ static void draw_tune_panel(x6100_lcd_t *lcd, const rx_t *rx, const screen_t *sc
 }
 
 //
+// Audio scope (F3): the demodulated RX audio from the codec capture (48 kHz,
+// left channel), FFT over AS_N samples every AS_N / 2 new ones (Hann window,
+// 50 % overlap), smoothed like the RF spectrum.
+//
+
+static void audio_feed(screen_t *scr, const int16_t *buf, unsigned frames, unsigned channels)
+{
+	static float ring[AS_N];
+	static unsigned pos, fresh;
+	static float v[AS_N][2];
+
+	for (unsigned i = 0; i < frames; i++) {
+		ring[pos] = buf[i * channels] / 32768.0f;
+		pos = (pos + 1) % AS_N;
+
+		if (++fresh < AS_N / 2)
+			continue;
+
+		fresh = 0;
+
+		for (int k = 0; k < AS_N; k++) {
+			float w = 0.5f - 0.5f * cosf(2.0f * (float) M_PI * (float) k / (float) (AS_N - 1));
+
+			v[k][0] = ring[(pos + k) % AS_N] * w;
+			v[k][1] = 0.0f;
+		}
+
+		fft(v, AS_N);
+
+		for (int k = 0; k < AS_N / 2; k++) {
+			// dBFS: a full-scale sine (Hann, coherent gain 0.5) reads 0 dB
+			float p = (v[k][0] * v[k][0] + v[k][1] * v[k][1]) * 16.0f / ((float) AS_N * (float) AS_N);
+			float db = p > 1e-20f ? 10.0f * log10f(p) : -200.0f;
+
+			scr->aspec[k] = scr->aspec_valid ? scr->aspec[k] * (1.0f - SCOPE_AVG) + db * SCOPE_AVG : db;
+			scr->apeak[k] = scr->aspec_valid && scr->apeak[k] - PEAK_DECAY_DB > scr->aspec[k]
+				? scr->apeak[k] - PEAK_DECAY_DB : scr->aspec[k];
+		}
+
+		// Floor: 20th percentile of the bins up to 6 kHz, smoothed
+		{
+			static float s[AS_N / 2];
+			const int n = 6000 * AS_N / AS_RATE;
+
+			memcpy(s, scr->aspec, sizeof(float) * (size_t) n);
+
+			for (int i = 1; i < n; i++) {
+				float x = s[i];
+				int j = i - 1;
+
+				while (j >= 0 && s[j] > x) {
+					s[j + 1] = s[j];
+					j--;
+				}
+
+				s[j + 1] = x;
+			}
+
+			scr->afloor = scr->aspec_valid ? scr->afloor * 0.9f + s[n / 5] * 0.1f : s[n / 5];
+		}
+
+		scr->aspec_valid = true;
+	}
+}
+
+static float audio_db_at(const float *a, int x, int w, int range_hz)
+{
+	double bin = (double) x * range_hz / w * AS_N / AS_RATE;
+	int i = (int) bin;
+	double t = bin - i;
+
+	if (i + 1 >= AS_N / 2)
+		return a[AS_N / 2 - 1];
+
+	return (float) (a[i] * (1.0 - t) + a[i + 1] * t);
+}
+
+static int audio_y(float db)
+{
+	float n = (db - AS_DB_MIN) / (AS_DB_MAX - AS_DB_MIN);
+
+	n = n < 0.0f ? 0.0f : n > 1.0f ? 1.0f : n;
+	return SPEC_Y + SPEC_H - 1 - (int) (n * (float) (SPEC_H - 1));
+}
+
+//
+// Audio scope picture: 0-3 or 0-6 kHz (F2), the receive passband shaded, the
+// notch marked when on; waterfall below in the same colours as the RF one
+//
+
+static void draw_audio_scope(screen_t *scr, const rx_t *rx, bool new_line)
+{
+	x6100_lcd_t *lcd = &scr->lcd;
+	const int W = lcd->w, range = rx->arange ? 6000 : 3000;
+	uint32_t lo, hi;
+	int prev_y = -1;
+
+	if (!scr->wf_ascope) {
+		x6100_lcd_fill(lcd, 0, WF_Y, W, WF_H(lcd), 0x000000);	/* fresh waterfall for audio */
+		scr->wf_ascope = true;
+	}
+
+	x6100_lcd_fill(lcd, 0, SPEC_Y, W, SPEC_H, 0x05080C);
+
+	// Passband in audio Hz: the filter edges (AM / FM: 0 .. high)
+	mode_filter(rx->mode, rx->fil, &lo, &hi);
+
+	{
+		int x0 = (int) ((long) lo * W / range), x1 = (int) ((long) hi * W / range);
+
+		x1 = x1 >= W ? W - 1 : x1;
+
+		if (x1 > x0)
+			x6100_lcd_fill(lcd, x0, SPEC_Y, x1 - x0 + 1, SPEC_H, 0x183820);
+	}
+
+	// Grid every 500 Hz (labels every kHz) and every 10 dB
+	for (int hz = 500; hz < range; hz += 500) {
+		int gx = hz * W / range;
+
+		x6100_lcd_vline(lcd, gx, SPEC_Y, SPEC_Y + SPEC_H - 1, 0x1A2430);
+
+		if (hz % 1000 == 0) {
+			char lbl[8];
+
+			snprintf(lbl, sizeof(lbl), "%dk", hz / 1000);
+			x6100_lcd_text(lcd, gx - x6100_lcd_text_width(lbl, 2) / 2, SPEC_Y + 4, 2, lbl, SCR_DIM);
+		}
+	}
+
+	for (int db = (int) AS_DB_MAX - GRID_DB; db > (int) AS_DB_MIN; db -= GRID_DB)
+		x6100_lcd_hline(lcd, 0, W - 1, audio_y((float) db), 0x1A2430);
+
+	if (scr->aspec_valid) {
+		for (int x = 0; x < W; x++) {
+			int y = audio_y(audio_db_at(scr->aspec, x, W, range));
+			int py = audio_y(audio_db_at(scr->apeak, x, W, range));
+
+			x6100_lcd_vline(lcd, x, y, SPEC_Y + SPEC_H - 1, SCOPE_FILL);
+			x6100_lcd_fill(lcd, x, py, 1, 1, SCOPE_PEAK);
+			x6100_lcd_vline(lcd, x, prev_y < 0 ? y : prev_y, y, SCOPE_LINE);
+			prev_y = y;
+		}
+	} else {
+		x6100_lcd_text(lcd, LBL_W + 8, SPEC_Y + SPEC_H / 2 - 7, 2, "NO AUDIO (CAPTURE)", SCR_WARN);
+	}
+
+	// dBFS labels in the left margin, over the trace
+	for (int db = (int) AS_DB_MAX - GRID_DB; db > (int) AS_DB_MIN; db -= GRID_DB) {
+		char lbl[8];
+		int gy = audio_y((float) db);
+
+		if (gy <= SPEC_Y + 20)
+			continue;
+
+		snprintf(lbl, sizeof(lbl), "%d", db);
+		x6100_lcd_fill(lcd, 0, gy - 10, LBL_W, 9, 0x05080C);
+		x6100_lcd_text(lcd, 2, gy - 9, 1, lbl, SCR_DIM);
+	}
+
+	// Notch frequency when the notch is on
+	if (rx->dnf && rx->dnf_f < range) {
+		int nx = rx->dnf_f * W / range;
+
+		x6100_lcd_vline(lcd, nx, SPEC_Y, SPEC_Y + SPEC_H - 1, 0x30D0B0);
+		x6100_lcd_text(lcd, nx + 4, SPEC_Y + SPEC_H - 18, 2, "MN", 0x30D0B0);
+	}
+
+	if (new_line && scr->aspec_valid) {
+		x6100_lcd_scroll_down(lcd, WF_Y, WF_H(lcd));
+
+		for (int x = 0; x < W; x++)
+			x6100_lcd_fill(lcd, x, WF_Y, 1, 1,
+				wf_colour((audio_db_at(scr->aspec, x, W, range) - (scr->afloor - WF_BELOW_DB)) / WF_RANGE_DB));
+	}
+}
+
+//
 // Shift a band of rows horizontally by dx pixels (positive = right), fill the gap black
 //
 
@@ -2306,7 +2506,7 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 	// width on screen, rounded corners), label centred. Positions in g_tag_x[].
 	//
 	{
-		static const char *tag[5] = { "SCOPE", "SPAN", "", "METER", "FIL" };
+		static const char *tag[5] = { "SCOPE", "SPAN", "AUDIO", "METER", "FIL" };
 		const int y = lcd->h - TAG_H, bw = TAG_W, bh = TAG_H - 2;
 
 		x6100_lcd_fill(lcd, 0, y, W, TAG_H, SCR_BG);
@@ -2410,6 +2610,20 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 
 	if (!scr->spec_valid)
 		return;
+
+	//
+	// F3: audio scope instead of the RF scope (spectrum and waterfall of the
+	// demodulated RX audio); the labels and panels below are drawn over either
+	//
+	if (rx->ascope) {
+		draw_audio_scope(scr, rx, new_line);
+		goto overlays;
+	}
+
+	if (scr->wf_ascope) {
+		x6100_lcd_fill(lcd, 0, WF_Y, W, WF_H(lcd), 0x000000);	/* back from the audio scope */
+		scr->wf_ascope = false;
+	}
 
 	//
 	// Spectrum in the scope window
@@ -2548,15 +2762,19 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 			x6100_lcd_text(lcd, W - 14, SPEC_Y + SPEC_H / 2 - 7, 2, ">", SCR_WARN);
 	}
 
+overlays:
 	//
 	// Scope mode, top right of the spectrum
 	//
 	{
 		static const char *names[] = { "CENTER", "SCROLL-C", "FIX", "SCROLL-F" };
+		static const char *ranges[] = { "0-3K", "0-6K" };
 		char m[24];
 		int tw;
 
-		if (rx->span % 2000 == 0)
+		if (rx->ascope)
+			snprintf(m, sizeof(m), "AUDIO %s", ranges[rx->arange]);
+		else if (rx->span % 2000 == 0)
 			snprintf(m, sizeof(m), "%s +-%dk", names[rx->scope], rx->span / 2000);
 		else
 			snprintf(m, sizeof(m), "%s +-%d.%dk", names[rx->scope], rx->span / 2000, rx->span / 200 % 10);
@@ -2622,7 +2840,7 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 	//
 	// Waterfall, newest line on top; no data outside the IQ span stays black
 	//
-	if (new_line) {
+	if (new_line && !rx->ascope) {
 		x6100_lcd_scroll_down(lcd, WF_Y, WF_H(lcd));
 
 		for (int x = 0; x < W; x++) {
@@ -3647,13 +3865,16 @@ int main(int argc, char **argv)
 	x6100_flow_t flow;
 	x6100_flow_frame_t frame;
 	int fds[IN_COUNT];
-	struct pollfd pfd[IN_COUNT + 2];
+	struct pollfd pfd[IN_COUNT + 3];
 	int npfd = 0;
-	input_t pmap[IN_COUNT + 2];
+	input_t pmap[IN_COUNT + 3];
 	char cmd[128];
 	size_t cmd_len = 0;
 	int stdin_slot = -1;
 	int cat_slot = -1;
+	int apcm_slot = -1;	/* audio scope capture, fd -1 while closed */
+	x6100_pcm_t apcm;
+	bool apcm_open = false;
 	int cat_baud = 0;	/* 0 = no CAT */
 	static cat_t cat = { .fd = -1 };
 	rx_t rx = { .vol = 20, .rfg = 100, .step = 100, .agc = (x6100_agc_t) -1, .mode = X6100_MODE_USB,
@@ -3749,6 +3970,13 @@ int main(int argc, char **argv)
 	pfd[npfd].events = POLLIN;
 	pmap[npfd] = IN_COUNT;
 	stdin_slot = npfd;
+	npfd++;
+
+	// Audio scope capture slot, unused (fd -1) until F3 opens it
+	pfd[npfd].fd = -1;
+	pfd[npfd].events = POLLIN;
+	pmap[npfd] = IN_COUNT;
+	apcm_slot = npfd;
 	npfd++;
 
 	if ((rc = x6100_i2c_open(&i2c, NULL)) < 0 || (rc = x6100_flow_open(&flow, NULL)) < 0) {
@@ -3849,6 +4077,16 @@ int main(int argc, char **argv)
 				continue;
 			}
 
+			if (p == apcm_slot) {
+				static int16_t abuf[1024 * 2];
+				ssize_t got = x6100_pcm_read(&apcm, abuf, 1024);
+
+				if (got > 0)
+					audio_feed(&scr, abuf, (unsigned) got, 2);
+
+				continue;
+			}
+
 			if (p == cat_slot) {
 				changed |= cat_poll(&cat);
 				continue;
@@ -3877,6 +4115,28 @@ int main(int argc, char **argv)
 				else if (ev.type == EV_REL)
 					changed |= on_knob(&rx, pmap[p], ev.value);
 			}
+		}
+
+		//
+		// Audio scope capture: open while F3 shows it, closed otherwise (the codec
+		// is left alone when the audio scope is not used)
+		//
+		if (rx.ascope && !apcm_open) {
+			int boost = rx.mode == X6100_MODE_AM || rx.mode == X6100_MODE_NFM ? 0 : 1;	/* as x6100_audio */
+
+			if (x6100_mixer_rx_setup(X6100_PCM_CARD, boost) < 0
+				|| x6100_pcm_open(&apcm, X6100_PCM_CARD, X6100_PCM_DEVICE, true, AS_RATE, 2, 1024, 4) < 0) {
+				fprintf(stderr, "\naudio scope: codec capture not available\n");
+				rx.ascope = false;
+			} else {
+				apcm_open = true;
+				pfd[apcm_slot].fd = apcm.fd;
+			}
+		} else if (!rx.ascope && apcm_open) {
+			x6100_pcm_close(&apcm);
+			apcm_open = false;
+			pfd[apcm_slot].fd = -1;
+			scr.aspec_valid = false;
 		}
 
 		if (pwr_since != 0 && now_ms() - pwr_since >= PWR_QUIT_MS)
@@ -4142,6 +4402,9 @@ int main(int argc, char **argv)
 
 	if (!lcd_on)
 		backlight_set(true);	/* leave the display lit for whatever runs next */
+
+	if (apcm_open)
+		x6100_pcm_close(&apcm);
 
 	if (g_ntp_pid > 0)
 		kill(g_ntp_pid, SIGTERM);
