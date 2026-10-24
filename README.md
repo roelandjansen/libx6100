@@ -21,6 +21,12 @@ on the photo (stations every few kHz, voice in syllables on the waterfall).
 
 Filter panel (hold F5), IC-705 style: MFK sets BW or SFT, per mode group and FIL1-3.
 
+![x6100_trx tune panel](docs/images/x6100_trx_tune.png)
+
+Tune panel (hold ATU): amber TUNING with live PO and SWR while the tuner searches,
+then green TUNED for 4 s with the time taken and the network it settled on (L, C, S
+in decimal, as relay bits and in hex).
+
 ## Status
 
 Verified on hardware (BASE 1.1.9), see `docs/x6100_control_interface.md` §9:
