@@ -7,6 +7,9 @@ Status: 2026-10-24.
 - Clock: own time source / sync check (now: system time, one `ntpd -q` at start).
 - PWR short press = display off: check the backlight sysfs path on the radio, and
   that the power key reports press and release (hold 1.5 s quits).
+- Audio scope: spectrum / waterfall of the demodulated RX audio (codec capture,
+  0-6 kHz), e.g. on F3 (the free key) or as a scope mode. Shows the passband, notch
+  and CW / digital signals inside it.
 
 ## Radio
 

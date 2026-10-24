@@ -76,6 +76,7 @@ Maximum 6000 Hz (baseband audio runs at 12 kHz). AM / FM are symmetric.
 | AM / FM | ±3 kHz | ±2.5 kHz | ±2 kHz |
 
 Saved values override the defaults; MFK long (DEF) restores them.
+
 ## DSP panel (DFL long)
 
 The baseband's noise reduction, noise blanker and manual notch on one sheet.
