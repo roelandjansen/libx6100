@@ -1023,6 +1023,10 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 #define WF_Y		(SPEC_Y + SPEC_H + 4)
 #define TAG_H		20		/* F1-F5 tags along the bottom edge */
 #define WF_H(lcd)	((lcd)->h - WF_Y - TAG_H)
+
+// Tag centre x above F1-F5 (screen 800 px); F3 slightly left of centre, F1 / F5
+// further out than a 160 px grid
+static const int g_tag_x[5] = { 60, 226, 392, 558, 740 };
 #define DISP_MS		70
 #define SPEC_DB_MIN	-130.0f
 #define SPEC_DB_MAX	-30.0f
@@ -1993,22 +1997,22 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 	x6100_lcd_text(lcd, INFO_COL_FIL, INFO_Y, 2, s, SCR_DIM);
 
 	//
-	// F1-F5 tags along the bottom, one 160 px cell above each key, centred:
-	// the key's function (its current value is shown elsewhere on screen)
+	// F1-F5 tags along the bottom, centred above each key. The keys are not on
+	// a 160 px grid: F3 sits a little left of the screen centre and the row is
+	// wider than the screen thirds suggest. Dividers halfway between the tags.
+	// Tune g_tag_x[] by eye on the radio.
 	//
 	{
 		static const char *tag[5] = { "SCOPE", "SPAN", "", "METER", "FIL" };
-		const int cw = W / 5, y = lcd->h - TAG_H;
+		const int y = lcd->h - TAG_H;
 
 		x6100_lcd_fill(lcd, 0, y, W, TAG_H, SCR_BG);
 
 		for (int i = 0; i < 5; i++) {
-			int x = i * cw;
-
-			x6100_lcd_text(lcd, x + (cw - x6100_lcd_text_width(tag[i], 2)) / 2, y + 3, 2, tag[i], SCR_DIM);
+			x6100_lcd_text(lcd, g_tag_x[i] - x6100_lcd_text_width(tag[i], 2) / 2, y + 3, 2, tag[i], SCR_DIM);
 
 			if (i > 0)
-				x6100_lcd_fill(lcd, x, y + 2, 1, TAG_H - 4, SCR_DIM);
+				x6100_lcd_fill(lcd, (g_tag_x[i - 1] + g_tag_x[i]) / 2, y + 2, 1, TAG_H - 4, SCR_DIM);
 		}
 	}
 
