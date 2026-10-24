@@ -28,7 +28,7 @@ Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
 | Control | Short | Long |
 |---|---|---|
 | VFO knob | tune | |
-| FST | step 10 / 100 / 1000 / 5000 Hz | 1 Hz step on / off |
+| FST | step 10 / 100 / 1000 / 5000 Hz; AM on LW / MW: 100 / 1k / 5k / 9k / 10k (channel raster) | 1 Hz step on / off |
 | VOL knob | volume; push = mute | |
 | MFK knob | RF gain or TX power | |
 | MFK push | RF gain 100 / TX power 5.0 W | switch RF gain <-> TX power |
@@ -44,7 +44,7 @@ Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
 | PTT | hold = TX; tap (< 400 ms) = latch, next press drops | |
 | ATU | tuner in / out | tune (keys TX at tune power) |
 | LOCK | lock knobs and keys (PTT still works) | |
-| PWR | quit (drops TX first) | |
+| PWR | display on / off | hold 1.5 s: quit (drops TX first) |
 
 ## Scope modes
 
@@ -83,7 +83,7 @@ Saved values override the defaults; MFK long (DEF) restores them.
 - F1-F5 tags along the bottom edge: SCOPE, SPAN, (free), METER, FIL
 - OVF (red, top left of the dial): flow IQ at its clip level
 - Tune panel (ATU long press / CAT): amber TUNING with live PO and SWR bars (SWR green / yellow / red), then green TUNED for 4 s with the time taken and the network (L, C, S in decimal, relay bits and hex)
-- Clock under the filter label: system time, UTC, ISO 8601 (`2026-10-24T10:08:27Z`); assumes the OS keeps time (network); hidden behind the filter panel while that is open
+- Clock under the filter label: system time, UTC, ISO 8601 (`2026-10-24T10:08:27Z`); hidden behind the filter panel while that is open. At start x6100_trx runs one NTP sync with the image's own client (`ntpd -q`, servers from its config) and reports the result on the console
 
 ## Console (ssh)
 
@@ -97,7 +97,7 @@ Type a line + Enter while running; tokens can be combined (`14074000 usb`).
 | `att noatt pre nopre` | attenuator / preamp |
 | `center scrollc fix scrollf` | scope mode |
 | `fil1 fil2 fil3` | receive filter |
-| `step 1\|10\|100\|1000\|5000` | tuning step |
+| `step 1\|10\|100\|1000\|5000\|9000\|10000` | tuning step (9000 / 10000 on LW / MW AM only) |
 | `pwr 0.1-10` | TX power in W |
 | `vol 0-100` | volume (also unmutes) |
 

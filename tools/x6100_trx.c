@@ -60,6 +60,7 @@
 #include "x6100.h"
 
 #include <ctype.h>
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/input.h>
@@ -73,6 +74,7 @@
 #include <strings.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <termios.h>
 #include <time.h>
 #include <unistd.h>
@@ -88,6 +90,8 @@ static bool g_cat_log;	/* --cat-log: print CI-V frames in and out */
 #define FREQ_MAX	(g_no_limit ? 100000000u : 56000000u)
 #define POLL_MS		5
 #define LONG_PRESS_MS	600
+#define PWR_QUIT_MS	1500	/* PWR held this long quits; shorter toggles the display */
+#define PWR_QUIT_MS	1500	/* PWR held this long quits; shorter toggles the display */
 #define REFRESH_MS	1000
 #define METER_MS	500
 #define TX_TIMEOUT_MS	180000
@@ -693,6 +697,18 @@ static int grid_step(int span)
 
 	return 20000;
 }
+//
+// AM broadcast on LW / MW: the 9 / 10 kHz channel steps are offered only there.
+// The VFO steps on multiples of the step from 0 Hz, which is the channel raster
+// (LW 153 kHz = 17 x 9, MW 531 = 59 x 9 kHz; US MW 530 = 53 x 10 kHz).
+//
+
+static bool am_broadcast(const rx_t *rx)
+{
+	return rx->mode == X6100_MODE_AM && ((rx->freq >= 148500 && rx->freq <= 283500)
+		|| (rx->freq >= 520000 && rx->freq <= 1710000));
+}
+
 
 static bool on_key(rx_t *rx, int key)
 {
@@ -739,7 +755,11 @@ static bool on_key(rx_t *rx, int key)
 		rx->lock = !rx->lock;
 		break;
 	case X6100_KEY_FST:
-		rx->step = rx->step == 10 ? 100 : rx->step == 100 ? 1000 : rx->step == 1000 ? 5000 : 10;
+		if (am_broadcast(rx))	/* LW / MW in AM: channel steps 9 kHz (EU) and 10 kHz (US) */
+			rx->step = rx->step == 100 ? 1000 : rx->step == 1000 ? 5000 : rx->step == 5000 ? 9000
+				: rx->step == 9000 ? 10000 : 100;
+		else
+			rx->step = rx->step == 10 ? 100 : rx->step == 100 ? 1000 : rx->step == 1000 ? 5000 : 10;
 		break;
 	case X6100_KEY_BAND_UP:
 		band_step(rx, +1);
@@ -2106,7 +2126,10 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 	//
 	// Info line in fixed columns, so changing values never shift the other fields
 	//
-	snprintf(s, sizeof(s), "STEP %4d", rx->step);
+	if (rx->step >= 1000 && rx->step % 1000 == 0)
+		snprintf(s, sizeof(s), "STEP %3dk", rx->step / 1000);	/* 1k .. 10k in four places */
+	else
+		snprintf(s, sizeof(s), "STEP %4d", rx->step);
 	x6100_lcd_text(lcd, INFO_COL_STEP, INFO_Y, 2, s, SCR_DIM);
 	snprintf(s, sizeof(s), "VOL %3d", rx->vol);
 	x6100_lcd_text(lcd, INFO_COL_VOL, INFO_Y, 2, s, rx->mute ? SCR_WARN : SCR_DIM);
@@ -2568,11 +2591,11 @@ static bool console_line(rx_t *rx, char *line)
 
 			want_step = false;
 
-			if (st == 1 || st == 10 || st == 100 || st == 1000 || st == 5000) {
+			if (st == 1 || st == 10 || st == 100 || st == 1000 || st == 5000 || st == 9000 || st == 10000) {
 				rx->step = st;
 				changed = true;
 			} else {
-				fprintf(stderr, "\nstep must be 1, 10, 100, 1000 or 5000\n");
+				fprintf(stderr, "\nstep must be 1, 10, 100, 1000, 5000 (9000, 10000 on LW / MW AM)\n");
 			}
 
 			continue;
@@ -3291,6 +3314,85 @@ static void cat_scope(cat_t *cat, uint64_t t)
 	cat->scope_ms = t;
 }
 
+//
+// Display backlight on / off (PWR short press), through the first backlight in
+// /sys/class/backlight: bl_power 0 = on, 4 = off (FB_BLANK_POWERDOWN)
+//
+
+static bool backlight_set(bool on)
+{
+	DIR *d = opendir("/sys/class/backlight");
+	struct dirent *e;
+	bool ok = false;
+
+	if (d == NULL)
+		return false;
+
+	while (!ok && (e = readdir(d)) != NULL) {
+		char path[300];
+		FILE *fp;
+
+		if (e->d_name[0] == '.')
+			continue;
+
+		snprintf(path, sizeof(path), "/sys/class/backlight/%s/bl_power", e->d_name);
+
+		if ((fp = fopen(path, "w")) != NULL) {
+			ok = fprintf(fp, "%d\n", on ? 0 : 4) > 0;
+			ok = fclose(fp) == 0 && ok;
+		}
+	}
+
+	closedir(d);
+	return ok;
+}
+
+//
+// One NTP sync at start with the system's own client and configuration
+// (busybox ntpd -q: servers from /etc/ntp.conf). Runs detached; the result is
+// reported when it exits (ntp_poll).
+//
+
+static pid_t g_ntp_pid = -1;
+
+static void ntp_start(void)
+{
+	pid_t pid = fork();
+
+	if (pid == 0) {
+		int fd = open("/dev/null", O_RDWR);
+
+		if (fd >= 0) {
+			dup2(fd, STDIN_FILENO);
+			dup2(fd, STDOUT_FILENO);
+			dup2(fd, STDERR_FILENO);
+		}
+
+		setsid();
+		execlp("ntpd", "ntpd", "-q", "-n", (char *) NULL);
+		_exit(127);
+	}
+
+	g_ntp_pid = pid;
+}
+
+static void ntp_poll(void)
+{
+	int st;
+
+	if (g_ntp_pid <= 0 || waitpid(g_ntp_pid, &st, WNOHANG) != g_ntp_pid)
+		return;
+
+	g_ntp_pid = -1;
+
+	if (WIFEXITED(st) && WEXITSTATUS(st) == 0)
+		printf("\nntp: clock synced\n");
+	else if (WIFEXITED(st) && WEXITSTATUS(st) == 127)
+		printf("\nntp: no ntpd on this image\n");
+	else
+		printf("\nntp: sync failed (status %d); clock as the OS has it\n", WIFEXITED(st) ? WEXITSTATUS(st) : -1);
+}
+
 int main(int argc, char **argv)
 {
 	x6100_i2c_t i2c;
@@ -3437,6 +3539,11 @@ int main(int argc, char **argv)
 	}
 
 	//
+	// One NTP sync with the system's own client (runs in the background)
+	//
+	ntp_start();
+
+	//
 	// CAT on the USB serial port (--cat)
 	//
 	if (cat_baud > 0) {
@@ -3469,6 +3576,8 @@ int main(int argc, char **argv)
 	bool new_frame = false;
 	bool dirty = false;
 	hold_t hold = { .key = -1 };
+	uint64_t pwr_since = 0;	/* PWR pressed at (ms), 0 = not held */
+	bool lcd_on = true;
 	uint64_t swr_since = 0;
 
 	while (!g_stop) {
@@ -3499,14 +3608,34 @@ int main(int argc, char **argv)
 			}
 
 			while (read(pfd[p].fd, &ev, sizeof(ev)) == (ssize_t) sizeof(ev)) {
-				if (pmap[p] == IN_POWER && ev.type == EV_KEY && ev.code == KEY_POWER && ev.value == 1)
-					g_stop = 1;
-				else if (pmap[p] == IN_KEYPAD && ev.type == EV_KEY)
+				if (pmap[p] == IN_POWER && ev.type == EV_KEY && ev.code == KEY_POWER) {
+					//
+					// PWR: short press = display on / off, hold PWR_QUIT_MS = quit
+					// (the hold is acted on in the loop below, while still held)
+					//
+					if (ev.value == 1) {
+						pwr_since = now_ms();
+					} else if (ev.value == 0 && pwr_since != 0) {
+						if (now_ms() - pwr_since < PWR_QUIT_MS) {
+							lcd_on = !lcd_on;
+
+							if (!backlight_set(lcd_on))
+								fprintf(stderr, "\nwarning: no backlight control found\n");
+						}
+
+						pwr_since = 0;
+					}
+				} else if (pmap[p] == IN_KEYPAD && ev.type == EV_KEY)
 					changed |= on_keypad(&rx, &hold, (int) ev.code - X6100_KEY_BASE, ev.value);
 				else if (ev.type == EV_REL)
 					changed |= on_knob(&rx, pmap[p], ev.value);
 			}
 		}
+
+		if (pwr_since != 0 && now_ms() - pwr_since >= PWR_QUIT_MS)
+			g_stop = 1;
+
+		ntp_poll();
 
 		if (hold.key >= 0 && !hold.fired && now_ms() - hold.since >= LONG_PRESS_MS) {
 			hold.fired = true;
@@ -3527,6 +3656,10 @@ int main(int argc, char **argv)
 					rx.agc_group[g] = rx.agc;
 				}
 			}
+
+			// Channel steps only where they make sense
+			if ((rx.step == 9000 || rx.step == 10000) && !am_broadcast(&rx))
+				rx.step = 1000;
 
 			scope_follow(&rx);
 			apply(&ctl, &cal, &rx);
@@ -3753,6 +3886,12 @@ int main(int argc, char **argv)
 	apply_flags(&ctl, &rx);
 	x6100_ctl_sync(&ctl);
 	fil_save();
+
+	if (!lcd_on)
+		backlight_set(true);	/* leave the display lit for whatever runs next */
+
+	if (g_ntp_pid > 0)
+		kill(g_ntp_pid, SIGTERM);
 
 	if (scr.on) {
 		x6100_lcd_fill(&scr.lcd, 0, 0, scr.lcd.w, scr.lcd.h, 0);
