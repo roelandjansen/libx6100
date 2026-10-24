@@ -95,6 +95,18 @@ bash build.sh
 
 Output in `out/`: `libx6100.a` and static ARM tools.
 
+`build.sh` first does `git pull --ff-only`, then builds only when a source file, the
+script or the zig version changed (fingerprint in `out/.fingerprint`).
+
+```
+bash build.sh                 # pull, build if needed
+bash build.sh deploy          # ... and scp x6100_trx, x6100_ui.sh, the quick reference
+X6100_HOST=root@192.168.1.61 bash build.sh deploy
+bash build.sh -f --no-pull    # force a build, no pull
+```
+
+`deploy` copies to `$X6100_HOST:/root` (default `root@x6100`).
+
 ## Run on the radio
 
 ```

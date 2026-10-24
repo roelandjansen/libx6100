@@ -82,8 +82,107 @@ build_tools() {
 	printf 'built %s\n' "${C_OUT}/x6100_rx"
 }
 
+#
+# Print a fingerprint of everything that goes into the build: the tracked (and
+# edited) sources, this script and the zig version
+#
+
+src_fingerprint() {
+	{
+		git ls-files -z -- src include tools build.sh | xargs -0 sha256sum
+		"${G_ZIG}" version
+	} | sha256sum | cut -d ' ' -f 1
+}
+
+#
+# Fast-forward to the remote branch; refuse to merge or rebase on our own
+#
+
+update_tree() {
+	if ! git -C . rev-parse --git-dir >/dev/null 2>&1; then
+		printf '%s\n' 'not a git checkout: no pull'
+		return 0
+	fi
+
+	if ! git pull --ff-only; then
+		printf '%s\n' 'error: git pull --ff-only failed (local commits or conflicts?)' >&2
+		exit 1
+	fi
+}
+
+#
+# Copy the binaries and the quick reference to the radio
+#
+
+deploy() {
+	local L_FILE
+
+	for L_FILE in "${C_DEPLOY[@]}"; do
+		if [[ ! -f "${L_FILE}" ]]; then
+			printf 'error: %s missing\n' "${L_FILE}" >&2
+			exit 1
+		fi
+	done
+
+	scp -- "${C_DEPLOY[@]}" "${G_HOST}:/root/"
+	printf 'deployed to %s:/root: %s\n' "${G_HOST}" "${C_DEPLOY[*]}"
+}
+
+#
+# Usage
+#
+
+usage() {
+	printf '%s\n' \
+		'usage: build.sh [options] [deploy]' \
+		'' \
+		'  (none)       git pull, then build only if a source changed' \
+		'  deploy       the same, then scp x6100_trx, x6100_ui.sh and the quick reference' \
+		'               to $X6100_HOST:/root (default root@x6100)' \
+		'  -f, --force  build even when nothing changed' \
+		'  --no-pull    skip git pull' \
+		'  -h, --help   this text'
+}
+
+readonly C_STAMP="${C_OUT}/.fingerprint"
+readonly C_DEPLOY=("${C_OUT}/x6100_trx" scripts/x6100_ui.sh docs/x6100_trx_quickref.md)
+
+G_HOST="${X6100_HOST:-root@x6100}"
+G_FORCE=0
+G_PULL=1
+G_DEPLOY=0
+
+while [[ $# -gt 0 ]]; do
+	case "$1" in
+		-f|--force)
+			G_FORCE=1
+			;;
+		--no-pull)
+			G_PULL=0
+			;;
+		deploy)
+			G_DEPLOY=1
+			;;
+		-h|--help)
+			usage
+			exit 0
+			;;
+		*)
+			usage >&2
+			exit 1
+			;;
+	esac
+
+	shift
+done
+
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
 check_zig
+
+if [[ "${G_PULL}" -eq 1 ]]; then
+	update_tree
+fi
+
 mkdir -p -- "${C_OUT}"
 
 #
@@ -92,8 +191,19 @@ mkdir -p -- "${C_OUT}"
 
 export ZIG_GLOBAL_CACHE_DIR="${PWD}/${C_OUT}/zig-cache-global"
 export ZIG_LOCAL_CACHE_DIR="${PWD}/${C_OUT}/zig-cache"
-printf 'zig %s\n' "$("${G_ZIG}" version)"
 
-build_lib
-build_tools
-build_sniff
+G_PRINT="$(src_fingerprint)"
+
+if [[ "${G_FORCE}" -eq 0 && -f "${C_STAMP}" && "$(cat -- "${C_STAMP}")" == "${G_PRINT}" ]]; then
+	printf '%s\n' 'sources unchanged: no build (use -f to force)'
+else
+	printf 'zig %s\n' "$("${G_ZIG}" version)"
+	build_lib
+	build_tools
+	build_sniff
+	printf '%s\n' "${G_PRINT}" > "${C_STAMP}"
+fi
+
+if [[ "${G_DEPLOY}" -eq 1 ]]; then
+	deploy
+fi
