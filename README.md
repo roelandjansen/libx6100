@@ -32,6 +32,12 @@ in decimal, as relay bits and in hex).
 DSP panel (hold DFL): the baseband's noise reduction, noise blanker and manual notch;
 MFK adjusts the selected value, DFN / DFL switch NR, NB and notch.
 
+![x6100_trx dial indicators](docs/images/x6100_trx_indicators.png)
+
+Indicators on the S-meter dial (2x): NB, NR and NT (notch) each in a fixed place at
+the top right, so none moves when another switches; OVF in red at the top left when
+the flow IQ reaches its clip level.
+
 ## Status
 
 Verified on hardware (BASE 1.1.9), see `docs/x6100_control_interface.md` §9:
