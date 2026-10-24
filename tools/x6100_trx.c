@@ -261,6 +261,7 @@ static const char *g_input_names[IN_COUNT] = {
 static volatile sig_atomic_t g_stop;
 static bool g_poweroff;	/* PWR held 4 s: power the radio off after the clean exit */
 static int g_cat_baud;		/* CI-V baud, 0 = no CAT: conf token cat, or --cat */
+static char g_ntp_server[64];	/* conf token ntp <server> | off; empty = ntp.conf or pool.ntp.org */
 
 static void on_signal(int sig)
 {
@@ -3253,6 +3254,18 @@ static bool console_line(rx_t *rx, char *line)
 			continue;
 		}
 
+		// ntp <server> | ntp off: the one sync at start (read at start only)
+		if (strcasecmp(t, "ntp") == 0) {
+			const char *v = strtok(NULL, " \t\r\n");
+
+			if (v != NULL)
+				snprintf(g_ntp_server, sizeof(g_ntp_server), "%s", v);
+			else
+				fprintf(stderr, "\nntp: <server> or off\n");
+
+			continue;
+		}
+
 		// agc ssb|ssbd|cw|am|fm off|slow|fast|auto: AGC of a mode group
 		if (strcasecmp(t, "agc") == 0) {
 			static const char *agcs[] = { [X6100_AGC_OFF] = "off", [X6100_AGC_SLOW] = "slow",
@@ -4153,18 +4166,65 @@ static bool backlight_set(bool on)
 }
 
 //
-// One NTP sync at start with the system's own client and configuration
-// (busybox ntpd -q: servers from /etc/ntp.conf). Runs detached; the result is
-// reported when it exits (ntp_poll).
+// One NTP sync at start with the system's busybox ntpd (-q: set once, exit).
+// Skipped when the OS already runs a time daemon (it would hold port 123 and
+// the one-shot fails). Servers: conf token ntp <server>, else /etc/ntp.conf,
+// else pool.ntp.org (busybox ntpd has no peers without -p or ntp.conf).
+// Runs detached; the result is reported when it exits (ntp_poll).
 //
 
 static pid_t g_ntp_pid = -1;
 
+static bool proc_running(const char *const *names)
+{
+	DIR *d = opendir("/proc");
+	struct dirent *e;
+	bool found = false;
+
+	if (d == NULL)
+		return false;
+
+	while (!found && (e = readdir(d)) != NULL) {
+		char path[300], comm[32] = "";
+		FILE *fp;
+
+		if (!isdigit((unsigned char) e->d_name[0]) || atoi(e->d_name) == getpid())
+			continue;
+
+		snprintf(path, sizeof(path), "/proc/%s/comm", e->d_name);
+
+		if ((fp = fopen(path, "r")) == NULL)
+			continue;
+
+		if (fgets(comm, sizeof(comm), fp) != NULL)
+			comm[strcspn(comm, "\n")] = '\0';
+
+		fclose(fp);
+
+		for (int i = 0; names[i] != NULL; i++)
+			found |= strcmp(comm, names[i]) == 0;
+	}
+
+	closedir(d);
+	return found;
+}
+
 static void ntp_start(void)
 {
-	pid_t pid = fork();
+	static const char *const daemons[] = { "ntpd", "chronyd", "systemd-timesyn", "openntpd", NULL };
+	const char *server = g_ntp_server[0] != '\0' ? g_ntp_server
+		: access("/etc/ntp.conf", R_OK) == 0 ? NULL : "pool.ntp.org";
+	pid_t pid;
 
-	if (pid == 0) {
+	if (strcmp(g_ntp_server, "off") == 0)
+		return;
+
+	if (proc_running(daemons)) {
+		printf("ntp: the OS runs a time daemon; clock as the OS has it\n");
+		return;
+	}
+
+	if ((pid = fork()) == 0) {
 		int fd = open("/dev/null", O_RDWR);
 
 		if (fd >= 0) {
@@ -4174,9 +4234,17 @@ static void ntp_start(void)
 		}
 
 		setsid();
-		execlp("ntpd", "ntpd", "-q", "-n", (char *) NULL);
+
+		if (server != NULL)
+			execlp("ntpd", "ntpd", "-q", "-n", "-p", server, (char *) NULL);
+		else
+			execlp("ntpd", "ntpd", "-q", "-n", (char *) NULL);
+
 		_exit(127);
 	}
+
+	if (pid > 0)
+		printf("ntp: syncing with %s\n", server != NULL ? server : "the servers in /etc/ntp.conf");
 
 	g_ntp_pid = pid;
 }

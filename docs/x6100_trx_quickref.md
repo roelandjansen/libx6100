@@ -103,7 +103,7 @@ Values are kept in the last state (see Settings); defaults NR 20, NB 10 / 10, no
 - OVF (red, top left of the dial): flow IQ at its clip level
 - NB / NR / MN (blue, top right of the dial) in fixed places, e.g. `NB    MN`, `   NR   `, `NB NR MN`; MN = manual notch, as on Icom radios
 - Tune panel (ATU long press / CAT): amber TUNING with live PO and SWR bars (SWR green / yellow / red), then green TUNED for 4 s with the time taken and the network (L, C, S in decimal, relay bits and hex)
-- Clock under the filter label: system time, UTC, ISO 8601 (`2026-10-24T10:08:27Z`); hidden behind the filter panel while that is open. At start x6100_trx runs one NTP sync with the image's own client (`ntpd -q`, servers from its config) and reports the result on the console
+- Clock under the filter label: system time, UTC, ISO 8601 (`2026-10-24T10:08:27Z`); hidden behind the filter panel while that is open. At start x6100_trx runs one NTP sync with the image's busybox `ntpd -q` (server: `ntp` in the conf, else /etc/ntp.conf, else pool.ntp.org) and reports the result on the console; skipped when the OS already runs a time daemon, or with `ntp off`
 
 ## Settings
 
@@ -154,6 +154,7 @@ Type a line + Enter while running; tokens can be combined (`14074000 usb`).
 | `atunet 40m L C S` | tuned network of a band |
 | `mute nomute` | audio mute |
 | `cat 19200`, `cat off` | CI-V at start (settings file; `--cat` overrides) |
+| `ntp <server>`, `ntp off` | NTP sync at start (settings file) |
 
 ## TX safety
 
