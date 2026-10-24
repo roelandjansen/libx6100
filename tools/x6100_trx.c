@@ -2257,9 +2257,12 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 		if (now_ms() < scr->ovf_until)
 			x6100_lcd_text(lcd, VU_X + 8, VU_Y + 6, 2, "OVF", SCR_WARN);
 
-		// Baseband noise reduction / blanker on, top right of the dial
+		// Baseband noise blanker / reduction on, top right of the dial
 		{
-			const char *dsp = rx->nr && rx->nb ? "NR NB" : rx->nr ? "NR" : rx->nb ? "NB" : "";
+			// Fixed slots: NB left, NR right, so neither moves when the other changes
+			char dsp[8];
+
+			snprintf(dsp, sizeof(dsp), "%s %s", rx->nb ? "NB" : "  ", rx->nr ? "NR" : "  ");
 
 			x6100_lcd_text(lcd, VU_X + VU_W - 8 - x6100_lcd_text_width(dsp, 2), VU_Y + 6, 2, dsp, SCR_ACCENT);
 		}
