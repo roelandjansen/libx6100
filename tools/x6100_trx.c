@@ -173,6 +173,12 @@ typedef struct
 	int nr_lvl;		/* 0-60 */
 	int nb_lvl;		/* 0-100 */
 	int nb_w;		/* 0-100 */
+	bool dnf;		/* manual notch (register 24) */
+	int dnf_f;		/* 100-3000 Hz */
+	int dnf_w;		/* 10-100 Hz */
+	bool dedit;		/* DSP panel open (DFL long) */
+	int dedit_par;		/* selected value, index into g_dsp */
+	uint64_t dedit_since;	/* last panel activity, for the idle close */
 	uint32_t band_freq[11];
 
 	//
@@ -533,6 +539,7 @@ static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 	x6100_ctl_set(ctl, X6100_REG_VFOA_PRE, rx->pre);
 	x6100_ctl_set(ctl, X6100_REG_VFOB_PRE, rx->pre);
 	x6100_ctl_set(ctl, X6100_REG_NR_NB, X6100_R23(rx->nr_lvl, rx->nb_w, rx->nb_lvl, rx->nr, rx->nb));
+	x6100_ctl_set(ctl, X6100_REG_DNF, X6100_R24(rx->dnf_f, rx->dnf_w, rx->dnf));
 	x6100_set_filter(ctl, rx->mode, low, high);
 	x6100_ctl_set(ctl, X6100_REG_RXVOL, rx->mute ? 0 : (uint32_t) rx->vol);
 	x6100_ctl_update(ctl, X6100_REG_RFG_TXPWR_FFTDEC, 0xFF, (uint32_t) rx->rfg);
@@ -720,6 +727,49 @@ static bool am_broadcast(const rx_t *rx)
 }
 
 
+//
+// Baseband DSP values edited in the DSP panel (DFL long): NR level, NB level and
+// width (register 23), manual notch frequency and width (register 24). Ranges as
+// x6100_gui; defaults NB 10 / 10 and notch 1000 / 50 Hz as the stock start values,
+// NR 20 of 60.
+//
+
+typedef struct
+{
+	const char *name;
+	int min;
+	int max;
+	int step;
+	int def;
+	const char *unit;
+} dsp_par_t;
+
+static const dsp_par_t g_dsp[] = {
+	{ "NR LEVEL", 0, 60, 1, 20, "" },
+	{ "NB LEVEL", 0, 100, 1, 10, "" },
+	{ "NB WIDTH", 0, 100, 1, 10, "" },
+	{ "NOTCH", 100, 3000, 10, 1000, "HZ" },
+	{ "NOTCH WIDTH", 10, 100, 5, 50, "HZ" },
+};
+
+#define DSP_PARS	((int) (sizeof(g_dsp) / sizeof(g_dsp[0])))
+
+static int *dsp_value(rx_t *rx, int i)
+{
+	switch (i) {
+	case 0:
+		return &rx->nr_lvl;
+	case 1:
+		return &rx->nb_lvl;
+	case 2:
+		return &rx->nb_w;
+	case 3:
+		return &rx->dnf_f;
+	default:
+		return &rx->dnf_w;
+	}
+}
+
 static bool on_key(rx_t *rx, int key)
 {
 	//
@@ -757,12 +807,31 @@ static bool on_key(rx_t *rx, int key)
 		fil_save();
 	}
 
+	//
+	// DSP panel open: MFK push selects the next value; DFN / DFL keep switching
+	// NR, NB and notch; any other key closes the panel and does its normal job
+	//
+	if (rx->dedit) {
+		rx->dedit_since = now_ms();
+
+		if (key == X6100_KEY_MFK_PUSH) {
+			rx->dedit_par = (rx->dedit_par + 1) % DSP_PARS;
+			return true;
+		}
+
+		if (key != X6100_KEY_DFN && key != X6100_KEY_DFL)
+			rx->dedit = false;
+	}
+
 	if (rx->lock && key != X6100_KEY_LOCK)
 		return false;
 
 	switch (key) {
 	case X6100_KEY_LOCK:
 		rx->lock = !rx->lock;
+		break;
+	case X6100_KEY_DFL:	/* short: notch on / off; long: DSP panel */
+		rx->dnf = !rx->dnf;
 		break;
 	case X6100_KEY_DFN:	/* short: NR on / off; long: NB on / off */
 		rx->nr = !rx->nr;
@@ -856,7 +925,7 @@ typedef struct
 static bool has_long(int key)
 {
 	return key == X6100_KEY_PRE || key == X6100_KEY_FST || key == X6100_KEY_ATU || key == X6100_KEY_MFK_PUSH
-		|| key == X6100_KEY_F1 || key == X6100_KEY_F5 || key == X6100_KEY_DFN;
+		|| key == X6100_KEY_F1 || key == X6100_KEY_F5 || key == X6100_KEY_DFN || key == X6100_KEY_DFL;
 }
 
 static bool on_long_key(rx_t *rx, int key)
@@ -889,6 +958,12 @@ static bool on_long_key(rx_t *rx, int key)
 
 		return true;
 	case X6100_KEY_MFK_PUSH:
+		if (rx->dedit) {
+			*dsp_value(rx, rx->dedit_par) = g_dsp[rx->dedit_par].def;
+			rx->dedit_since = now_ms();
+			return true;
+		}
+
 		if (rx->fedit) {
 			fil_default(mode_group(rx->mode), rx->fil);
 			rx->fedit_since = now_ms();
@@ -905,6 +980,10 @@ static bool on_long_key(rx_t *rx, int key)
 		rx->tune_since = now_ms();
 		rx->tune_seen_tx = false;
 		rx->warn = NULL;
+		return true;
+	case X6100_KEY_DFL:
+		rx->dedit = !rx->dedit;
+		rx->dedit_since = now_ms();
 		return true;
 	case X6100_KEY_DFN:
 		rx->nb = !rx->nb;
@@ -991,6 +1070,15 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 		rx->vol = clampi(rx->vol + value * X6100_DIR_VOL, 0, 100);
 		return true;
 	case IN_MFK:
+		if (rx->dedit) {
+			int *p = dsp_value(rx, rx->dedit_par);
+			const dsp_par_t *d = &g_dsp[rx->dedit_par];
+
+			*p = clampi(*p + value * X6100_DIR_MFK * d->step, d->min, d->max);
+			rx->dedit_since = now_ms();
+			return true;
+		}
+
 		if (rx->fedit) {
 			fgroup_t g = mode_group(rx->mode);
 
@@ -1929,6 +2017,56 @@ static void draw_filter_panel(x6100_lcd_t *lcd, const rx_t *rx)
 }
 
 //
+// DSP panel (DFL long): the baseband's noise reduction, noise blanker and notch
+// on one sheet. Teal, to tell it from the filter (blue) and tune (amber) panels.
+// One row per value with a slider; the selected row is highlighted, MFK turns it,
+// MFK push moves to the next row, MFK long sets it back to its default. The ON /
+// OFF state of each function is shown in its group and switched with DFN / DFL.
+//
+
+static void draw_dsp_panel(x6100_lcd_t *lcd, const rx_t *rx)
+{
+	const int px = LBL_W + 8, py = SPEC_Y + 16, pw = 500, ph = 132;
+	const int sx = px + 196, sw = 170;	/* slider */
+	const uint32_t bg = 0x0A1A1A, teal = 0x30D0B0, sel = 0x15403C, dim = 0x7A9490, white = 0xF0F0F0;
+	const uint32_t on = 0x3CC83C, off = 0x5A6464;
+	const bool state[DSP_PARS] = { rx->nr, rx->nb, rx->nb, rx->dnf, rx->dnf };
+	char s[32];
+
+	x6100_lcd_fill(lcd, px, py, pw, ph, bg);
+	x6100_lcd_fill(lcd, px, py, 3, ph, teal);	/* teal rule on the left */
+	x6100_lcd_hline(lcd, px, px + pw - 1, py, 0x1E4A44);
+	x6100_lcd_hline(lcd, px, px + pw - 1, py + ph - 1, 0x1E4A44);
+	x6100_lcd_vline(lcd, px + pw - 1, py, py + ph - 1, 0x1E4A44);
+
+	x6100_lcd_text(lcd, px + 14, py + 7, 2, "DSP", teal);
+	x6100_lcd_text(lcd, px + 70, py + 11, 1, "MFK: ADJUST   PUSH: NEXT   HOLD: DEFAULT   DFN: NR / NB   DFL: NOTCH", dim);
+
+	for (int i = 0; i < DSP_PARS; i++) {
+		const dsp_par_t *d = &g_dsp[i];
+		int v = *dsp_value((rx_t *) rx, i);
+		int y = py + 28 + i * 20;
+		int fill = (v - d->min) * sw / (d->max - d->min);
+
+		if (i == rx->dedit_par)
+			x6100_lcd_fill(lcd, px + 6, y - 2, pw - 12, 19, sel);
+
+		// ON / OFF once per function (NR row, first NB row, first notch row)
+		if (i == 0 || i == 1 || i == 3)
+			x6100_lcd_text(lcd, px + 14, y, 2, state[i] ? "ON " : "OFF", state[i] ? on : off);
+
+		x6100_lcd_text(lcd, px + 58, y, 2, d->name, i == rx->dedit_par ? white : dim);
+
+		x6100_lcd_fill(lcd, sx, y + 4, sw, 6, 0x1C2C2C);
+		x6100_lcd_fill(lcd, sx, y + 4, fill, 6, state[i] ? teal : off);
+		x6100_lcd_fill(lcd, sx + fill - 1, y + 1, 3, 12, white);
+
+		snprintf(s, sizeof(s), "%d%s%s", v, d->unit[0] ? " " : "", d->unit);
+		x6100_lcd_text(lcd, px + pw - 12 - x6100_lcd_text_width(s, 2), y, 2, s, white);
+	}
+}
+
+//
 // Tune panel: shown over the scope while the tuner searches (ATU long press or
 // CAT 1C 01 02). Amber, to tell it apart from the blue filter panel: what is
 // happening, for how long, and the two numbers that matter while tuning,
@@ -2260,9 +2398,9 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 		// Baseband noise blanker / reduction on, top right of the dial
 		{
 			// Fixed slots: NB left, NR right, so neither moves when the other changes
-			char dsp[8];
+			char dsp[12];
 
-			snprintf(dsp, sizeof(dsp), "%s %s", rx->nb ? "NB" : "  ", rx->nr ? "NR" : "  ");
+			snprintf(dsp, sizeof(dsp), "%s %s %s", rx->nb ? "NB" : "  ", rx->nr ? "NR" : "  ", rx->dnf ? "NT" : "  ");
 
 			x6100_lcd_text(lcd, VU_X + VU_W - 8 - x6100_lcd_text_width(dsp, 2), VU_Y + 6, 2, dsp, SCR_ACCENT);
 		}
@@ -2465,6 +2603,9 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 	if (rx->fedit)
 		draw_filter_panel(lcd, rx);
 
+	if (rx->dedit)
+		draw_dsp_panel(lcd, rx);
+
 	if (rx->tuning || (rx->tune_done && now_ms() - rx->tune_done < TUNE_SHOW_MS))
 		draw_tune_panel(lcd, rx, scr);
 
@@ -2556,6 +2697,11 @@ static bool console_token(rx_t *rx, const char *t)
 		return true;
 	}
 
+	if (strcasecmp(t, "notch") == 0 || strcasecmp(t, "nonotch") == 0) {
+		rx->dnf = strcasecmp(t, "notch") == 0;
+		return true;
+	}
+
 	if (strcasecmp(t, "nb") == 0 || strcasecmp(t, "nonb") == 0) {
 		rx->nb = strcasecmp(t, "nb") == 0;
 		return true;
@@ -2621,7 +2767,7 @@ static bool console_line(rx_t *rx, char *line)
 	bool want_pwr = false;
 	bool want_vol = false;
 	int *want_lvl = NULL;	/* nrl / nbl / nbw: the level the next token sets */
-	int lvl_max = 0;
+	int lvl_min = 0, lvl_max = 0;
 
 	for (char *t = strtok(line, " \t"); t != NULL; t = strtok(NULL, " \t")) {
 		if (want_step) {
@@ -2643,11 +2789,11 @@ static bool console_line(rx_t *rx, char *line)
 			char *end;
 			long v = strtol(t, &end, 10);
 
-			if (*end == '\0' && v >= 0 && v <= lvl_max) {
+			if (*end == '\0' && v >= lvl_min && v <= lvl_max) {
 				*want_lvl = (int) v;
 				changed = true;
 			} else {
-				fprintf(stderr, "\nlevel must be 0 to %d\n", lvl_max);
+				fprintf(stderr, "\nmust be %d to %d\n", lvl_min, lvl_max);
 			}
 
 			want_lvl = NULL;
@@ -2678,9 +2824,14 @@ static bool console_line(rx_t *rx, char *line)
 			continue;
 		}
 
-		if (strcasecmp(t, "nrl") == 0 || strcasecmp(t, "nbl") == 0 || strcasecmp(t, "nbw") == 0) {
-			want_lvl = strcasecmp(t, "nrl") == 0 ? &rx->nr_lvl : strcasecmp(t, "nbl") == 0 ? &rx->nb_lvl : &rx->nb_w;
-			lvl_max = want_lvl == &rx->nr_lvl ? 60 : 100;
+		if (strcasecmp(t, "nrl") == 0 || strcasecmp(t, "nbl") == 0 || strcasecmp(t, "nbw") == 0
+			|| strcasecmp(t, "ntf") == 0 || strcasecmp(t, "ntw") == 0) {
+			int i = strcasecmp(t, "nrl") == 0 ? 0 : strcasecmp(t, "nbl") == 0 ? 1 : strcasecmp(t, "nbw") == 0 ? 2
+				: strcasecmp(t, "ntf") == 0 ? 3 : 4;
+
+			want_lvl = dsp_value(rx, i);
+			lvl_min = g_dsp[i].min;
+			lvl_max = g_dsp[i].max;
 			continue;
 		}
 
@@ -2989,6 +3140,12 @@ static bool cat_get(void *ctx, x6100_civ_item_t item, int vfo, int32_t *v)
 	case X6100_CIV_LVL_NB:
 		*v = rx->nb_lvl * 255 / 100;
 		return true;
+	case X6100_CIV_DNF:
+		*v = rx->dnf;
+		return true;
+	case X6100_CIV_LVL_DNF:
+		*v = (rx->dnf_f - 100) * 255 / 2900;	/* 0000-0255 over 100-3000 Hz */
+		return true;
 	case X6100_CIV_ATU:
 		*v = rx->tuning ? 2 : rx->atu_on;
 		return true;
@@ -3184,6 +3341,12 @@ static bool cat_set(void *ctx, x6100_civ_item_t item, int vfo, int32_t v)
 		break;
 	case X6100_CIV_LVL_NB:
 		rx->nb_lvl = (v * 100 + 127) / 255;
+		break;
+	case X6100_CIV_DNF:
+		rx->dnf = v != 0;
+		break;
+	case X6100_CIV_LVL_DNF:
+		rx->dnf_f = 100 + (v * 2900 + 127) / 255 / 10 * 10;
 		break;
 	case X6100_CIV_ATU:
 		if (v == 2) {
@@ -3495,7 +3658,7 @@ int main(int argc, char **argv)
 	static cat_t cat = { .fd = -1 };
 	rx_t rx = { .vol = 20, .rfg = 100, .step = 100, .agc = (x6100_agc_t) -1, .mode = X6100_MODE_USB,
 		.txpwr = TXPWR_DEF, .scope = SCOPE_CENTER, .span = SPAN_HZ,
-		.nr_lvl = 20, .nb_lvl = 10, .nb_w = 10 };	/* NB 10 / 10 as the stock defaults; NR 20 of 60 */
+		.nr_lvl = 20, .nb_lvl = 10, .nb_w = 10, .dnf_f = 1000, .dnf_w = 50 };	/* defaults: g_dsp[] */
 	int rc;
 
 	fil_load();
@@ -3765,6 +3928,12 @@ int main(int argc, char **argv)
 			dirty = true;
 		}
 
+
+		// DSP panel closes after 10 s without activity
+		if (rx.dedit && t - rx.dedit_since >= 10000) {
+			rx.dedit = false;
+			dirty = true;
+		}
 		//
 		// TX supervision: band edge (VFO moved while keyed), timeout
 		//

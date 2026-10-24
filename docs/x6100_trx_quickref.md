@@ -36,6 +36,7 @@ Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
 | SSB / CW / AM-FM | USB <-> LSB / CW <-> CWR / AM <-> NFM | |
 | PRE | preamp on / off | attenuator on / off (~12 dB) |
 | DFN | NR (noise reduction) on / off | NB (noise blanker) on / off |
+| DFL | notch on / off | DSP panel (NR, NB, notch levels) |
 | AGC | off / slow / fast / auto, per mode group | |
 | F1 | scroll on / off: CENTER <-> SCROLL-C, FIX <-> SCROLL-F | CENTER family <-> FIX family |
 | F2 | span ±48 / 24 / 12 / 6 / 3 / 1.5 kHz | |
@@ -46,6 +47,7 @@ Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
 | ATU | tuner in / out | tune (keys TX at tune power) |
 | LOCK | lock knobs and keys (PTT still works) | |
 | PWR | display on / off | hold 1.5 s: quit (drops TX first) |
+| GEN / KEY / MSG / APP | not used yet (see the key plan in `TODO.md`) | |
 
 ## Scope modes
 
@@ -74,6 +76,20 @@ Maximum 6000 Hz (baseband audio runs at 12 kHz). AM / FM are symmetric.
 | AM / FM | ±3 kHz | ±2.5 kHz | ±2 kHz |
 
 Saved values override the defaults; MFK long (DEF) restores them.
+## DSP panel (DFL long)
+
+The baseband's noise reduction, noise blanker and manual notch on one sheet.
+
+| Control | Action |
+|---|---|
+| MFK turn | adjust the selected value |
+| MFK push | next value: NR level, NB level, NB width, notch, notch width |
+| MFK long | selected value back to its default |
+| DFN short / long | NR / NB on, off (panel stays open) |
+| DFL short | notch on, off (panel stays open) |
+| DFL long, another key, 10 s idle | close |
+
+Values are not saved yet: x6100_trx starts with NR 20, NB 10 / 10, notch 1000 / 50 Hz.
 
 ## Display
 
@@ -83,7 +99,7 @@ Saved values override the defaults; MFK long (DEF) restores them.
 - AGC default AUTO; AM / FM SLOW (AUTO squashes AM)
 - F1-F5 tags along the bottom edge: SCOPE, SPAN, (free), METER, FIL
 - OVF (red, top left of the dial): flow IQ at its clip level
-- NB / NR (blue, top right of the dial) in fixed places: `NB   `, `   NR`, `NB NR`
+- NB / NR / NT (blue, top right of the dial) in fixed places, e.g. `NB    NT`, `   NR   `, `NB NR NT`
 - Tune panel (ATU long press / CAT): amber TUNING with live PO and SWR bars (SWR green / yellow / red), then green TUNED for 4 s with the time taken and the network (L, C, S in decimal, relay bits and hex)
 - Clock under the filter label: system time, UTC, ISO 8601 (`2026-10-24T10:08:27Z`); hidden behind the filter panel while that is open. At start x6100_trx runs one NTP sync with the image's own client (`ntpd -q`, servers from its config) and reports the result on the console
 
@@ -102,8 +118,9 @@ Type a line + Enter while running; tokens can be combined (`14074000 usb`).
 | `step 1\|10\|100\|1000\|5000\|9000\|10000` | tuning step (9000 / 10000 on LW / MW AM only) |
 | `pwr 0.1-10` | TX power in W |
 | `vol 0-100` | volume (also unmutes) |
-| `nr nonr nb nonb` | noise reduction / blanker on, off |
+| `nr nonr nb nonb notch nonotch` | noise reduction / blanker / notch on, off |
 | `nrl 0-60`, `nbl 0-100`, `nbw 0-100` | NR level, NB level, NB width (start: 20, 10, 10) |
+| `ntf 100-3000`, `ntw 10-100` | notch frequency, notch width in Hz (start: 1000, 50) |
 
 ## TX safety
 

@@ -27,6 +27,11 @@ Tune panel (hold ATU): amber TUNING with live PO and SWR while the tuner searche
 then green TUNED for 4 s with the time taken and the network it settled on (L, C, S
 in decimal, as relay bits and in hex).
 
+![x6100_trx DSP panel](docs/images/x6100_trx_dsp.png)
+
+DSP panel (hold DFL): the baseband's noise reduction, noise blanker and manual notch;
+MFK adjusts the selected value, DFN / DFL switch NR, NB and notch.
+
 ## Status
 
 Verified on hardware (BASE 1.1.9), see `docs/x6100_control_interface.md` §9:

@@ -23,8 +23,8 @@ Status: 2026-10-24.
 ## From the stock UI, not yet in x6100_trx
 
 - Settings menu (GEN key); keyer settings (KEY), messages (MSG), apps (APP).
-- NR / NB levels from the panel (now console / CAT only; DFN switches them).
-- DNF (notch); compressor; VOX / anti-VOX; squelch; monitor;
+- Save the DSP panel values (now lost at exit).
+- Compressor; VOX / anti-VOX; squelch; monitor;
   mic select and gain; line in / out levels (registers known, defaults set at start).
 - CW keyer: speed, iambic A / B, sidetone, break-in delay.
 - VFO A / B, memory channels.
@@ -32,6 +32,22 @@ Status: 2026-10-24.
 - Brightness; battery / charge status.
 - Digital modes on the radio (FT8, CW / RTTY decoder); CW / voice message memories;
   RX / TX equaliser.
+
+## Key plan (GEN / KEY / MSG / APP / DFN / DFL)
+
+| Key | Short | Long | Status |
+|---|---|---|---|
+| GEN | settings menu: network, WiFi, Bluetooth, LAN server (wfview), CAT, NTP / time, display, defaults | status page: IP, versions, battery, temperature | planned |
+| KEY | keyer on / off (straight / iambic) | keyer panel: speed, iambic A / B, sidetone, break-in delay, CW pitch | planned |
+| MSG | message list: play CW / voice memory | record / edit a message | planned |
+| APP | app list: FT8, CW / RTTY decoder, SWR scan, recorder | last app | planned |
+| DFN | NR on / off | NB on / off | done |
+| DFL | notch on / off | DSP panel (NR, NB, notch values) | done |
+
+Rules: short = the one thing used most, long = its panel; a panel is closed by its
+own long press, another key or 10 s idle; F1-F5 stay scope / span / - / meter /
+filter. TX-side settings (mic, compressor, VOX, monitor, TX EQ) go in a TX panel
+under GEN until a better key turns up.
 
 ## CAT / network
 

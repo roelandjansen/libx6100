@@ -248,7 +248,8 @@ static const sub_map_t g_switches[] = {
 	{ 0x12, X6100_CIV_AGC },
 	{ 0x22, X6100_CIV_NB },
 	{ 0x40, X6100_CIV_NR },
-	{ 0x41, X6100_CIV_DNF },
+	{ 0x41, X6100_CIV_DNF },	/* Xiegu: DNF; IC-705: auto notch */
+	{ 0x48, X6100_CIV_DNF },	/* IC-705: manual notch */
 	{ 0x44, X6100_CIV_COMP },
 	{ 0x45, X6100_CIV_MONI },
 	{ 0x46, X6100_CIV_VOX },
