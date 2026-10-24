@@ -4551,6 +4551,13 @@ static void ntp_start(void)
 		return;
 	}
 
+	// The IU1WXY image syncs at boot itself (S48sntp, S49ntp): leave the clock to it
+	if (access("/etc/init.d/S48sntp", X_OK) == 0 || access("/etc/init.d/S49ntp", X_OK) == 0) {
+		snprintf(g_ntp_msg, sizeof(g_ntp_msg), "left to the OS (init.d sntp / ntp)");
+		printf("ntp: %s\n", g_ntp_msg);
+		return;
+	}
+
 	if (proc_running(daemons)) {
 		snprintf(g_ntp_msg, sizeof(g_ntp_msg), "the OS runs a time daemon");
 		printf("ntp: the OS runs a time daemon; clock as the OS has it\n");
@@ -4600,7 +4607,7 @@ static void ntp_poll(void)
 	else
 		snprintf(g_ntp_msg, sizeof(g_ntp_msg), "failed (status %d)", WIFEXITED(st) ? WEXITSTATUS(st) : -1);
 
-	printf("\nntp: %s\n", g_ntp_msg);
+	printf(WIFEXITED(st) && WEXITSTATUS(st) == 0 ? "\nntp: %s\n" : "\nwarning: ntp %s; clock as the OS has it\n", g_ntp_msg);
 }
 
 int main(int argc, char **argv)
