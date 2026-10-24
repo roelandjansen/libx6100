@@ -25,7 +25,7 @@ Status: 2026-10-24.
 ## From the stock UI, not yet in x6100_trx
 
 - Settings menu (GEN key); keyer settings (KEY), messages (MSG), apps (APP).
-- Save the DSP panel values (now lost at exit).
+- Per-band ATU networks and per-group AGC in the state file; `cat` baud in the conf.
 - Compressor; VOX / anti-VOX; squelch; monitor;
   mic select and gain; line in / out levels (registers known, defaults set at start).
 - CW keyer: speed, iambic A / B, sidetone, break-in delay.

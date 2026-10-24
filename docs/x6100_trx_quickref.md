@@ -90,7 +90,7 @@ The baseband's noise reduction, noise blanker and manual notch on one sheet.
 | DFL short | notch on, off (panel stays open) |
 | DFL long, another key, 10 s idle | close |
 
-Values are not saved yet: x6100_trx starts with NR 20, NB 10 / 10, notch 1000 / 50 Hz.
+Values are kept in the last state (see Settings); defaults NR 20, NB 10 / 10, notch 1000 / 50 Hz.
 
 ## Display
 
@@ -104,6 +104,27 @@ Values are not saved yet: x6100_trx starts with NR 20, NB 10 / 10, notch 1000 / 
 - NB / NR / MN (blue, top right of the dial) in fixed places, e.g. `NB    MN`, `   NR   `, `NB NR MN`; MN = manual notch, as on Icom radios
 - Tune panel (ATU long press / CAT): amber TUNING with live PO and SWR bars (SWR green / yellow / red), then green TUNED for 4 s with the time taken and the network (L, C, S in decimal, relay bits and hex)
 - Clock under the filter label: system time, UTC, ISO 8601 (`2026-10-24T10:08:27Z`); hidden behind the filter panel while that is open. At start x6100_trx runs one NTP sync with the image's own client (`ntpd -q`, servers from its config) and reports the result on the console
+
+## Settings
+
+Two files in `/etc/x6100`, both in console tokens (`#` = comment):
+
+| File | Written by | Holds |
+|---|---|---|
+| `x6100_trx.state` | x6100_trx, at exit | last state: frequency, mode, filter, volume, gains, DSP, scope, REF, band memories |
+| `x6100_trx.conf` | you, never x6100_trx | what must be the same at every start (example: `docs/x6100_trx.conf.example`) |
+| `filters.conf` | filter panel | filter widths and shifts per mode group |
+
+At start: defaults, then `x6100_trx.state`, then `x6100_trx.conf`, then the command line;
+later wins. Command-line values apply to that run only (but end up in the state at exit).
+
+A new SD card image wipes `/etc/x6100`. On the PC:
+
+```
+sh ./build.sh backup     # radio -> ~/.config/x6100 (or $X6100_CONFIG)
+sh ./build.sh restore    # ~/.config/x6100 -> radio, overwriting
+sh ./build.sh deploy     # also puts back settings the radio lacks (conf: the example)
+```
 
 ## Console (ssh)
 
@@ -124,6 +145,11 @@ Type a line + Enter while running; tokens can be combined (`14074000 usb`).
 | `nrl 0-60`, `nbl 0-100`, `nbw 0-100` | NR level, NB level, NB width (start: 20, 10, 10) |
 | `ntf 100-3000`, `ntw 10-100` | notch frequency, notch width in Hz (start: 1000, 50) |
 | `ref -30-30`, `aref -30-30` | RF / audio scope reference level in dB (+ = trace up) |
+| `rfg 0-100` | RF gain |
+| `atu noatu` | tuner in / out |
+| `rf af split`, `af3 af6` | scope view, audio range |
+| `span 96000-3000` | scope span in Hz |
+| `band 40m 7074000` | remembered frequency of a band |
 
 ## TX safety
 

@@ -1,0 +1,33 @@
+# x6100_trx.conf: your own settings, on the radio in /etc/x6100/x6100_trx.conf
+#
+# Same tokens as the ssh console, one or more per line, # starts a comment.
+# Read at start after x6100_trx.state (the last state, written at exit) and
+# before the command line: this file wins over the last state, the command
+# line wins over this file. x6100_trx never writes this file.
+#
+# Put here only what should be the same at every start; everything else
+# comes back from the last state.
+#
+# Tokens:
+#   7074000 7.074 7074k            frequency (Hz, MHz, kHz)
+#   usb lsb cw cwr am nfm           mode
+#   off slow fast auto              AGC (for the start mode)
+#   fil1 fil2 fil3                  receive filter
+#   step 1|10|100|1000|5000         tuning step
+#   vol 0-100  rfg 0-100            volume, RF gain
+#   pwr 0.1-10                      TX power, W
+#   att noatt pre nopre atu noatu   attenuator, preamp, tuner
+#   nr nonr nb nonb notch nonotch   NR, NB, notch on / off
+#   nrl 0-60 nbl 0-100 nbw 0-100    NR level, NB level, NB width
+#   ntf 100-3000 ntw 10-100         notch frequency, width (Hz)
+#   center scrollc fix scrollf      scope mode
+#   span 96000|48000|...|3000       scope span (Hz, full width)
+#   rf af split  af3 af6            scope view, audio range 0-3 / 0-6 kHz
+#   ref -30-30 aref -30-30          RF / audio scope reference level (dB)
+#   band 40m 7074000                remembered frequency of a band
+
+# Examples (remove the # to use):
+# vol 20
+# pwr 5
+# ref -10
+# nrl 20 nbl 10 nbw 10

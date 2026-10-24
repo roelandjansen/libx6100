@@ -126,6 +126,62 @@ deploy() {
 
 	scp -- "${C_DEPLOY[@]}" "${G_HOST}:/root/"
 	printf 'deployed to %s:/root: %s\n' "${G_HOST}" "${C_DEPLOY[*]}"
+	settings_seed
+}
+
+#
+# Settings on the radio (/etc/x6100) and their local copy ($X6100_CONFIG): a new SD
+# card image wipes the radio, so backup keeps them here and deploy puts them back
+#
+
+settings_on_radio() {
+	ssh -- "${G_HOST}" "cd ${C_RADIO_SETTINGS} 2>/dev/null && ls -1 ${C_SETTINGS[*]} 2>/dev/null" || true	# none yet: empty
+}
+
+settings_seed() {
+	local L_HAVE
+	local L_FILE
+
+	L_HAVE="$(settings_on_radio)"
+	ssh -- "${G_HOST}" "mkdir -p ${C_RADIO_SETTINGS}"
+
+	for L_FILE in "${C_SETTINGS[@]}"; do
+		if grep -qx -- "${L_FILE}" <<< "${L_HAVE}"; then
+			continue
+		fi
+
+		if [[ -f "${G_CONFIG}/${L_FILE}" ]]; then
+			scp -q -- "${G_CONFIG}/${L_FILE}" "${G_HOST}:${C_RADIO_SETTINGS}/${L_FILE}"
+			printf 'restored %s from %s\n' "${L_FILE}" "${G_CONFIG}"
+		elif [[ "${L_FILE}" == x6100_trx.conf ]]; then
+			scp -q -- docs/x6100_trx.conf.example "${G_HOST}:${C_RADIO_SETTINGS}/${L_FILE}"
+			printf 'installed %s from the example\n' "${L_FILE}"
+		fi
+	done
+}
+
+settings_backup() {
+	local L_FILE
+
+	mkdir -p -- "${G_CONFIG}"
+
+	for L_FILE in $(settings_on_radio); do
+		scp -q -- "${G_HOST}:${C_RADIO_SETTINGS}/${L_FILE}" "${G_CONFIG}/${L_FILE}"
+		printf 'saved %s\n' "${G_CONFIG}/${L_FILE}"
+	done
+}
+
+settings_restore() {
+	local L_FILE
+
+	ssh -- "${G_HOST}" "mkdir -p ${C_RADIO_SETTINGS}"
+
+	for L_FILE in "${C_SETTINGS[@]}"; do
+		if [[ -f "${G_CONFIG}/${L_FILE}" ]]; then
+			scp -q -- "${G_CONFIG}/${L_FILE}" "${G_HOST}:${C_RADIO_SETTINGS}/${L_FILE}"
+			printf 'restored %s\n' "${L_FILE}"
+		fi
+	done
 }
 
 #
@@ -135,10 +191,15 @@ deploy() {
 usage() {
 	printf '%s\n' \
 		'usage: build.sh [options] [deploy]' \
+		'       build.sh backup | restore' \
 		'' \
 		'  (none)       git pull, then build only if a source changed' \
 		'  deploy       the same, then scp x6100_trx, x6100_ui.sh and the quick reference' \
 		'               to $X6100_HOST:/root (default root@x6100)' \
+		'               and settings missing on the radio from $X6100_CONFIG (or the example)' \
+		'  backup       copy the radio settings (/etc/x6100) to $X6100_CONFIG' \
+		'               (default ~/.config/x6100); no build' \
+		'  restore      copy $X6100_CONFIG to the radio, overwriting; no build' \
 		'  -f, --force  build even when nothing changed' \
 		'  --no-pull    skip git pull' \
 		'  -h, --help   this text'
@@ -146,8 +207,12 @@ usage() {
 
 readonly C_STAMP="${C_OUT}/.fingerprint"
 readonly C_DEPLOY=("${C_OUT}/x6100_trx" scripts/x6100_ui.sh docs/x6100_trx_quickref.md)
+readonly C_RADIO_SETTINGS="/etc/x6100"
+readonly C_SETTINGS=(x6100_trx.conf x6100_trx.state filters.conf)
 
 G_HOST="${X6100_HOST:-root@x6100}"
+G_CONFIG="${X6100_CONFIG:-${HOME}/.config/x6100}"
+G_SETTINGS=""
 G_FORCE=0
 G_PULL=1
 G_DEPLOY=0
@@ -159,6 +224,9 @@ while [[ $# -gt 0 ]]; do
 			;;
 		--no-pull)
 			G_PULL=0
+			;;
+		backup|restore)
+			G_SETTINGS="$1"
 			;;
 		deploy)
 			G_DEPLOY=1
@@ -177,6 +245,15 @@ while [[ $# -gt 0 ]]; do
 done
 
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
+
+if [[ "${G_SETTINGS}" == backup ]]; then
+	settings_backup
+	exit 0
+elif [[ "${G_SETTINGS}" == restore ]]; then
+	settings_restore
+	exit 0
+fi
+
 check_zig
 
 if [[ "${G_PULL}" -eq 1 ]]; then

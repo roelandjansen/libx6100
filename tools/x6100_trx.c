@@ -3037,6 +3037,23 @@ static bool console_token(rx_t *rx, const char *t)
 		return true;
 	}
 
+	if (strcasecmp(t, "atu") == 0 || strcasecmp(t, "noatu") == 0) {
+		rx->atu_on = strcasecmp(t, "atu") == 0;
+		return true;
+	}
+
+	// Scope view: RF, audio, or both side by side; audio range
+	if (strcasecmp(t, "rf") == 0 || strcasecmp(t, "af") == 0 || strcasecmp(t, "split") == 0) {
+		rx->ascope = strcasecmp(t, "af") == 0;
+		rx->asplit = strcasecmp(t, "split") == 0;
+		return true;
+	}
+
+	if (strcasecmp(t, "af3") == 0 || strcasecmp(t, "af6") == 0) {
+		rx->arange = strcasecmp(t, "af6") == 0;
+		return true;
+	}
+
 	if (isdigit((unsigned char) t[0])) {
 		double v = strtod(t, &end);
 
@@ -3088,8 +3105,10 @@ static bool console_line(rx_t *rx, char *line)
 	bool want_vol = false;
 	int *want_lvl = NULL;	/* nrl / nbl / nbw: the level the next token sets */
 	int lvl_min = 0, lvl_max = 0;
+	int want_band = -1;	/* band <name> <Hz>: -2 = name next, >= 0 = that band's Hz next */
+	bool want_span = false;
 
-	for (char *t = strtok(line, " \t"); t != NULL; t = strtok(NULL, " \t")) {
+	for (char *t = strtok(line, " \t\r\n"); t != NULL; t = strtok(NULL, " \t\r\n")) {
 		if (want_step) {
 			int st = atoi(t);
 
@@ -3155,10 +3174,80 @@ static bool console_line(rx_t *rx, char *line)
 			continue;
 		}
 
+		if (want_band >= 0) {
+			uint32_t f = (uint32_t) strtoul(t, NULL, 10);
+
+			if (f >= g_bands[want_band].low && f <= g_bands[want_band].high) {
+				rx->band_freq[want_band] = f;
+				changed = true;
+			} else {
+				fprintf(stderr, "\nband %s: %s outside the band\n", g_bands[want_band].name, t);
+			}
+
+			want_band = -1;
+			continue;
+		}
+
+		if (want_band == -2) {
+			want_band = -1;
+
+			for (int i = 0; i < BAND_COUNT; i++) {
+				if (strcasecmp(t, g_bands[i].name) == 0)
+					want_band = i;
+			}
+
+			if (want_band < 0) {
+				fprintf(stderr, "\nband: unknown band %s\n", t);
+				want_band = -3;	/* skip its frequency */
+			}
+
+			continue;
+		}
+
+		if (want_band == -3) {
+			want_band = -1;
+			continue;
+		}
+
+		if (want_span) {
+			int v = atoi(t);
+
+			want_span = false;
+
+			for (int i = 0; i < SPAN_COUNT; i++) {
+				if (g_spans[i] == v) {
+					rx->span = v;
+					changed = true;
+				}
+			}
+
+			if (rx->span != v)
+				fprintf(stderr, "\nspan must be 96000, 48000, 24000, 12000, 6000 or 3000\n");
+
+			continue;
+		}
+
 		if (strcasecmp(t, "ref") == 0 || strcasecmp(t, "aref") == 0) {
 			want_lvl = strcasecmp(t, "ref") == 0 ? &rx->rref : &rx->aref;
 			lvl_min = -REF_MAX_DB;
 			lvl_max = REF_MAX_DB;
+			continue;
+		}
+
+		if (strcasecmp(t, "rfg") == 0) {
+			want_lvl = &rx->rfg;
+			lvl_min = 0;
+			lvl_max = 100;
+			continue;
+		}
+
+		if (strcasecmp(t, "band") == 0) {
+			want_band = -2;
+			continue;
+		}
+
+		if (strcasecmp(t, "span") == 0) {
+			want_span = true;
 			continue;
 		}
 
@@ -3184,6 +3273,71 @@ static bool console_line(rx_t *rx, char *line)
 	}
 
 	return changed;
+}
+
+//
+// Settings files, both in console tokens (one or more per line, # comment):
+//   STATE_PATH  last state, written by x6100_trx at exit
+//   CONF_PATH   the user's own settings, never written by x6100_trx
+// Read at start in that order, then the command line: later wins.
+//
+
+#define CONF_PATH	"/etc/x6100/x6100_trx.conf"
+#define STATE_PATH	"/etc/x6100/x6100_trx.state"
+
+static void conf_load(rx_t *rx, const char *path)
+{
+	FILE *fp;
+	char line[256];
+
+	if ((fp = fopen(path, "r")) == NULL)
+		return;
+
+	while (fgets(line, sizeof(line), fp) != NULL) {
+		char *hash = strchr(line, '#');
+
+		if (hash != NULL)
+			*hash = '\0';
+
+		console_line(rx, line);
+	}
+
+	fclose(fp);
+	fprintf(stderr, "settings: %s\n", path);
+}
+
+static void state_save(const rx_t *rx)
+{
+	static const char *modes[] = { [X6100_MODE_LSB] = "lsb", [X6100_MODE_USB] = "usb", [X6100_MODE_CW] = "cw",
+		[X6100_MODE_CWR] = "cwr", [X6100_MODE_AM] = "am", [X6100_MODE_NFM] = "nfm" };
+	static const char *agcs[] = { [X6100_AGC_OFF] = "off", [X6100_AGC_SLOW] = "slow",
+		[X6100_AGC_FAST] = "fast", [X6100_AGC_AUTO] = "auto" };
+	static const char *scopes[] = { [SCOPE_CENTER] = "center", [SCOPE_CENTER_S] = "scrollc",
+		[SCOPE_FIX] = "fix", [SCOPE_FIX_S] = "scrollf" };
+	char tmp[] = STATE_PATH ".tmp";
+	FILE *fp;
+
+	if ((fp = fopen(tmp, "w")) == NULL) {
+		fprintf(stderr, "\nstate: cannot write %s: %s\n", tmp, strerror(errno));
+		return;
+	}
+
+	fprintf(fp, "# x6100_trx last state, written at exit. Do not edit: put your own\n"
+		"# settings in x6100_trx.conf, which is read after this file.\n\n");
+
+	for (int i = 0; i < BAND_COUNT; i++)
+		fprintf(fp, "band %s %u\n", g_bands[i].name, (unsigned) rx->band_freq[i]);
+
+	fprintf(fp, "\n%u %s %s fil%d step %d\n", (unsigned) rx->freq, modes[rx->mode], agcs[rx->agc], rx->fil + 1, rx->step);
+	fprintf(fp, "vol %d rfg %d pwr %.1f\n", rx->vol, rx->rfg, rx->txpwr / 10.0);
+	fprintf(fp, "%s %s %s\n", rx->att ? "att" : "noatt", rx->pre ? "pre" : "nopre", rx->atu_on ? "atu" : "noatu");
+	fprintf(fp, "%s %s %s\n", rx->nr ? "nr" : "nonr", rx->nb ? "nb" : "nonb", rx->dnf ? "notch" : "nonotch");
+	fprintf(fp, "nrl %d nbl %d nbw %d ntf %d ntw %d\n", rx->nr_lvl, rx->nb_lvl, rx->nb_w, rx->dnf_f, rx->dnf_w);
+	fprintf(fp, "%s span %d %s %s ref %d aref %d\n", scopes[rx->scope], rx->span,
+		rx->asplit ? "split" : rx->ascope ? "af" : "rf", rx->arange ? "af6" : "af3", rx->rref, rx->aref);
+
+	if (fclose(fp) != 0 || rename(tmp, STATE_PATH) != 0)
+		fprintf(stderr, "\nstate: cannot save %s: %s\n", STATE_PATH, strerror(errno));
 }
 
 static bool console_read(rx_t *rx, char *buf, size_t size, size_t *len)
@@ -3998,6 +4152,10 @@ int main(int argc, char **argv)
 
 	set_freq(&rx, 14074000);
 
+	// Last state, then the user's settings; the command line below goes last
+	conf_load(&rx, STATE_PATH);
+	conf_load(&rx, CONF_PATH);
+
 	for (int i = 1; i < argc; i++) {
 		if (strcmp(argv[i], "--no-limit") == 0) {
 			g_no_limit = true;
@@ -4536,6 +4694,7 @@ int main(int argc, char **argv)
 	apply_flags(&ctl, &rx);
 	x6100_ctl_sync(&ctl);
 	fil_save();
+	state_save(&rx);
 
 	if (!lcd_on)
 		backlight_set(true);	/* leave the display lit for whatever runs next */
