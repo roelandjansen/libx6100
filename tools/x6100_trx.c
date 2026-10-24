@@ -1026,7 +1026,7 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 
 // Tag centre x above F1-F5 (screen 800 px); F3 slightly left of centre, F1 / F5
 // further out than a 160 px grid
-static const int g_tag_x[5] = { 60, 226, 392, 558, 740 };
+static const int g_tag_x[5] = { 60, 224, 393, 567, 742 };	/* fitted to a photo of the keys */
 #define DISP_MS		70
 #define SPEC_DB_MIN	-130.0f
 #define SPEC_DB_MAX	-30.0f
