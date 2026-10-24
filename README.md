@@ -100,6 +100,15 @@ scripts/x6100_ui.sh start
 
 The GUI must be stopped: it writes the same bus every millisecond.
 
+## Test setup and thanks
+
+Development and the pictures above are done on an X6100 that boots the operating
+system and GUI image by Giovanni Ricciardi IU1WXY
+([github.com/IU1WXY](https://github.com/IU1WXY)), with the stock Xiegu baseband
+(BASE 1.1.9). `scripts/x6100_ui.sh stop` stops his GUI so that `x6100_trx` owns the
+baseband, and `start` brings it back. Many thanks to IU1WXY for a well-kept image to
+boot from. libx6100 contains no code from it.
+
 ## Safety
 
 - No function writes the calibration block; keep your own dump as backup.
