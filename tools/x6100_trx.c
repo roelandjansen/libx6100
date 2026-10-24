@@ -91,8 +91,8 @@ static bool g_cat_log;	/* --cat-log: print CI-V frames in and out */
 #define FREQ_MAX	(g_no_limit ? 100000000u : 56000000u)
 #define POLL_MS		5
 #define LONG_PRESS_MS	600
-#define PWR_QUIT_MS	1500	/* PWR held this long quits; shorter toggles the display */
-#define PWR_QUIT_MS	1500	/* PWR held this long quits; shorter toggles the display */
+#define PWR_QUIT_MS	1500	/* PWR: shorter = display on / off; 1.5-4 s = quit on release */
+#define PWR_OFF_MS	4000	/* PWR held this long: shut the radio down (as the stock UI) */
 #define REFRESH_MS	1000
 #define METER_MS	500
 #define TX_TIMEOUT_MS	180000
@@ -254,6 +254,7 @@ static const char *g_input_names[IN_COUNT] = {
 };
 
 static volatile sig_atomic_t g_stop;
+static bool g_poweroff;	/* PWR held 4 s: power the radio off after the clean exit */
 
 static void on_signal(int sig)
 {
@@ -4084,6 +4085,7 @@ int main(int argc, char **argv)
 	bool dirty = false;
 	hold_t hold = { .key = -1 };
 	uint64_t pwr_since = 0;	/* PWR pressed at (ms), 0 = not held */
+	const char *pwr_msg = NULL;	/* the PWR hint we put in rx.warn */
 	bool lcd_on = true;
 	uint64_t swr_since = 0;
 
@@ -4127,17 +4129,21 @@ int main(int argc, char **argv)
 			while (read(pfd[p].fd, &ev, sizeof(ev)) == (ssize_t) sizeof(ev)) {
 				if (pmap[p] == IN_POWER && ev.type == EV_KEY && ev.code == KEY_POWER) {
 					//
-					// PWR: short press = display on / off, hold PWR_QUIT_MS = quit
-					// (the hold is acted on in the loop below, while still held)
+					// PWR: release before 1.5 s = display on / off, release 1.5-4 s =
+					// quit, held 4 s = power off (acted on below while still held)
 					//
 					if (ev.value == 1) {
 						pwr_since = now_ms();
 					} else if (ev.value == 0 && pwr_since != 0) {
-						if (now_ms() - pwr_since < PWR_QUIT_MS) {
+						uint64_t held = now_ms() - pwr_since;
+
+						if (held < PWR_QUIT_MS) {
 							lcd_on = !lcd_on;
 
 							if (!backlight_set(lcd_on))
 								fprintf(stderr, "\nwarning: no backlight control found\n");
+						} else if (held < PWR_OFF_MS) {
+							g_stop = 1;
 						}
 
 						pwr_since = 0;
@@ -4171,8 +4177,25 @@ int main(int argc, char **argv)
 			scr.aspec_valid = false;
 		}
 
-		if (pwr_since != 0 && now_ms() - pwr_since >= PWR_QUIT_MS)
-			g_stop = 1;
+		//
+		// PWR held: from 1.5 s the screen says what releasing will do; at 4 s the
+		// radio powers off without waiting for the release
+		//
+		if (pwr_since != 0) {
+			uint64_t held = now_ms() - pwr_since;
+			const char *msg = held >= PWR_OFF_MS ? "POWER OFF" : held >= PWR_QUIT_MS ? "RELEASE: QUIT, HOLD: OFF" : NULL;
+
+			if (msg != rx.warn && (msg != NULL || rx.warn == pwr_msg)) {
+				rx.warn = msg;
+				pwr_msg = msg;
+				dirty = true;
+			}
+
+			if (held >= PWR_OFF_MS) {
+				g_poweroff = true;
+				g_stop = 1;
+			}
+		}
 
 		ntp_poll();
 
@@ -4457,6 +4480,18 @@ int main(int argc, char **argv)
 	for (int i = 0; i < IN_COUNT; i++) {
 		if (fds[i] >= 0)
 			close(fds[i]);
+	}
+
+	//
+	// PWR held 4 s: power the radio off, as the stock UI does (filters are
+	// saved and TX dropped above). The kernel's poweroff switches the PMIC off.
+	//
+	if (g_poweroff) {
+		printf("powering off\n");
+		sync();
+		execlp("poweroff", "poweroff", (char *) NULL);
+		perror("poweroff");
+		return 1;
 	}
 
 	return 0;

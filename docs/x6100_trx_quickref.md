@@ -46,7 +46,7 @@ Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
 | PTT | hold = TX; tap (< 400 ms) = latch, next press drops | |
 | ATU | tuner in / out | tune (keys TX at tune power) |
 | LOCK | lock knobs and keys (PTT still works) | |
-| PWR | display on / off | hold 1.5 s: quit (drops TX first) |
+| PWR | display on / off | release after 1.5-4 s: quit; hold 4 s: power off (as the stock UI). TX is dropped and filters saved first |
 | GEN / KEY / MSG / APP | not used yet (see the key plan in `TODO.md`) | |
 
 ## Scope modes

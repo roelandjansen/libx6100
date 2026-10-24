@@ -6,12 +6,9 @@ Status: 2026-10-24.
 
 - Clock: own time source / sync check (now: system time, one `ntpd -q` at start).
 - PWR short press = display off: check the backlight sysfs path on the radio, and
-  that the power key reports press and release (hold 1.5 s quits).
+  that the power key reports press and release (1.5-4 s quits, 4 s powers off).
 - Brightness: backlight level via /sys/class/backlight/*/brightness (max_brightness),
-  if the image exposes it; e.g. in the GEN menu.
-- PWR long press: the stock / IU1WXY UI shuts the radio down; x6100_trx now quits.
-  Make long press = shutdown (TX off, settings saved, then poweroff), and quit via
-  console / Ctrl-C only, or keep quit on a different hold time.
+  if the image exposes it; in the GEN menu.
 
 ## Radio
 
