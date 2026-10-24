@@ -106,6 +106,8 @@ Type a line + Enter while running; tokens can be combined (`14074000 usb`).
 - amateur bands only (unless `--oob`); TX timeout
 - SWR above 3.0 for 300 ms drops TX
 - any key except PTT and F1-F5 drops a latched TX; tune aborts on any key
-- hand mic PTT keys the baseband directly; the display follows the TX flag
+- hand mic PTT keys the baseband directly; the display follows the TX flag. It does
+  not abort a tune: Linux never sees it (flow flags show only b1 TX, 2026-10-24).
+  Abort a tune with the PTT key, any other key or CAT PTT
 - transient I2C errors are retried; quits after 2 s of failures
   (the baseband keeps its last state, so audio continues)

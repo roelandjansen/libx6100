@@ -499,3 +499,12 @@ when any flow IQ sample comes within about 1 dB of that ceiling.
 
 Note: b2 ("ATU tune done") was set in RX without any tune in this run.
 Input level in dBm unknown (no signal generator yet): calibrate later.
+
+## Hand mic PTT (2026-10-24)
+
+`x6100_trx --probe`, hand mic PTT keyed in RX: the flow flag word goes
+`0x0C -> 0x0E -> 0x0C`, i.e. only b1 (TX). No separate bit for the microphone PTT,
+and no input event reaches x6100_trx. The mic PTT goes to the baseband directly,
+so Linux cannot tell it from any other TX, and during an ATU tune (TX already set)
+it cannot be seen at all: hand mic PTT does not abort a tune. Not checked yet:
+other input devices (evtest) and GPIO state; parked.
