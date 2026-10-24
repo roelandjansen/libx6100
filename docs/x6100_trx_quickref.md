@@ -187,7 +187,7 @@ Type a line + Enter while running; tokens can be combined (`14074000 usb`).
 | `bright 5-100` | display brightness in % |
 | `ab`, `a=b` | VFO A <-> B, A=B |
 | `vfob 7074000 lsb fil1`, `vfo a\|b` | the VFO not in use; which one is in use (state file) |
-| `region r1|r2|r3|nl` | transmit allocations for the TX check and the OOB marker (default r1) |
+| `region r1\|r2\|r3\|nl` | transmit allocations for the TX check and the OOB marker (default r1) |
 | `oob`, `nolimit` | as `--oob` / `--no-limit` (settings file): warned at every start, red OOB on the dial |
 
 ## TX safety
