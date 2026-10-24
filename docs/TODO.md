@@ -27,7 +27,7 @@ Status: 2026-10-24.
 - Compressor; VOX / anti-VOX; squelch; monitor;
   mic select and gain; line in / out levels (registers known, defaults set at start).
 - CW keyer: speed, iambic A / B, sidetone, break-in delay.
-- VFO A / B, memory channels.
+- Memory channels (V/M key).
 - SWR scan over a band (register 12 `swrscan`).
 - Battery / charge status.
 - Digital modes on the radio (FT8, CW / RTTY decoder); CW / voice message memories;

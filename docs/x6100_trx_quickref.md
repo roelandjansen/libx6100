@@ -34,6 +34,7 @@ Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
 | MFK push | RF gain 100 / TX power 5.0 W | switch RF gain <-> TX power |
 | BAND- / BAND+ | previous / next band (last frequency per band kept) | |
 | SSB / CW / AM-FM | USB <-> LSB / CW <-> CWR / AM <-> NFM | |
+| A/B | VFO A <-> B (frequency, mode, filter) | A=B: the other VFO takes the one in use |
 | PRE | preamp on / off | attenuator on / off (~12 dB) |
 | DFN | NR (noise reduction) on / off | NB (noise blanker) on / off |
 | DFL | notch on / off | DSP panel (NR, NB, notch levels) |
@@ -95,6 +96,7 @@ Values are kept in the last state (see Settings); defaults NR 20, NB 10 / 10, no
 
 ## Display
 
+- VFO A / VFO B above the TX box: the VFO in use
 - TX box left of the frequency: red outline / red TX = RX, red fill / white TX = TX
 - STEP and status fields right-aligned, fixed width
 - S-meter: S0-S9, then S9+10 .. S9+60 in rounded 10 dB steps; dBm line exact
@@ -137,7 +139,7 @@ Two files in `/etc/x6100`, both in console tokens (`#` = comment):
 
 | File | Written by | Holds |
 |---|---|---|
-| `x6100_trx.state` | x6100_trx, at exit | last state: frequency, mode, filter, volume / mute, gains, AGC per mode group, DSP, scope, REF, band memories, tuned ATU networks |
+| `x6100_trx.state` | x6100_trx, at exit | last state: frequency, mode, filter, VFO B, volume / mute, gains, AGC per mode group, DSP, scope, REF, band memories, tuned ATU networks |
 | `x6100_trx.conf` | you, never x6100_trx | what must be the same at every start (example: `docs/x6100_trx.conf.example`) |
 | `filters.conf` | filter panel | filter widths and shifts per mode group |
 

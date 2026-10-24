@@ -190,6 +190,14 @@ typedef struct
 	uint32_t band_freq[11];
 
 	//
+	// VFO B: the other VFO (A/B key swaps, A/B long = A=B); on_b: B is the one in use
+	//
+	uint32_t b_freq;
+	x6100_mode_t b_mode;
+	int b_fil;
+	bool on_b;
+
+	//
 	// TX
 	//
 	int txpwr;		/* 0.1 W units */
@@ -721,6 +729,34 @@ static void set_freq(rx_t *rx, int64_t freq)
 		rx->band_freq[rx->band] = rx->freq;
 }
 
+//
+// VFO A / B: the VFO in use is rx->freq / mode / fil, the other one is kept in
+// rx->b_*; swapping exchanges them (A/B key, CI-V 07 00 / 01 / B0)
+//
+
+static void vfo_swap(rx_t *rx)
+{
+	uint32_t f = rx->freq;
+	x6100_mode_t m = rx->mode;
+	int fil = rx->fil;
+
+	set_freq(rx, rx->b_freq);
+	rx->mode = rx->b_mode;
+	rx->fil = rx->b_fil;
+	rx->b_freq = f;
+	rx->b_mode = m;
+	rx->b_fil = fil;
+	rx->on_b = !rx->on_b;
+}
+
+// The other VFO takes over the one in use (A/B long, CI-V 07 A0)
+static void vfo_equal(rx_t *rx)
+{
+	rx->b_freq = rx->freq;
+	rx->b_mode = rx->mode;
+	rx->b_fil = rx->fil;
+}
+
 static void band_step(rx_t *rx, int dir)
 {
 	int band = rx->band;
@@ -959,6 +995,9 @@ static bool on_key(rx_t *rx, int key)
 	case X6100_KEY_LOCK:
 		rx->lock = !rx->lock;
 		break;
+	case X6100_KEY_AB:	/* short: VFO A <-> B; long: A=B (the other VFO takes this one) */
+		vfo_swap(rx);
+		break;
 	case X6100_KEY_GEN:	/* short: settings panel; long: status page */
 		rx->gedit = !rx->gedit;
 		rx->gedit_since = now_ms();
@@ -1066,7 +1105,7 @@ static bool has_long(int key)
 {
 	return key == X6100_KEY_PRE || key == X6100_KEY_FST || key == X6100_KEY_ATU || key == X6100_KEY_MFK_PUSH
 		|| key == X6100_KEY_F1 || key == X6100_KEY_F2 || key == X6100_KEY_F3 || key == X6100_KEY_F5 || key == X6100_KEY_DFN || key == X6100_KEY_DFL
-		|| key == X6100_KEY_GEN;
+		|| key == X6100_KEY_GEN || key == X6100_KEY_AB;
 }
 
 static bool on_long_key(rx_t *rx, int key)
@@ -1141,6 +1180,9 @@ static bool on_long_key(rx_t *rx, int key)
 	case X6100_KEY_DFL:
 		rx->dedit = !rx->dedit;
 		rx->dedit_since = now_ms();
+		return true;
+	case X6100_KEY_AB:
+		vfo_equal(rx);
 		return true;
 	case X6100_KEY_GEN:
 		rx->ginfo = !rx->ginfo;
@@ -3184,6 +3226,9 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 		x6100_lcd_text(lcd, bx + (bw - x6100_lcd_text_width(s, 2)) / 2, by + bh + 6, 2, s, SCR_FG);
 	}
 
+	// VFO in use, above the TX box
+	x6100_lcd_text(lcd, 14, FREQ_Y - 3, 1, rx->on_b ? "VFO B" : "VFO A", SCR_ACCENT);
+
 	//
 	// Indicators in fixed slots, two rows, so nothing shifts when one changes
 	//
@@ -3717,6 +3762,17 @@ static bool console_token(rx_t *rx, const char *t)
 		return true;
 	}
 
+	// VFO A <-> B, A=B (as the A/B key short / long)
+	if (strcasecmp(t, "ab") == 0) {
+		vfo_swap(rx);
+		return true;
+	}
+
+	if (strcasecmp(t, "a=b") == 0) {
+		vfo_equal(rx);
+		return true;
+	}
+
 	// Safety checks off, as --oob / --no-limit (the operator's responsibility)
 	if (strcasecmp(t, "oob") == 0) {
 		g_allow_oob = true;
@@ -3959,6 +4015,38 @@ static bool console_line(rx_t *rx, char *line)
 			continue;
 		}
 
+		// vfob <Hz> <mode> fil<n>: the VFO not in use; vfo a|b: which one is in use (label)
+		if (strcasecmp(t, "vfob") == 0) {
+			const char *fs = strtok(NULL, " \t\r\n"), *ms = strtok(NULL, " \t\r\n"), *ls = strtok(NULL, " \t\r\n");
+			uint32_t hz = fs == NULL ? 0 : (uint32_t) strtoul(fs, NULL, 10);
+			static rx_t tmp;
+
+			tmp = *rx;
+
+			if (hz < FREQ_MIN || hz > FREQ_MAX || ms == NULL || !console_token(&tmp, ms) || ls == NULL
+				|| strncasecmp(ls, "fil", 3) != 0 || ls[3] < '1' || ls[3] > '3') {
+				fprintf(stderr, "\nvfob: <Hz> <mode> fil1|fil2|fil3\n");
+				continue;
+			}
+
+			rx->b_freq = hz;
+			rx->b_mode = tmp.mode;
+			rx->b_fil = ls[3] - '1';
+			changed = true;
+			continue;
+		}
+
+		if (strcasecmp(t, "vfo") == 0) {
+			const char *v = strtok(NULL, " \t\r\n");
+
+			if (v != NULL && (strcasecmp(v, "a") == 0 || strcasecmp(v, "b") == 0))
+				rx->on_b = strcasecmp(v, "b") == 0;
+			else
+				fprintf(stderr, "\nvfo: a or b\n");
+
+			continue;
+		}
+
 		// region r1|r2|r3|nl: transmit allocations for the TX check and OOB marker
 		if (strcasecmp(t, "region") == 0) {
 			const char *v = strtok(NULL, " \t\r\n");
@@ -4153,6 +4241,7 @@ static void state_save(const rx_t *rx)
 		fprintf(fp, "agc %s %s\n", g_fg_name[g], agcs[rx->agc_group[g]]);
 
 	fprintf(fp, "\n%u %s %s fil%d step %d\n", (unsigned) rx->freq, modes[rx->mode], agcs[rx->agc], rx->fil + 1, rx->step);
+	fprintf(fp, "vfob %u %s fil%d vfo %s\n", (unsigned) rx->b_freq, modes[rx->b_mode], rx->b_fil + 1, rx->on_b ? "b" : "a");
 	fprintf(fp, "vol %d %s rfg %d pwr %.1f\n", rx->vol, rx->mute ? "mute" : "nomute", rx->rfg, rx->txpwr / 10.0);
 	fprintf(fp, "%s %s %s\n", rx->att ? "att" : "noatt", rx->pre ? "pre" : "nopre", rx->atu_on ? "atu" : "noatu");
 	fprintf(fp, "%s %s %s\n", rx->nr ? "nr" : "nonr", rx->nb ? "nb" : "nonb", rx->dnf ? "notch" : "nonotch");
@@ -4230,10 +4319,6 @@ typedef struct
 	//
 	// VFO B: shadow only, the baseband runs one VFO; 07 / B0 swaps it in
 	//
-	uint32_t b_freq;
-	x6100_mode_t b_mode;
-	int b_fil;
-	bool on_b;
 
 	//
 	// Last state announced (transceive 00 / 01)
@@ -4314,22 +4399,6 @@ static void fil_set_width(rx_t *rx, int hz)
 	fil_save();
 }
 
-static void cat_swap(cat_t *cat)
-{
-	rx_t *rx = cat->rx;
-	uint32_t f = rx->freq;
-	x6100_mode_t m = rx->mode;
-	int fil = rx->fil;
-
-	set_freq(rx, cat->b_freq);
-	rx->mode = cat->b_mode;
-	rx->fil = cat->b_fil;
-	cat->b_freq = f;
-	cat->b_mode = m;
-	cat->b_fil = fil;
-	cat->on_b = !cat->on_b;
-}
-
 static bool cat_get(void *ctx, x6100_civ_item_t item, int vfo, int32_t *v)
 {
 	cat_t *cat = ctx;
@@ -4338,13 +4407,13 @@ static bool cat_get(void *ctx, x6100_civ_item_t item, int vfo, int32_t *v)
 
 	switch (item) {
 	case X6100_CIV_FREQ:
-		*v = (int32_t) (vfo ? cat->b_freq : rx->freq);
+		*v = (int32_t) (vfo ? rx->b_freq : rx->freq);
 		return true;
 	case X6100_CIV_MODE:
-		*v = vfo ? cat->b_mode : rx->mode;
+		*v = vfo ? rx->b_mode : rx->mode;
 		return true;
 	case X6100_CIV_FIL:
-		*v = (vfo ? cat->b_fil : rx->fil) + 1;
+		*v = (vfo ? rx->b_fil : rx->fil) + 1;
 		return true;
 	case X6100_CIV_FIL_WIDTH:
 		*v = fil_width(rx);
@@ -4482,14 +4551,14 @@ static bool cat_set(void *ctx, x6100_civ_item_t item, int vfo, int32_t v)
 			return false;
 
 		if (vfo)
-			cat->b_freq = (uint32_t) v;
+			rx->b_freq = (uint32_t) v;
 		else
 			set_freq(rx, v);
 
 		break;
 	case X6100_CIV_MODE:
 		if (vfo)
-			cat->b_mode = (x6100_mode_t) v;
+			rx->b_mode = (x6100_mode_t) v;
 		else
 			rx->mode = (x6100_mode_t) v;
 
@@ -4499,7 +4568,7 @@ static bool cat_set(void *ctx, x6100_civ_item_t item, int vfo, int32_t v)
 			return false;
 
 		if (vfo)
-			cat->b_fil = v - 1;
+			rx->b_fil = v - 1;
 		else
 			rx->fil = v - 1;
 
@@ -4508,17 +4577,15 @@ static bool cat_set(void *ctx, x6100_civ_item_t item, int vfo, int32_t v)
 		fil_set_width(rx, v);
 		break;
 	case X6100_CIV_VFO:
-		if ((v == 1) != cat->on_b)
-			cat_swap(cat);
+		if ((v == 1) != rx->on_b)
+			vfo_swap(cat->rx);
 
 		break;
 	case X6100_CIV_VFO_SWAP:
-		cat_swap(cat);
+		vfo_swap(cat->rx);
 		break;
 	case X6100_CIV_VFO_EQUAL:
-		cat->b_freq = rx->freq;
-		cat->b_mode = rx->mode;
-		cat->b_fil = rx->fil;
+		vfo_equal(rx);
 		break;
 	case X6100_CIV_SPLIT:
 		return v == 0;	/* no split yet */
@@ -4715,9 +4782,6 @@ static int cat_open(cat_t *cat, rx_t *rx, const screen_t *scr, int baud)
 	memset(cat, 0, sizeof(*cat));
 	cat->rx = rx;
 	cat->scr = scr;
-	cat->b_freq = rx->freq;
-	cat->b_mode = rx->mode;
-	cat->b_fil = rx->fil;
 	cat->ann_mode = -1;
 	cat->scope_edge = 1;
 	x6100_civ_init(&cat->civ, &ops);
@@ -5166,6 +5230,10 @@ int main(int argc, char **argv)
 
 	if (g_allow_oob)
 		fprintf(stderr, "warning: oob, band check off: you are responsible for where you transmit\n");
+
+	// VFO B starts as a copy of A when no state gave it
+	if (rx.b_freq == 0)
+		vfo_equal(&rx);
 
 	// AGC given with a mode (state, conf, command line) belongs to the start mode's group
 	rx.agc_last_group = mode_group(rx.mode);
