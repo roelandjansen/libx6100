@@ -25,14 +25,14 @@ Status: 2026-10-24.
 
 ## From the stock UI, not yet in x6100_trx
 
-- Settings menu (GEN key); keyer settings (KEY), messages (MSG), apps (APP).
+- GEN: more rows (see key plan); keyer settings (KEY), messages (MSG), apps (APP).
 - CI-V rate: the example conf has `cat 19200`; raise it once ttyS2 runs faster.
 - Compressor; VOX / anti-VOX; squelch; monitor;
   mic select and gain; line in / out levels (registers known, defaults set at start).
 - CW keyer: speed, iambic A / B, sidetone, break-in delay.
 - VFO A / B, memory channels.
 - SWR scan over a band (register 12 `swrscan`).
-- Brightness; battery / charge status.
+- Battery / charge status.
 - Digital modes on the radio (FT8, CW / RTTY decoder); CW / voice message memories;
   RX / TX equaliser.
 
