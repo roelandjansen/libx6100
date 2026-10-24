@@ -7,7 +7,7 @@ Status: 2026-10-24.
 - TX overlay panel (as the IU1WXY UI): during TX a framed box over the scope with
   TX badge, mode + frequency, TX timer (mm:ss), and segmented bars for PWR (0-10 W
   scale), SWR (white / yellow / red zones) and ALC, value on the right of each bar.
-- Time / date display in ISO 8601 (`2026-10-24T11:57Z` or local `2026-10-24 11:57`).
+- Clock: shown (UTC, ISO 8601, from the system time). Open: own time source / sync check.
 - PWR short press: LCD on / off (long press stays quit).
 
 ## System

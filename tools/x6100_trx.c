@@ -2274,6 +2274,23 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 		x6100_lcd_text(lcd, W - tw - 6, SPEC_Y + 42, 2, m, rx->fedit ? SCR_WARN : SCR_ACCENT);
 	}
 
+	//
+	// Clock under the filter label: system time (kept by the OS / network for
+	// now), UTC, ISO 8601
+	//
+	{
+		time_t now = time(NULL);
+		struct tm tm;
+		char m[32];
+		int tw;
+
+		if (gmtime_r(&now, &tm) != NULL && strftime(m, sizeof(m), "%Y-%m-%dT%H:%M:%SZ", &tm) > 0) {
+			tw = x6100_lcd_text_width(m, 2);
+			x6100_lcd_fill(lcd, W - tw - 10, SPEC_Y + 60, tw + 8, 18, 0x000000);
+			x6100_lcd_text(lcd, W - tw - 6, SPEC_Y + 62, 2, m, SCR_DIM);
+		}
+	}
+
 	if (rx->fedit)
 		draw_filter_panel(lcd, rx);
 

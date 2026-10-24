@@ -82,6 +82,7 @@ Saved values override the defaults; MFK long (DEF) restores them.
 - AGC default AUTO; AM / FM SLOW (AUTO squashes AM)
 - F1-F5 tags along the bottom edge: SCOPE, SPAN, (free), METER, FIL
 - OVF (red, top left of the dial): flow IQ at its clip level
+- Clock under the filter label: system time, UTC, ISO 8601 (`2026-10-24T10:08:27Z`); assumes the OS keeps time (network)
 
 ## Console (ssh)
 
