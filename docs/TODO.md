@@ -20,7 +20,8 @@ Status: 2026-10-24.
 - TX ranges config file and transverter profile (frequency offset, TX enable).
 - AM tuning steps 9 / 10 / 5 kHz.
 - Split and RIT / XIT (TX / RX frequency handling).
-- S-meter calibration (signal generator), overload point in dBm with PRE / ATT.
+- S-meter calibration (signal generator): SMETER_CAL_DB is a guess (-21, was -15,
+  lowered 6 dB by ear); also the overload point in dBm with PRE / ATT.
 - Codec level vs ALC test (x6100_tx codec at -40 / -30 / -20 dBFS).
 - Register 35 LO offset for FIX mode; F2 (span) edges in FIX mode.
 - Linux-side DSP with liquid-dsp (static build).

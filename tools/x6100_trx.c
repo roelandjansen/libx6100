@@ -1049,9 +1049,9 @@ static const int g_tag_x[5] = { 52, 224, 393, 567, 742 };	/* fitted to photos of
 // Meter calibration: dBm = passband power in dB + SMETER_CAL_DB.
 // Provisional -15 dB from an FT8 comparison with an IC-7851; refine with a steady carrier.
 //
-#define SMETER_CAL_DB	-15.0
-#define VU_ATTACK_MS	40.0
-#define VU_RELEASE_MS	650.0	/* arc needle only; the bar follows the reading directly */
+#define SMETER_CAL_DB	-21.0	/* -15 read about 6 dB hot by ear (2026-10-24); calibrate */
+#define VU_ATTACK_MS	80.0
+#define VU_RELEASE_MS	900.0	/* arc needle only; the bar follows the reading directly */
 #define VU_ANGLE	33.0
 #define VU_PEAK_HOLD_MS	1500.0
 #define VU_PEAK_FALL	0.0006
