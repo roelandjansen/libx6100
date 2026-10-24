@@ -80,7 +80,7 @@ Saved values override the defaults; MFK long (DEF) restores them.
 - STEP and status fields right-aligned, fixed width
 - S-meter: S0-S9, then S9+10 .. S9+60 in rounded 10 dB steps; dBm line exact
 - AGC default AUTO; AM / FM SLOW (AUTO squashes AM)
-- F1-F5 tags along the bottom edge show what each key does now (scope mode, span, -, TX meter, filter)
+- F1-F5 tags along the bottom edge: SCOPE, SPAN, (free), METER, FIL
 - OVF (red, top left of the dial): flow IQ at its clip level
 
 ## Console (ssh)
