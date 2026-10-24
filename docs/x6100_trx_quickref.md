@@ -28,7 +28,7 @@ Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
 | Control | Short | Long |
 |---|---|---|
 | VFO knob | tune | |
-| FST | step 10 / 100 / 1000 / 5000 Hz; AM on LW / MW: 100 / 1k / 5k / 9k / 10k (channel raster) | 1 Hz step on / off |
+| FST | step 10 / 100 / 1000 / 5000 Hz; AM on LW / MW: 100 / 1k / 5k / 9k / 10k (channel raster); 60 m: 10 / 100 / 1k / 5k / CH (VFO knob steps through the 60 m channels) | 1 Hz step on / off |
 | VOL knob | volume; push = mute | |
 | MFK knob | RF gain or TX power | |
 | MFK push | RF gain 100 / TX power 5.0 W | switch RF gain <-> TX power |
@@ -38,7 +38,8 @@ Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
 | PRE | preamp on / off | attenuator on / off (~12 dB) |
 | DFN | NR (noise reduction) on / off | NB (noise blanker) on / off |
 | DFL | notch on / off | DSP panel (NR, NB, notch levels) |
-| AGC | off / slow / fast / auto, per mode group | |
+| AGC | off / slow / fast / auto, per mode group | RIT / XIT panel |
+| V/M | (memory channels, later) | split on / off: RX on the VFO in use, TX on the other |
 | F1 | scroll on / off: CENTER <-> SCROLL-C, FIX <-> SCROLL-F | CENTER family <-> FIX family |
 | F2 | span ±48 / 24 / 12 / 6 / 3 / 1.5 kHz; audio scope: 0-3 / 0-6 kHz | reference level: MFK turn = ±1 dB (±30), MFK push = RF <-> AF scope; F2 long, other key or 10 s idle closes |
 | F3 | audio scope on / off (RF <-> AF) | RF scope left (5/8) + audio scope right (3/8), on / off |
@@ -139,7 +140,7 @@ Two files in `/etc/x6100`, both in console tokens (`#` = comment):
 
 | File | Written by | Holds |
 |---|---|---|
-| `x6100_trx.state` | x6100_trx, at exit | last state: frequency, mode, filter, VFO B, volume / mute, gains, AGC per mode group, DSP, scope, REF, band memories, tuned ATU networks |
+| `x6100_trx.state` | x6100_trx, at exit | last state: frequency, mode, filter, VFO B, split, RIT / XIT, volume / mute, gains, AGC per mode group, DSP, scope, REF, band memories, tuned ATU networks |
 | `x6100_trx.conf` | you, never x6100_trx | what must be the same at every start (example: `docs/x6100_trx.conf.example`) |
 | `filters.conf` | filter panel | filter widths and shifts per mode group |
 
@@ -186,6 +187,9 @@ Type a line + Enter while running; tokens can be combined (`14074000 usb`).
 | `ntp <server>`, `ntp on`, `ntp off` | NTP sync at start (settings file) |
 | `bright 5-100` | display brightness in % |
 | `ab`, `a=b` | VFO A <-> B, A=B |
+| `txsplit`, `notxsplit` | split on / off |
+| `rit`, `norit`, `xit`, `noxit`, `ritofs -9990-9990` | RIT / XIT on / off, offset in Hz |
+| `step ch` | 60 m channel steps |
 | `vfob 7074000 lsb fil1`, `vfo a\|b` | the VFO not in use; which one is in use (state file) |
 | `region r1\|r2\|r3\|nl` | transmit allocations for the TX check and the OOB marker (default r1) |
 | `oob`, `nolimit` | as `--oob` / `--no-limit` (settings file): warned at every start, red OOB on the dial |
@@ -200,6 +204,27 @@ Type a line + Enter while running; tokens can be combined (`14074000 usb`).
   Abort a tune with the PTT key, any other key or CAT PTT
 - transient I2C errors are retried; quits after 2 s of failures
   (the baseband keeps its last state, so audio continues)
+
+## Split, RIT / XIT
+
+- V/M long: split. RX on the VFO in use (+ RIT), TX on the other VFO with its mode and
+  filter (+ XIT). The TX check and the OOB marker use the TX frequency.
+- AGC long: RIT / XIT panel (green). One offset for both, as on Icom radios: MFK turn
+  = offset in 10 Hz steps (±9990), on the RIT / XIT rows on (right) / off (left); MFK
+  push = next row; MFK long = offset 0 (CLEAR); AGC long, other key or 10 s closes.
+- Top left of the spectrum (amber): `SPLIT TX 7.120.00 LSB  RIT +120` while in use.
+- The baseband gets the TX frequency and mode just before PTT goes out and keeps it
+  until the PTT drop has gone out. Front panel PTT, CAT PTT and tune follow split;
+  the hand mic PTT keys the baseband directly and does not (it transmits on the RX
+  frequency: do not use the hand mic PTT with split).
+- CI-V: 0F (split), 21 00 / 01 / 02 (offset, RIT, XIT).
+
+## 60 m channels (FST: CH)
+
+| Region | Channels (dial, USB) |
+|---|---|
+| r2 | 5330.5, 5346.5, 5357.0, 5371.5, 5403.5 (US; outside 5351.5-5366.5 TX needs oob) |
+| r1, r3, nl | 5351.5, 5354.0, 5357.0, 5360.0, 5363.0 (no official channels in the WRC-15 segment: edge, FT8 and a 3 kHz raster as a convenience) |
 
 ## Regions (TX allocations)
 

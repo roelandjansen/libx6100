@@ -196,6 +196,13 @@ typedef struct
 	x6100_mode_t b_mode;
 	int b_fil;
 	bool on_b;
+	bool split;		/* RX on the VFO in use, TX on the other (V/M long) */
+	int rit_hz;		/* RIT / XIT offset, Hz (Icom: one offset, RIT and XIT on / off) */
+	bool rit;
+	bool xit;
+	bool tedit;		/* RIT / XIT panel (AGC long) */
+	int tedit_par;		/* 0 offset, 1 RIT, 2 XIT */
+	uint64_t tedit_since;
 
 	//
 	// TX
@@ -616,17 +623,43 @@ static void fil_default(fgroup_t g, int n)
 static bool g_allow_oob;	/* --oob: skip the band check, enable TX in the baseband everywhere */
 
 //
-// Push the receiver state into the register shadow
+// RX and TX frequency: RX = the VFO in use + RIT; TX = the other VFO with split,
+// else the VFO in use, + XIT (one offset for both, as on Icom radios)
+//
+
+static uint32_t rx_hz(const rx_t *rx)
+{
+	return (uint32_t) ((int64_t) rx->freq + (rx->rit ? rx->rit_hz : 0));
+}
+
+static uint32_t tx_hz(const rx_t *rx)
+{
+	return (uint32_t) ((int64_t) (rx->split ? rx->b_freq : rx->freq) + (rx->xit ? rx->rit_hz : 0));
+}
+
+static x6100_mode_t tx_mode(const rx_t *rx)
+{
+	return rx->split ? rx->b_mode : rx->mode;
+}
+
+//
+// Push the receiver state into the register shadow. While keyed (or while the
+// baseband has not yet seen the PTT drop: the register sync writes in index order,
+// frequency before flags) both VFO registers carry the TX frequency and mode;
+// otherwise the RX ones. Called on every pass of the main loop.
 //
 
 static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 {
 	uint32_t low, high;
+	bool keyed = rx->ptt || rx->tuning || (ctl->sent[X6100_REG_FLAGS] & (X6100_FLAG_IPTT | X6100_FLAG_ATU_TUNE));
+	uint32_t hz = keyed ? tx_hz(rx) : rx_hz(rx);
+	x6100_mode_t mode = keyed ? tx_mode(rx) : rx->mode;
 
-	mode_filter(rx->mode, rx->fil, &low, &high);
+	mode_filter(mode, keyed && rx->split ? rx->b_fil : rx->fil, &low, &high);
 
-	x6100_set_freq(ctl, 0, rx->freq);
-	x6100_set_freq(ctl, 1, rx->freq);
+	x6100_set_freq(ctl, 0, hz);
+	x6100_set_freq(ctl, 1, hz);
 
 	//
 	// Registers 0 / 6: TX enable per VFO ("ham band"), normally set from the band
@@ -637,8 +670,8 @@ static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 		x6100_ctl_set(ctl, X6100_REG_VFOA_BAND, 1);
 		x6100_ctl_set(ctl, X6100_REG_VFOB_BAND, 1);
 	}
-	x6100_set_mode(ctl, 0, rx->mode);
-	x6100_set_mode(ctl, 1, rx->mode);
+	x6100_set_mode(ctl, 0, mode);
+	x6100_set_mode(ctl, 1, mode);
 	x6100_ctl_set(ctl, X6100_REG_VFOA_AGC, rx->agc);
 	x6100_ctl_set(ctl, X6100_REG_VFOB_AGC, rx->agc);
 	x6100_ctl_set(ctl, X6100_REG_VFOA_ATT, rx->att);
@@ -647,11 +680,11 @@ static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 	x6100_ctl_set(ctl, X6100_REG_VFOB_PRE, rx->pre);
 	x6100_ctl_set(ctl, X6100_REG_NR_NB, X6100_R23(rx->nr_lvl, rx->nb_w, rx->nb_lvl, rx->nr, rx->nb));
 	x6100_ctl_set(ctl, X6100_REG_DNF, X6100_R24(rx->dnf_f, rx->dnf_w, rx->dnf));
-	x6100_set_filter(ctl, rx->mode, low, high);
+	x6100_set_filter(ctl, mode, low, high);
 	x6100_ctl_set(ctl, X6100_REG_RXVOL, rx->mute ? 0 : (uint32_t) rx->vol);
 	x6100_ctl_update(ctl, X6100_REG_RFG_TXPWR_FFTDEC, 0xFF, (uint32_t) rx->rfg);
 	x6100_set_txpwr(ctl, rx->txpwr / 10.0f);
-	x6100_cal_apply(ctl, cal, x6100_band_index(rx->freq));
+	x6100_cal_apply(ctl, cal, x6100_band_index(hz));
 
 	//
 	// Tuner: stored network for this band, or straight through
@@ -693,7 +726,7 @@ static bool tx_allowed(rx_t *rx)
 		return true;
 
 	// Selected region's allocation, and a band the baseband transmits in
-	if (!in_allocation(rx->freq) || rx->band < 0 || !(x6100_band_index(rx->freq) & 1)) {
+	if (!in_allocation(tx_hz(rx)) || rx->band < 0 || !(x6100_band_index(tx_hz(rx)) & 1)) {
 		rx->warn = "OUT OF BAND";
 		return false;
 	}
@@ -864,6 +897,51 @@ static bool am_broadcast(const rx_t *rx)
 		|| (rx->freq >= 520000 && rx->freq <= 1710000));
 }
 
+//
+// 60 m channels: on 60 m, FST also offers CH, and the VFO knob then steps through
+// the region's channel list (dial frequencies, USB).
+//   r2: the US channels (FCC; national, outside the WRC-15 segment the TX check
+//       of r2 refuses them unless oob).
+//   r1 / r3 / nl: no official channels in the WRC-15 segment (5351.5-5366.5 kHz):
+//       the segment edge for CW, the FT8 frequency and a 3 kHz raster for USB,
+//       as a convenience. The band plan, not this list, says what goes where.
+//
+
+#define STEP_CH		3000000	/* FST "CH": sentinel step, never used as a raster */
+
+static const uint32_t g_ch60_r2[] = { 5330500, 5346500, 5357000, 5371500, 5403500 };
+static const uint32_t g_ch60_wrc[] = { 5351500, 5354000, 5357000, 5360000, 5363000 };
+
+static bool on_60m(const rx_t *rx)
+{
+	return rx->freq >= 5250000 && rx->freq <= 5450000;
+}
+
+static void ch60_step(rx_t *rx, int dir)
+{
+	bool r2 = strcmp(g_regions[g_region].name, "r2") == 0;
+	const uint32_t *ch = r2 ? g_ch60_r2 : g_ch60_wrc;
+	int n = r2 ? (int) (sizeof(g_ch60_r2) / sizeof(g_ch60_r2[0])) : (int) (sizeof(g_ch60_wrc) / sizeof(g_ch60_wrc[0]));
+	int i = 0;
+
+	// Nearest channel at or above (dir > 0: strictly above) the current frequency
+	if (dir > 0) {
+		while (i < n && ch[i] <= rx->freq)
+			i++;
+
+		i = i < n ? i : 0;
+	} else {
+		i = n - 1;
+
+		while (i >= 0 && ch[i] >= rx->freq)
+			i--;
+
+		i = i >= 0 ? i : n - 1;
+	}
+
+	set_freq(rx, ch[i]);
+}
+
 
 //
 // Baseband DSP values edited in the DSP panel (DFL long): NR level, NB level and
@@ -909,6 +987,7 @@ static int *dsp_value(rx_t *rx, int i)
 }
 
 #define REF_MAX_DB	30		/* scope reference level range, +- dB (F2 long + MFK) */
+#define RIT_MAX_HZ	9990		/* RIT / XIT offset range, +- Hz (Icom: 9.99 kHz) */
 
 static bool on_key(rx_t *rx, int key)
 {
@@ -953,6 +1032,21 @@ static bool on_key(rx_t *rx, int key)
 
 		if (key != X6100_KEY_GEN)
 			rx->gedit = false;
+	}
+
+	//
+	// RIT / XIT panel open: MFK push selects offset / RIT / XIT; any other key
+	// closes it and does its normal job (AGC long closes it too)
+	//
+	if (rx->tedit) {
+		rx->tedit_since = now_ms();
+
+		if (key == X6100_KEY_MFK_PUSH) {
+			rx->tedit_par = (rx->tedit_par + 1) % 3;
+			return true;
+		}
+
+		rx->tedit = false;
 	}
 
 	if (rx->ginfo) {
@@ -1025,6 +1119,9 @@ static bool on_key(rx_t *rx, int key)
 		if (am_broadcast(rx))	/* LW / MW in AM: channel steps 9 kHz (EU) and 10 kHz (US) */
 			rx->step = rx->step == 100 ? 1000 : rx->step == 1000 ? 5000 : rx->step == 5000 ? 9000
 				: rx->step == 9000 ? 10000 : 100;
+		else if (on_60m(rx))	/* 60 m: CH steps through the channel list */
+			rx->step = rx->step == 10 ? 100 : rx->step == 100 ? 1000 : rx->step == 1000 ? 5000
+				: rx->step == 5000 ? STEP_CH : 10;
 		else
 			rx->step = rx->step == 10 ? 100 : rx->step == 100 ? 1000 : rx->step == 1000 ? 5000 : 10;
 		break;
@@ -1118,7 +1215,8 @@ static bool has_long(int key)
 {
 	return key == X6100_KEY_PRE || key == X6100_KEY_FST || key == X6100_KEY_ATU || key == X6100_KEY_MFK_PUSH
 		|| key == X6100_KEY_F1 || key == X6100_KEY_F2 || key == X6100_KEY_F3 || key == X6100_KEY_F5 || key == X6100_KEY_DFN || key == X6100_KEY_DFL
-		|| key == X6100_KEY_GEN || key == X6100_KEY_AB;
+		|| key == X6100_KEY_GEN || key == X6100_KEY_AB
+		|| key == X6100_KEY_VM || key == X6100_KEY_AGC;
 }
 
 static bool on_long_key(rx_t *rx, int key)
@@ -1151,6 +1249,12 @@ static bool on_long_key(rx_t *rx, int key)
 
 		return true;
 	case X6100_KEY_MFK_PUSH:
+		if (rx->tedit) {
+			rx->rit_hz = 0;	/* clear the offset, as Icom's CLEAR */
+			rx->tedit_since = now_ms();
+			return true;
+		}
+
 		if (rx->gedit) {
 			gen_adjust(rx->gedit_par, 0, true);
 			rx->gedit_since = now_ms();
@@ -1193,6 +1297,14 @@ static bool on_long_key(rx_t *rx, int key)
 	case X6100_KEY_DFL:
 		rx->dedit = !rx->dedit;
 		rx->dedit_since = now_ms();
+		return true;
+	case X6100_KEY_VM:	/* long: split on / off */
+		rx->split = !rx->split;
+		toast(rx->split ? "SPLIT ON" : "SPLIT OFF");
+		return true;
+	case X6100_KEY_AGC:	/* long: RIT / XIT panel */
+		rx->tedit = !rx->tedit;
+		rx->tedit_since = now_ms();
 		return true;
 	case X6100_KEY_AB:
 		vfo_equal(rx);
@@ -1281,12 +1393,29 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 
 	switch (in) {
 	case IN_VFO:
-		set_freq(rx, (int64_t) rx->freq - rx->freq % (uint32_t) rx->step + (int64_t) value * X6100_DIR_VFO * rx->step);
+		if (rx->step == STEP_CH)
+			ch60_step(rx, value * X6100_DIR_VFO > 0 ? 1 : -1);
+		else
+			set_freq(rx, (int64_t) rx->freq - rx->freq % (uint32_t) rx->step + (int64_t) value * X6100_DIR_VFO * rx->step);
 		return true;
 	case IN_VOL:
 		rx->vol = clampi(rx->vol + value * X6100_DIR_VOL, 0, 100);
 		return true;
 	case IN_MFK:
+		if (rx->tedit) {
+			int dir = value * X6100_DIR_MFK > 0 ? 1 : -1;
+
+			if (rx->tedit_par == 0)
+				rx->rit_hz = clampi(rx->rit_hz + value * X6100_DIR_MFK * 10, -RIT_MAX_HZ, RIT_MAX_HZ);
+			else if (rx->tedit_par == 1)
+				rx->rit = dir > 0;
+			else
+				rx->xit = dir > 0;
+
+			rx->tedit_since = now_ms();
+			return true;
+		}
+
 		if (rx->gedit) {
 			gen_adjust(rx->gedit_par, value * X6100_DIR_MFK > 0 ? 1 : -1, false);
 			rx->gedit_since = now_ms();
@@ -2819,6 +2948,44 @@ static void draw_gen_info(x6100_lcd_t *lcd, const screen_t *scr)
 	}
 }
 
+//
+// RIT / XIT panel (AGC long): one offset for both, as on Icom radios, and RIT /
+// XIT on or off. Green. MFK turn: offset in 10 Hz steps, or on / off on the
+// RIT and XIT rows; push: next row; hold: offset 0 (CLEAR).
+//
+
+static void draw_rit_panel(x6100_lcd_t *lcd, const rx_t *rx)
+{
+	const int px = LBL_W + 8, py = SPEC_Y + 16, pw = 420, ph = 96;
+	const uint32_t bg = 0x0C180C, green = 0x60D060, sel = 0x1C3A1C, dim = 0x80A080, white = 0xF0F0F0;
+	const uint32_t on = 0x3CC83C, off = 0x5A6464;
+	char v[3][24];
+
+	snprintf(v[0], sizeof(v[0]), "%+d HZ", rx->rit_hz);
+	snprintf(v[1], sizeof(v[1]), "%s", rx->rit ? "ON" : "OFF");
+	snprintf(v[2], sizeof(v[2]), "%s", rx->xit ? "ON" : "OFF");
+
+	x6100_lcd_fill(lcd, px, py, pw, ph, bg);
+	x6100_lcd_fill(lcd, px, py, 3, ph, green);
+	x6100_lcd_hline(lcd, px, px + pw - 1, py, 0x2A4A2A);
+	x6100_lcd_hline(lcd, px, px + pw - 1, py + ph - 1, 0x2A4A2A);
+	x6100_lcd_vline(lcd, px + pw - 1, py, py + ph - 1, 0x2A4A2A);
+	x6100_lcd_text(lcd, px + 14, py + 7, 2, "RIT / XIT", green);
+	x6100_lcd_text(lcd, px + 140, py + 11, 1, "MFK: ADJUST  PUSH: NEXT  HOLD: CLEAR", dim);
+
+	for (int i = 0; i < 3; i++) {
+		static const char *names[3] = { "OFFSET", "RIT  RX", "XIT  TX" };
+		int y = py + 30 + i * 21;
+		uint32_t c = i == 0 ? white : (i == 1 ? rx->rit : rx->xit) ? on : off;
+
+		if (i == rx->tedit_par)
+			x6100_lcd_fill(lcd, px + 6, y - 3, pw - 12, 19, sel);
+
+		x6100_lcd_text(lcd, px + 14, y, 2, names[i], i == rx->tedit_par ? white : dim);
+		x6100_lcd_text(lcd, px + pw - 12 - x6100_lcd_text_width(v[i], 2), y, 2, v[i], c);
+	}
+}
+
 static void draw_dsp_panel(x6100_lcd_t *lcd, const rx_t *rx)
 {
 	const int px = LBL_W + 8, py = SPEC_Y + 16, pw = 500, ph = 132;
@@ -3268,7 +3435,9 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 	//
 	// Info line in fixed columns, so changing values never shift the other fields
 	//
-	if (rx->step >= 1000 && rx->step % 1000 == 0)
+	if (rx->step == STEP_CH)
+		snprintf(s, sizeof(s), "STEP   CH");
+	else if (rx->step >= 1000 && rx->step % 1000 == 0)
 		snprintf(s, sizeof(s), "STEP %3dk", rx->step / 1000);	/* 1k .. 10k in four places */
 	else
 		snprintf(s, sizeof(s), "STEP %4d", rx->step);
@@ -3384,7 +3553,7 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 			x6100_lcd_text(lcd, VU_X + 8, VU_Y + 6, 2, "OVF", SCR_WARN);
 
 		// Band check off (--oob / conf oob) and tuned outside the region's allocations
-		if (g_allow_oob && !in_allocation(rx->freq))
+		if (g_allow_oob && !in_allocation(tx_hz(rx)))
 			x6100_lcd_text(lcd, VU_X + 8, VU_Y + 24, 2, "OOB", SCR_WARN);
 
 		// Baseband noise blanker / reduction on, top right of the dial
@@ -3580,6 +3749,28 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 
 overlays:
 	//
+	// Split / RIT / XIT in use: top left of the spectrum, amber
+	//
+	if (rx->split || rx->rit || rx->xit) {
+		static const char *mn[] = { [X6100_MODE_LSB] = "LSB", [X6100_MODE_USB] = "USB", [X6100_MODE_CW] = "CW",
+			[X6100_MODE_CWR] = "CWR", [X6100_MODE_AM] = "AM", [X6100_MODE_NFM] = "NFM" };
+		char m[48] = "";
+		int n = 0;
+		uint32_t f = tx_hz(rx);
+
+		if (rx->split)
+			n += snprintf(m + n, sizeof(m) - (size_t) n, "SPLIT TX %u.%03u.%02u %s  ", f / 1000000, f / 1000 % 1000,
+				f % 1000 / 10, mn[tx_mode(rx)] ? mn[tx_mode(rx)] : "");
+
+		if (rx->rit || rx->xit)
+			snprintf(m + n, sizeof(m) - (size_t) n, "%s%s%s %+d", rx->rit ? "RIT" : "", rx->rit && rx->xit ? "/" : "",
+				rx->xit ? "XIT" : "", rx->rit_hz);
+
+		x6100_lcd_fill(lcd, LBL_W + 4, SPEC_Y + 22, x6100_lcd_text_width(m, 2) + 8, 18, 0x000000);
+		x6100_lcd_text(lcd, LBL_W + 8, SPEC_Y + 24, 2, m, 0xFFB020);
+	}
+
+	//
 	// Toast: a short confirmation in the middle of the spectrum (VFO A / B, A=B)
 	//
 	if (g_toast[0] != '\0' && now_ms() < g_toast_until) {
@@ -3667,6 +3858,9 @@ overlays:
 
 	if (rx->dedit)
 		draw_dsp_panel(lcd, rx);
+
+	if (rx->tedit)
+		draw_rit_panel(lcd, rx);
 
 	if (rx->gedit)
 		draw_gen_panel(lcd, rx);
@@ -3788,6 +3982,22 @@ static bool console_token(rx_t *rx, const char *t)
 		return true;
 	}
 
+	// Split (TX on the other VFO), RIT / XIT on / off
+	if (strcasecmp(t, "txsplit") == 0 || strcasecmp(t, "notxsplit") == 0) {
+		rx->split = strcasecmp(t, "txsplit") == 0;
+		return true;
+	}
+
+	if (strcasecmp(t, "rit") == 0 || strcasecmp(t, "norit") == 0) {
+		rx->rit = strcasecmp(t, "rit") == 0;
+		return true;
+	}
+
+	if (strcasecmp(t, "xit") == 0 || strcasecmp(t, "noxit") == 0) {
+		rx->xit = strcasecmp(t, "xit") == 0;
+		return true;
+	}
+
 	// VFO A <-> B, A=B (as the A/B key short / long)
 	if (strcasecmp(t, "ab") == 0) {
 		vfo_swap(rx);
@@ -3892,7 +4102,9 @@ static bool console_line(rx_t *rx, char *line)
 
 			want_step = false;
 
-			if (st == 1 || st == 10 || st == 100 || st == 1000 || st == 5000 || st == 9000 || st == 10000) {
+			st = strcasecmp(t, "ch") == 0 ? STEP_CH : st;
+
+			if (st == 1 || st == 10 || st == 100 || st == 1000 || st == 5000 || st == 9000 || st == 10000 || st == STEP_CH) {
 				rx->step = st;
 				changed = true;
 			} else {
@@ -4156,6 +4368,13 @@ static bool console_line(rx_t *rx, char *line)
 			continue;
 		}
 
+		if (strcasecmp(t, "ritofs") == 0) {
+			want_lvl = &rx->rit_hz;
+			lvl_min = -RIT_MAX_HZ;
+			lvl_max = RIT_MAX_HZ;
+			continue;
+		}
+
 		if (strcasecmp(t, "rfg") == 0) {
 			want_lvl = &rx->rfg;
 			lvl_min = 0;
@@ -4268,6 +4487,7 @@ static void state_save(const rx_t *rx)
 
 	fprintf(fp, "\n%u %s %s fil%d step %d\n", (unsigned) rx->freq, modes[rx->mode], agcs[rx->agc], rx->fil + 1, rx->step);
 	fprintf(fp, "vfob %u %s fil%d vfo %s\n", (unsigned) rx->b_freq, modes[rx->b_mode], rx->b_fil + 1, rx->on_b ? "b" : "a");
+	fprintf(fp, "%s %s %s ritofs %d\n", rx->split ? "txsplit" : "notxsplit", rx->rit ? "rit" : "norit", rx->xit ? "xit" : "noxit", rx->rit_hz);
 	fprintf(fp, "vol %d %s rfg %d pwr %.1f\n", rx->vol, rx->mute ? "mute" : "nomute", rx->rfg, rx->txpwr / 10.0);
 	fprintf(fp, "%s %s %s\n", rx->att ? "att" : "noatt", rx->pre ? "pre" : "nopre", rx->atu_on ? "atu" : "noatu");
 	fprintf(fp, "%s %s %s\n", rx->nr ? "nr" : "nonr", rx->nb ? "nb" : "nonb", rx->dnf ? "notch" : "nonotch");
@@ -4445,10 +4665,19 @@ static bool cat_get(void *ctx, x6100_civ_item_t item, int vfo, int32_t *v)
 		*v = fil_width(rx);
 		return true;
 	case X6100_CIV_SPLIT:
-		*v = 0;
+		*v = rx->split;
+		return true;
+	case X6100_CIV_RIT:
+		*v = rx->rit;
+		return true;
+	case X6100_CIV_XIT:
+		*v = rx->xit;
+		return true;
+	case X6100_CIV_RIT_HZ:
+		*v = rx->rit_hz;
 		return true;
 	case X6100_CIV_STEP:
-		*v = rx->step;
+		*v = rx->step == STEP_CH ? 1000 : rx->step;	/* 60 m CH: report 1 kHz */
 		return true;
 	case X6100_CIV_ATT:
 		*v = rx->att;
@@ -4614,7 +4843,20 @@ static bool cat_set(void *ctx, x6100_civ_item_t item, int vfo, int32_t v)
 		vfo_equal(rx);
 		break;
 	case X6100_CIV_SPLIT:
-		return v == 0;	/* no split yet */
+		rx->split = v != 0;
+		break;
+	case X6100_CIV_RIT:
+		rx->rit = v != 0;
+		break;
+	case X6100_CIV_XIT:
+		rx->xit = v != 0;
+		break;
+	case X6100_CIV_RIT_HZ:
+		if (v < -RIT_MAX_HZ || v > RIT_MAX_HZ)
+			return false;
+
+		rx->rit_hz = v;
+		break;
 	case X6100_CIV_STEP:
 		if (v < 1 || v > 100000)
 			return false;
@@ -5513,6 +5755,9 @@ int main(int argc, char **argv)
 			if ((rx.step == 9000 || rx.step == 10000) && !am_broadcast(&rx))
 				rx.step = 1000;
 
+			if (rx.step == STEP_CH && !on_60m(&rx))
+				rx.step = 1000;
+
 			scope_follow(&rx);
 			apply(&ctl, &cal, &rx);
 			show(&rx);
@@ -5546,6 +5791,12 @@ int main(int argc, char **argv)
 			dirty = true;
 		}
 
+		// RIT / XIT panel after 10 s
+		if (rx.tedit && t - rx.tedit_since >= 10000) {
+			rx.tedit = false;
+			dirty = true;
+		}
+
 		// DSP panel closes after 10 s without activity
 		if (rx.dedit && t - rx.dedit_since >= 10000) {
 			rx.dedit = false;
@@ -5574,6 +5825,8 @@ int main(int argc, char **argv)
 			dirty = true;
 		}
 
+		// Every pass: RX / TX frequency follows PTT (split, RIT, XIT)
+		apply(&ctl, &cal, &rx);
 		apply_flags(&ctl, &rx);
 
 		if (cat.fd >= 0)
