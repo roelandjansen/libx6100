@@ -279,7 +279,7 @@ static unsigned g_conf_set;	/* GEN rows that x6100_trx.conf fixes (bit = row): s
 static bool g_conf_reading;	/* conf_load of CONF_PATH in progress */
 static char g_ntp_msg[64] = "not run";	/* last NTP result, for the status page */
 
-enum { GEN_BRIGHT, GEN_CAT, GEN_NTP, GEN_ROWS };	/* GEN settings rows */
+enum { GEN_BRIGHT, GEN_CAT, GEN_NTP, GEN_WIFI, GEN_WNET, GEN_BT, GEN_BTPAIR, GEN_BTDEV, GEN_ROWS };	/* GEN rows */
 
 static void gen_adjust(int row, int dir, bool def);
 
@@ -2168,12 +2168,282 @@ static void draw_filter_panel(x6100_lcd_t *lcd, const rx_t *rx)
 // filter (blue), DSP (teal) and tune (amber) panels.
 //
 
-static const char *g_gen_name[GEN_ROWS] = { "BRIGHTNESS", "CAT (CI-V)", "NTP SYNC" };
+static const char *g_gen_name[GEN_ROWS] = {
+	"BRIGHTNESS", "CAT CI-V", "NTP SYNC", "WIFI", "WIFI NETWORK", "BLUETOOTH", "BT PAIRING", "BT DEVICE",
+};
 static const int g_cat_rates[] = { 0, 4800, 9600, 19200, 38400, 57600, 115200 };
 
 #define CAT_RATES	((int) (sizeof(g_cat_rates) / sizeof(g_cat_rates[0])))
 
 static bool backlight_level(int pct);
+
+//
+// WiFi and Bluetooth as the image runs them: NetworkManager (no nmcli: D-Bus with
+// dbus-send / gdbus, saved profiles in NM_CONN_DIR) and bluez (bluetoothctl).
+// Read while the GEN panel is open, every SYS_POLL_MS; actions run detached.
+//
+
+#define NM_CONN_DIR	"/etc/NetworkManager/system-connections"
+#define SYS_POLL_MS	3000
+#define SYS_MAX		8
+#define BT_VISIBLE_S	120
+
+typedef struct
+{
+	bool wifi_on;
+	char ssid[40];
+	int signal;		/* dBm, 0 = not connected */
+	char ip[INET_ADDRSTRLEN];
+	int nnet;
+	char net_id[SYS_MAX][40];
+	char net_uuid[SYS_MAX][40];
+	int net_sel;
+	bool bt_on;
+	bool bt_visible;
+	uint64_t bt_visible_until;
+	int ndev;
+	char dev_mac[SYS_MAX][18];
+	char dev_name[SYS_MAX][32];
+	bool dev_conn[SYS_MAX];
+	int dev_sel;
+	uint64_t at;		/* last refresh, ms */
+} sys_t;
+
+static sys_t g_sys;
+
+// Run a command (argv, no shell) and read its output; false when it cannot run
+static bool sys_read(char *const argv[], char *buf, size_t size)
+{
+	int fd[2];
+	pid_t pid;
+	size_t len = 0;
+	ssize_t r;
+
+	buf[0] = '\0';
+
+	if (pipe(fd) < 0)
+		return false;
+
+	if ((pid = fork()) == 0) {
+		int nul = open("/dev/null", O_RDWR);
+
+		dup2(fd[1], STDOUT_FILENO);
+		if (nul >= 0) {
+			dup2(nul, STDIN_FILENO);
+			dup2(nul, STDERR_FILENO);
+		}
+
+		close(fd[0]);
+		execvp(argv[0], argv);
+		_exit(127);
+	}
+
+	close(fd[1]);
+
+	if (pid < 0) {
+		close(fd[0]);
+		return false;
+	}
+
+	while (len + 1 < size && (r = read(fd[0], buf + len, size - 1 - len)) > 0)
+		len += (size_t) r;
+
+	buf[len] = '\0';
+	close(fd[0]);
+	waitpid(pid, NULL, 0);
+	return true;
+}
+
+// Run a command detached (double fork: no zombie, no wait); for slow actions
+static void sys_spawn(char *const argv[])
+{
+	pid_t pid = fork();
+
+	if (pid == 0) {
+		if (fork() == 0) {
+			int nul = open("/dev/null", O_RDWR);
+
+			if (nul >= 0) {
+				dup2(nul, STDIN_FILENO);
+				dup2(nul, STDOUT_FILENO);
+				dup2(nul, STDERR_FILENO);
+			}
+
+			setsid();
+			execvp(argv[0], argv);
+		}
+
+		_exit(0);
+	}
+
+	if (pid > 0)
+		waitpid(pid, NULL, 0);
+}
+
+// Value after "key" on a line of text, up to the end of that line
+static bool sys_field(const char *text, const char *key, char *out, size_t n)
+{
+	const char *p = strstr(text, key);
+	size_t i = 0;
+
+	if (p == NULL)
+		return false;
+
+	p += strlen(key);
+
+	while (*p == ' ' || *p == '\t')
+		p++;
+
+	while (p[i] != '\0' && p[i] != '\n' && i + 1 < n) {
+		out[i] = p[i];
+		i++;
+	}
+
+	out[i] = '\0';
+	return true;
+}
+
+static void sys_refresh(void)
+{
+	static char buf[4096];
+	char v[64];
+	DIR *d;
+	struct ifaddrs *ifa;
+
+	// WiFi switch (NetworkManager), link and address
+	{
+		char *get[] = { "dbus-send", "--system", "--print-reply", "--dest=org.freedesktop.NetworkManager",
+			"/org/freedesktop/NetworkManager", "org.freedesktop.DBus.Properties.Get",
+			"string:org.freedesktop.NetworkManager", "string:WirelessEnabled", NULL };
+		char *link[] = { "iw", "dev", "wlan0", "link", NULL };
+
+		g_sys.wifi_on = sys_read(get, buf, sizeof(buf)) && strstr(buf, "boolean true") != NULL;
+		g_sys.ssid[0] = '\0';
+		g_sys.signal = 0;
+
+		if (sys_read(link, buf, sizeof(buf)) && sys_field(buf, "SSID:", g_sys.ssid, sizeof(g_sys.ssid))
+			&& sys_field(buf, "signal:", v, sizeof(v)))
+			g_sys.signal = atoi(v);
+	}
+
+	g_sys.ip[0] = '\0';
+
+	if (getifaddrs(&ifa) == 0) {
+		for (struct ifaddrs *a = ifa; a != NULL; a = a->ifa_next) {
+			if (a->ifa_addr != NULL && a->ifa_addr->sa_family == AF_INET && strcmp(a->ifa_name, "wlan0") == 0)
+				inet_ntop(AF_INET, &((struct sockaddr_in *) a->ifa_addr)->sin_addr, g_sys.ip, sizeof(g_sys.ip));
+		}
+
+		freeifaddrs(ifa);
+	}
+
+	// Saved WiFi profiles (keyfiles: id=, uuid=, type=wifi)
+	g_sys.nnet = 0;
+
+	if ((d = opendir(NM_CONN_DIR)) != NULL) {
+		struct dirent *e;
+
+		while (g_sys.nnet < SYS_MAX && (e = readdir(d)) != NULL) {
+			char path[300];
+			FILE *fp;
+			size_t n;
+
+			if (e->d_name[0] == '.')
+				continue;
+
+			snprintf(path, sizeof(path), "%s/%s", NM_CONN_DIR, e->d_name);
+
+			if ((fp = fopen(path, "r")) == NULL)
+				continue;
+
+			n = fread(buf, 1, sizeof(buf) - 1, fp);
+			buf[n] = '\0';
+			fclose(fp);
+
+			if (strstr(buf, "\ntype=wifi") == NULL && strstr(buf, "\ntype=802-11-wireless") == NULL)
+				continue;
+
+			if (sys_field(buf, "\nid=", g_sys.net_id[g_sys.nnet], sizeof(g_sys.net_id[0]))
+				&& sys_field(buf, "\nuuid=", g_sys.net_uuid[g_sys.nnet], sizeof(g_sys.net_uuid[0])))
+				g_sys.nnet++;
+		}
+
+		closedir(d);
+	}
+
+	g_sys.net_sel = clampi(g_sys.net_sel, 0, g_sys.nnet > 0 ? g_sys.nnet - 1 : 0);
+
+	// Bluetooth adapter and paired devices
+	{
+		char *show[] = { "bluetoothctl", "show", NULL };
+		char *paired[] = { "bluetoothctl", "devices", "Paired", NULL };
+
+		g_sys.bt_on = sys_read(show, buf, sizeof(buf)) && strstr(buf, "Powered: yes") != NULL;
+		g_sys.bt_visible = strstr(buf, "Discoverable: yes") != NULL;
+		g_sys.ndev = 0;
+
+		if (sys_read(paired, buf, sizeof(buf))) {
+			for (char *l = strtok(buf, "\n"); l != NULL && g_sys.ndev < SYS_MAX; l = strtok(NULL, "\n")) {
+				char mac[18];
+				int off = 0;
+
+				if (sscanf(l, "Device %17s %n", mac, &off) != 1 || off == 0)
+					continue;
+
+				snprintf(g_sys.dev_mac[g_sys.ndev], sizeof(g_sys.dev_mac[0]), "%s", mac);
+				snprintf(g_sys.dev_name[g_sys.ndev], sizeof(g_sys.dev_name[0]), "%s", l + off);
+				g_sys.ndev++;
+			}
+		}
+
+		for (int i = 0; i < g_sys.ndev; i++) {
+			char *info[] = { "bluetoothctl", "info", g_sys.dev_mac[i], NULL };
+
+			g_sys.dev_conn[i] = sys_read(info, buf, sizeof(buf)) && strstr(buf, "Connected: yes") != NULL;
+		}
+	}
+
+	g_sys.dev_sel = clampi(g_sys.dev_sel, 0, g_sys.ndev > 0 ? g_sys.ndev - 1 : 0);
+	g_sys.at = now_ms();
+}
+
+static void wifi_set(bool on)
+{
+	char *set[] = { "dbus-send", "--system", "--print-reply", "--dest=org.freedesktop.NetworkManager",
+		"/org/freedesktop/NetworkManager", "org.freedesktop.DBus.Properties.Set",
+		"string:org.freedesktop.NetworkManager", "string:WirelessEnabled",
+		on ? "variant:boolean:true" : "variant:boolean:false", NULL };
+	char out[256];
+
+	sys_read(set, out, sizeof(out));
+	g_sys.at = 0;	/* read back on the next draw */
+}
+
+// Activate a saved profile: settings path by uuid, then ActivateConnection (gdbus, detached)
+static void wifi_connect(const char *uuid)
+{
+	char *sh[] = { "sh", "-c",
+		"P=$(gdbus call --system --dest org.freedesktop.NetworkManager"
+		" --object-path /org/freedesktop/NetworkManager/Settings"
+		" --method org.freedesktop.NetworkManager.Settings.GetConnectionByUuid \"$1\""
+		" | sed -n \"s/.*'\\(.*\\)'.*/\\1/p\");"
+		" [ -n \"$P\" ] && gdbus call --system --dest org.freedesktop.NetworkManager"
+		" --object-path /org/freedesktop/NetworkManager"
+		" --method org.freedesktop.NetworkManager.ActivateConnection \"$P\" / /",
+		"wifi_connect", (char *) uuid, NULL };
+
+	sys_spawn(sh);
+	g_sys.at = 0;
+}
+
+static void bt_cmd(char *a1, char *a2)
+{
+	char *cmd[] = { "bluetoothctl", a1, a2, NULL };
+	char out[512];
+
+	sys_read(cmd, out, sizeof(out));
+	g_sys.at = 0;
+}
 
 static void gen_value(int row, char *s, size_t n)
 {
@@ -2190,13 +2460,65 @@ static void gen_value(int row, char *s, size_t n)
 		else
 			snprintf(s, n, "OFF");
 		break;
-	default:
+	case GEN_NTP:
 		snprintf(s, n, "%s", strcmp(g_ntp_server, "off") == 0 ? "OFF" : "AT START");
+		break;
+	case GEN_WIFI:
+		snprintf(s, n, "%s", g_sys.wifi_on ? "ON" : "OFF");
+		break;
+	case GEN_WNET:
+		snprintf(s, n, "%s", g_sys.nnet > 0 ? g_sys.net_id[g_sys.net_sel] : "NONE SAVED");
+		break;
+	case GEN_BT:
+		snprintf(s, n, "%s", g_sys.bt_on ? "ON" : "OFF");
+		break;
+	case GEN_BTPAIR:
+		if (g_sys.bt_visible && now_ms() < g_sys.bt_visible_until)
+			snprintf(s, n, "VISIBLE %ds", (int) ((g_sys.bt_visible_until - now_ms()) / 1000));
+		else
+			snprintf(s, n, "%s", g_sys.bt_visible ? "VISIBLE" : "OFF");
+		break;
+	default:
+		snprintf(s, n, "%s", g_sys.ndev > 0 ? g_sys.dev_name[g_sys.dev_sel] : "NONE PAIRED");
 		break;
 	}
 }
 
-// MFK turn on a row (dir +-1); def: MFK long, back to the default
+// Second column: what the row does or what is going on
+static void gen_hint(int row, char *s, size_t n)
+{
+	bool cur = g_sys.nnet > 0 && strcmp(g_sys.ssid, g_sys.net_id[g_sys.net_sel]) == 0;
+
+	switch (row) {
+	case GEN_CAT:
+	case GEN_NTP:
+		snprintf(s, n, "APPLIES AT NEXT START");
+		break;
+	case GEN_WIFI:
+		if (g_sys.ssid[0] != '\0')
+			snprintf(s, n, "%s  %s  %d DBM", g_sys.ssid, g_sys.ip[0] ? g_sys.ip : "NO IP", g_sys.signal);
+		else
+			snprintf(s, n, "NOT CONNECTED");
+		break;
+	case GEN_WNET:
+		snprintf(s, n, "%s", g_sys.nnet == 0 ? "ADD WITH NMTUI OVER SSH" : cur ? "CONNECTED" : "HOLD MFK: CONNECT");
+		break;
+	case GEN_BTPAIR:
+		snprintf(s, n, "TURN: VISIBLE %d S AS X6100", BT_VISIBLE_S);
+		break;
+	case GEN_BTDEV:
+		if (g_sys.ndev > 0)
+			snprintf(s, n, "%s", g_sys.dev_conn[g_sys.dev_sel] ? "CONNECTED, HOLD: DISCONNECT" : "HOLD MFK: CONNECT");
+		else
+			s[0] = '\0';
+		break;
+	default:
+		s[0] = '\0';
+		break;
+	}
+}
+
+// MFK turn on a row (dir +-1); def: MFK long (default, or connect on the WiFi / BT rows)
 static void gen_adjust(int row, int dir, bool def)
 {
 	if (g_conf_set & (1u << row))
@@ -2216,8 +2538,54 @@ static void gen_adjust(int row, int dir, bool def)
 		g_cat_baud = def ? 19200 : g_cat_rates[clampi(i + dir, 0, CAT_RATES - 1)];
 		break;
 	}
-	default:
+	case GEN_NTP:
 		snprintf(g_ntp_server, sizeof(g_ntp_server), "%s", def || strcmp(g_ntp_server, "off") == 0 ? "" : "off");
+		break;
+	case GEN_WIFI:
+		if (!def)
+			wifi_set(dir > 0);
+		break;
+	case GEN_WNET:
+		if (def && g_sys.nnet > 0)
+			wifi_connect(g_sys.net_uuid[g_sys.net_sel]);
+		else if (g_sys.nnet > 0)
+			g_sys.net_sel = (g_sys.net_sel + dir + g_sys.nnet) % g_sys.nnet;
+		break;
+	case GEN_BT:
+		if (!def)
+			bt_cmd("power", dir > 0 ? "on" : "off");
+		break;
+	case GEN_BTPAIR:
+		if (def)
+			break;
+
+		if (dir > 0) {
+			char t[8];
+
+			snprintf(t, sizeof(t), "%d", BT_VISIBLE_S);
+			bt_cmd("discoverable-timeout", t);
+			bt_cmd("pairable", "on");
+			bt_cmd("discoverable", "on");
+			g_sys.bt_visible_until = now_ms() + BT_VISIBLE_S * 1000u;
+		} else {
+			bt_cmd("discoverable", "off");
+			bt_cmd("pairable", "off");
+			g_sys.bt_visible_until = 0;
+		}
+		break;
+	default:
+		if (g_sys.ndev == 0)
+			break;
+
+		if (def) {
+			char *cmd[] = { "bluetoothctl", g_sys.dev_conn[g_sys.dev_sel] ? "disconnect" : "connect",
+				g_sys.dev_mac[g_sys.dev_sel], NULL };
+
+			sys_spawn(cmd);	/* connecting takes seconds */
+			g_sys.at = now_ms() - SYS_POLL_MS + 1500;
+		} else {
+			g_sys.dev_sel = (g_sys.dev_sel + dir + g_sys.ndev) % g_sys.ndev;
+		}
 		break;
 	}
 }
@@ -2235,34 +2603,54 @@ static void gen_frame(x6100_lcd_t *lcd, int px, int py, int pw, int ph, const ch
 	x6100_lcd_text(lcd, px + 14 + x6100_lcd_text_width(title, 2) + 16, py + 11, 1, hint, dim);
 }
 
+static void upcase(char *s)
+{
+	for (; *s != '\0'; s++)
+		*s = (char) toupper((unsigned char) *s);	/* the panel font is drawn in capitals */
+}
+
 static void draw_gen_panel(x6100_lcd_t *lcd, const rx_t *rx)
 {
-	const int px = LBL_W + 8, py = SPEC_Y + 16, pw = 500, ph = 132;
+	// Five rows in view, scrolling with the selection: the panel stays inside the
+	// spectrum, so the waterfall never scrolls panel pixels into its history
+	const int vis = 5, top = clampi(rx->gedit_par - 2, 0, GEN_ROWS - vis);
+	const int px = LBL_W + 8, py = SPEC_Y + 14, pw = 560, ph = 30 + vis * 21;
 	const uint32_t sel = 0x2E2348, dim = 0x8A82A0, white = 0xF0F0F0, violet = 0xB080FF, amber = 0xFFB020;
 
-	gen_frame(lcd, px, py, pw, ph, "SETTINGS", "MFK: ADJUST   PUSH: NEXT   HOLD: DEFAULT   GEN: CLOSE");
+	if (now_ms() - g_sys.at >= SYS_POLL_MS)
+		sys_refresh();
 
-	for (int i = 0; i < GEN_ROWS; i++) {
-		int y = py + 30 + i * 22;
+	gen_frame(lcd, px, py, pw, ph, "SETTINGS", "MFK: ADJUST  PUSH: NEXT  HOLD: DEFAULT / CONNECT  GEN: CLOSE");
+
+	for (int i = top; i < top + vis; i++) {
+		int y = py + 30 + (i - top) * 21;
 		bool locked = g_conf_set & (1u << i);
-		char v[24];
+		char v[40], h[64];
 
 		if (i == rx->gedit_par)
-			x6100_lcd_fill(lcd, px + 6, y - 3, pw - 12, 20, sel);
+			x6100_lcd_fill(lcd, px + 6, y - 3, pw - 12, 19, sel);
 
 		x6100_lcd_text(lcd, px + 14, y, 2, g_gen_name[i], i == rx->gedit_par ? white : dim);
 
-		if (i != GEN_BRIGHT)
-			x6100_lcd_text(lcd, px + 200, y + 4, 1, "APPLIES AT NEXT START", dim);
+		gen_hint(i, h, sizeof(h));
+		upcase(h);
+		x6100_lcd_text(lcd, px + 196, y + 4, 1, h, dim);
 
 		gen_value(i, v, sizeof(v));
+		upcase(v);
 		x6100_lcd_text(lcd, px + pw - 12 - x6100_lcd_text_width(v, 2), y, 2, v, locked ? dim : white);
 
 		if (locked)
 			x6100_lcd_text(lcd, px + pw - 22 - x6100_lcd_text_width(v, 2) - x6100_lcd_text_width("CONF", 2), y, 2, "CONF", amber);
 	}
 
-	x6100_lcd_text(lcd, px + 14, py + ph - 16, 1, "KEPT IN THE STATE FILE.  CONF: SET IN THE CONF FILE, CHANGE IT THERE", violet);
+	// Position in the list, top right: the panel shows five of the rows
+	{
+		char pos[12];
+
+		snprintf(pos, sizeof(pos), "%d/%d", rx->gedit_par + 1, GEN_ROWS);
+		x6100_lcd_text(lcd, px + pw - 12 - x6100_lcd_text_width(pos, 1), py + 11, 1, pos, violet);
+	}
 }
 
 static void draw_gen_info(x6100_lcd_t *lcd, const screen_t *scr)

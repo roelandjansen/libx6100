@@ -116,8 +116,15 @@ Values are kept in the last state (see Settings); defaults NR 20, NB 10 / 10, no
 | BRIGHTNESS | 10-100 % in steps of 5 (default 100) | at once |
 | CAT (CI-V) | OFF, 4800 ... 115200 (default 19200; the stock image only runs 19200) | next start |
 | NTP SYNC | AT START / OFF | next start |
+| WIFI | ON / OFF (NetworkManager); shows network, IP and signal | at once |
+| WIFI NETWORK | turn: choose a saved network, hold MFK: connect. New networks: `nmtui` over ssh | at once |
+| BLUETOOTH | ON / OFF | at once |
+| BT PAIRING | turn right: visible as X6100 for 120 s to pair, left: hidden | at once |
+| BT DEVICE | turn: choose a paired device, hold MFK: connect / disconnect | at once |
 
-Changes go to `x6100_trx.state` at exit. A row set in `x6100_trx.conf` shows CONF and
+The panel shows five rows and scrolls with the selection (position top right). WiFi and
+Bluetooth are the image's own (NetworkManager, bluez) and keep their state themselves;
+brightness, CAT and NTP go to `x6100_trx.state` at exit. A row set in `x6100_trx.conf` shows CONF and
 cannot be changed here: the conf wins at start, so change it there.
 
 GEN long: status page (IP address, uptime, battery, CAT, last NTP result, build).
@@ -140,8 +147,9 @@ later wins. Command-line values apply to that run only (but end up in the state 
 A new SD card image wipes `/etc/x6100`. On the PC:
 
 ```
-sh ./build.sh backup     # radio -> ~/.config/x6100 (or $X6100_CONFIG)
-sh ./build.sh restore    # ~/.config/x6100 -> radio, overwriting
+sh ./build.sh backup     # radio -> ~/.config/x6100 (or $X6100_CONFIG), WiFi profiles included
+sh ./build.sh restore    # ~/.config/x6100 -> radio, overwriting; restarts NetworkManager
+                         # for the WiFi profiles (an ssh session over WiFi drops)
 sh ./build.sh deploy     # also puts back settings the radio lacks (conf: the example)
 ```
 

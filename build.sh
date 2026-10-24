@@ -170,6 +170,16 @@ settings_backup() {
 		scp -q -- "${G_HOST}:${C_RADIO_SETTINGS}/${L_FILE}" "${G_CONFIG}/${L_FILE}"
 		printf 'saved %s\n' "${G_CONFIG}/${L_FILE}"
 	done
+
+	# Saved WiFi profiles (NetworkManager keyfiles, with their passwords: kept 0600)
+	mkdir -p -- "${G_CONFIG}/${C_NM_DIR##*/}"
+	chmod 700 -- "${G_CONFIG}/${C_NM_DIR##*/}"
+
+	if scp -q -p -- "${G_HOST}:${C_NM_DIR}/*.nmconnection" "${G_CONFIG}/${C_NM_DIR##*/}/"; then
+		printf 'saved WiFi profiles in %s\n' "${G_CONFIG}/${C_NM_DIR##*/}"
+	else
+		printf '%s\n' 'no WiFi profiles on the radio'
+	fi
 }
 
 settings_restore() {
@@ -183,6 +193,13 @@ settings_restore() {
 			printf 'restored %s\n' "${L_FILE}"
 		fi
 	done
+
+	# WiFi profiles: NetworkManager reads keyfiles at start, so restart it
+	if compgen -G "${G_CONFIG}/${C_NM_DIR##*/}/*.nmconnection" > /dev/null; then
+		scp -q -- "${G_CONFIG}/${C_NM_DIR##*/}/"*.nmconnection "${G_HOST}:${C_NM_DIR}/"
+		ssh -- "${G_HOST}" "chmod 600 ${C_NM_DIR}/*.nmconnection && /etc/init.d/S45network-manager restart"
+		printf '%s\n' 'restored WiFi profiles, NetworkManager restarted'
+	fi
 }
 
 #
@@ -210,6 +227,7 @@ readonly C_STAMP="${C_OUT}/.fingerprint"
 readonly C_DEPLOY=("${C_OUT}/x6100_trx" scripts/x6100_ui.sh docs/x6100_trx_quickref.md)
 readonly C_RADIO_SETTINGS="/etc/x6100"
 readonly C_SETTINGS=(x6100_trx.conf x6100_trx.state filters.conf)
+readonly C_NM_DIR="/etc/NetworkManager/system-connections"
 
 G_HOST="${X6100_HOST:-root@x6100}"
 G_CONFIG="${X6100_CONFIG:-${HOME}/.config/x6100}"
