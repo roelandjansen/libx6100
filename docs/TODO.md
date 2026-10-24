@@ -12,8 +12,8 @@ Status: 2026-10-24.
 
 ## System
 
-- NTP sync (the radio has no RTC battery backed time we can rely on; set the clock
-  from the network when WiFi / Ethernet is up).
+- NTP sync: set the clock from the network when WiFi / Ethernet is up (check
+  first what the image already runs, and whether the RTC keeps time).
 
 ## Radio
 
