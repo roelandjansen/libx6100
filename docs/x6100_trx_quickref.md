@@ -160,6 +160,9 @@ sh ./build.sh deploy     # also puts back settings the radio lacks (conf: the ex
 
 Type a line + Enter while running; tokens can be combined (`14074000 usb`).
 
+The status line starts with the VFO in use (A / B); with split, RIT or XIT it adds
+`RX 7123.000 TX 7115.000 LSB SPLIT`.
+
 | Token | Effect |
 |---|---|
 | `7074000`, `7.074`, `7074k` | frequency (Hz, MHz, kHz) |

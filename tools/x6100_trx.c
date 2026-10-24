@@ -745,12 +745,26 @@ static void tx_drop(rx_t *rx, const char *why)
 		rx->warn = why;
 }
 
+#define STEP_CH		3000000	/* FST "CH" on 60 m: sentinel step, never used as a raster */
+
 static void show(const rx_t *rx)
 {
-	printf("\r%9.3f kHz %-5s %-4s step %4d  vol %3d%s  rfg %3d  pre %s  agc %-4s%s      ",
-		rx->freq / 1000.0, rx->band >= 0 ? g_bands[rx->band].name : "-", mode_name(rx->mode),
-		rx->step, rx->vol, rx->mute ? " (mute)" : "", rx->rfg, rx->pre ? "on " : "off",
-		agc_name(rx->agc), rx->lock ? "  LOCK" : "");
+	char st[8], sp[48] = "";
+
+	if (rx->step == STEP_CH)
+		snprintf(st, sizeof(st), "  CH");
+	else
+		snprintf(st, sizeof(st), "%4d", rx->step);
+
+	// RX / TX apart (split, RIT, XIT): both frequencies, TX with its mode
+	if (rx->split || rx->rit || rx->xit)
+		snprintf(sp, sizeof(sp), "  RX %.3f TX %.3f %s%s", rx_hz(rx) / 1000.0, tx_hz(rx) / 1000.0,
+			mode_name(tx_mode(rx)), rx->split ? " SPLIT" : "");
+
+	printf("\r%c %9.3f kHz %-5s %-4s step %s  vol %3d%s  rfg %3d  pre %s  agc %-4s%s%s      ",
+		rx->on_b ? 'B' : 'A', rx->freq / 1000.0, rx->band >= 0 ? g_bands[rx->band].name : "-",
+		mode_name(rx->mode), st, rx->vol, rx->mute ? " (mute)" : "", rx->rfg, rx->pre ? "on " : "off",
+		agc_name(rx->agc), sp, rx->lock ? "  LOCK" : "");
 	fflush(stdout);
 }
 
@@ -907,8 +921,6 @@ static bool am_broadcast(const rx_t *rx)
 //       the segment edge for CW, the FT8 frequency and a 3 kHz raster for USB,
 //       as a convenience. The band plan, not this list, says what goes where.
 //
-
-#define STEP_CH		3000000	/* FST "CH": sentinel step, never used as a raster */
 
 static const uint32_t g_ch60_r2[] = { 5330500, 5346500, 5357000, 5371500, 5403500 };
 static const uint32_t g_ch60_wrc[] = { 5351500, 5354000, 5357000, 5360000, 5363000 };
