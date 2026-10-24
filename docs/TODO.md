@@ -1,6 +1,6 @@
 # libx6100 / x6100_trx — to do
 
-Status: 2026-10-24.
+Status: 2026-10-24 (v0.8.0).
 
 ## Display
 
@@ -37,7 +37,7 @@ Status: 2026-10-24.
 
 | Key | Short | Long | Status |
 |---|---|---|---|
-| GEN | settings panel: brightness, CAT, NTP (done); next: network, WiFi, Bluetooth, LAN server (wfview), TX panel | status page: IP, uptime, battery, CAT, NTP, build (done); next: temperature, baseband version | partly done |
+| GEN | settings panel: brightness, CAT, NTP, WiFi, Bluetooth (done); next: region, LAN server (wfview), TX panel | status page: IP, uptime, battery, CAT, NTP, build (done); next: temperature, baseband version | partly done |
 | KEY | keyer on / off (straight / iambic) | keyer panel: speed, iambic A / B, sidetone, break-in delay, CW pitch | planned |
 | MSG | message list: play CW / voice memory | record / edit a message | planned |
 | APP | app list: FT8, CW / RTTY decoder, SWR scan, recorder | last app | planned |
