@@ -1021,6 +1021,8 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 #define SPEC_Y		180
 #define SPEC_H		150
 #define WF_Y		(SPEC_Y + SPEC_H + 4)
+#define TAG_H		20		/* F1-F5 tags along the bottom edge */
+#define WF_H(lcd)	((lcd)->h - WF_Y - TAG_H)
 #define DISP_MS		70
 #define SPEC_DB_MIN	-130.0f
 #define SPEC_DB_MAX	-30.0f
@@ -1991,6 +1993,41 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 	x6100_lcd_text(lcd, INFO_COL_FIL, INFO_Y, 2, s, SCR_DIM);
 
 	//
+	// F1-F5 tags along the bottom, one 160 px cell above each key: what the key
+	// does now (scope mode, span, -, TX meter, filter)
+	//
+	{
+		static const char *scope_names[4] = { "CENTER", "SCRL-C", "FIX", "SCRL-F" };
+		static const char *meter_tags[3] = { "PO", "SWR", "ALC" };
+		const int cw = W / 5, y = lcd->h - TAG_H;
+		char tag[5][16];
+
+		snprintf(tag[0], sizeof(tag[0]), "%s", scope_names[rx->scope]);
+
+		if (rx->span % 2000 == 0)
+			snprintf(tag[1], sizeof(tag[1]), "+-%dk", rx->span / 2000);
+		else
+			snprintf(tag[1], sizeof(tag[1]), "+-%d.%dk", rx->span / 2000, rx->span % 2000 / 200);
+
+		snprintf(tag[2], sizeof(tag[2]), "-");
+		snprintf(tag[3], sizeof(tag[3]), "%s", meter_tags[rx->meter]);
+		snprintf(tag[4], sizeof(tag[4]), "FIL%d", rx->fil + 1);
+
+		x6100_lcd_fill(lcd, 0, y, W, TAG_H, SCR_BG);
+
+		for (int i = 0; i < 5; i++) {
+			int x = i * cw;
+
+			snprintf(s, sizeof(s), "F%d", i + 1);
+			x6100_lcd_text(lcd, x + 8, y + 3, 2, s, SCR_DIM);
+			x6100_lcd_text(lcd, x + 8 + x6100_lcd_text_width("F1 ", 2), y + 3, 2, tag[i], SCR_FG);
+
+			if (i > 0)
+				x6100_lcd_fill(lcd, x, y + 2, 1, TAG_H - 4, SCR_DIM);
+		}
+	}
+
+	//
 	// Meters: S in RX; Po (needle, bar) and SWR in TX, marker on the ALC arc
 	// while the ALC is working, else on Po
 	//
@@ -2069,7 +2106,7 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 	// window shifts it by the same number of pixels, so it stays frequency aligned
 	//
 	if (rx->scope != scr->wf_scope || rx->span != scr->wf_span) {
-		x6100_lcd_fill(lcd, 0, WF_Y, W, lcd->h - WF_Y, 0x000000);
+		x6100_lcd_fill(lcd, 0, WF_Y, W, WF_H(lcd), 0x000000);
 		scr->wf_scope = rx->scope;
 		scr->wf_span = rx->span;
 		scr->wf_ref = (double) v.lo;
@@ -2077,7 +2114,7 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 		int dx = (int) lround((scr->wf_ref - (double) v.lo) * W / v.span);
 
 		if (dx != 0) {
-			wf_shift(lcd, WF_Y, lcd->h - WF_Y, dx);
+			wf_shift(lcd, WF_Y, WF_H(lcd), dx);
 			scr->wf_ref -= (double) dx * v.span / W;
 		}
 	} else {
@@ -2245,7 +2282,7 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 	// Waterfall, newest line on top; no data outside the IQ span stays black
 	//
 	if (new_line) {
-		x6100_lcd_scroll_down(lcd, WF_Y, lcd->h - WF_Y);
+		x6100_lcd_scroll_down(lcd, WF_Y, WF_H(lcd));
 
 		for (int x = 0; x < W; x++) {
 			uint32_t c = spec_index(&v, x) < 0 ? 0x000000
