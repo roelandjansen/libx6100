@@ -68,3 +68,6 @@ under GEN until a better key turns up.
 - Baseband (STM32) clean-room firmware: `x6100_baseband_handover.md`.
 - RX IQ balance (registers 48 / 49): `tools/x6100_iqcal.c`.
 - Hand mic PTT is invisible to Linux (cannot abort a tune); evtest / GPIO not checked.
+- Band edge markers on the scope, per region / licence: a table in the conf (first:
+  the Netherlands, full licence, e.g. 80 m 3500-3800 kHz, 40 m 7000-7200 kHz, ...),
+  later region presets (IARU 1 / 2 / 3) and the TX band check from the same table.
