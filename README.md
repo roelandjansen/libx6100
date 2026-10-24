@@ -47,6 +47,11 @@ passband and the manual notch (render with synthetic speech and a CW tone).
 
 F3 long: RF scope on the left, audio scope on the right.
 
+![x6100_trx split](docs/images/x6100_trx_splittx.png)
+
+Split (V/M long): receive on VFO A (green line), transmit on VFO B (red TX line);
+the TX frequency and mode in amber at the top left. RIT / XIT show the same way.
+
 ## Status
 
 Verified on hardware (BASE 1.1.9), see `docs/x6100_control_interface.md` §9:

@@ -1394,7 +1394,7 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 	switch (in) {
 	case IN_VFO:
 		if (rx->step == STEP_CH)
-			ch60_step(rx, value * X6100_DIR_VFO > 0 ? 1 : -1);
+			set_freq(rx, (int64_t) rx->freq - rx->freq % 100 + (int64_t) value * X6100_DIR_VFO * 100);
 		else
 			set_freq(rx, (int64_t) rx->freq - rx->freq % (uint32_t) rx->step + (int64_t) value * X6100_DIR_VFO * rx->step);
 		return true;
@@ -1436,6 +1436,12 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 
 			*p = clampi(*p + value * X6100_DIR_MFK * d->step, d->min, d->max);
 			rx->dedit_since = now_ms();
+			return true;
+		}
+
+		// 60 m channel mode: MFK picks the channel, the VFO knob fine-tunes (100 Hz)
+		if (rx->step == STEP_CH && !rx->fedit) {
+			ch60_step(rx, value * X6100_DIR_MFK > 0 ? 1 : -1);
 			return true;
 		}
 

@@ -28,7 +28,7 @@ Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
 | Control | Short | Long |
 |---|---|---|
 | VFO knob | tune | |
-| FST | step 10 / 100 / 1000 / 5000 Hz; AM on LW / MW: 100 / 1k / 5k / 9k / 10k (channel raster); 60 m: 10 / 100 / 1k / 5k / CH (VFO knob steps through the 60 m channels) | 1 Hz step on / off |
+| FST | step 10 / 100 / 1000 / 5000 Hz; AM on LW / MW: 100 / 1k / 5k / 9k / 10k (channel raster); 60 m: 10 / 100 / 1k / 5k / CH (MFK picks the 60 m channel, the VFO knob fine-tunes in 100 Hz) | 1 Hz step on / off |
 | VOL knob | volume; push = mute | |
 | MFK knob | RF gain or TX power | |
 | MFK push | RF gain 100 / TX power 5.0 W | switch RF gain <-> TX power |
@@ -207,6 +207,8 @@ Type a line + Enter while running; tokens can be combined (`14074000 usb`).
 
 ## Split, RIT / XIT
 
+![split](images/x6100_trx_splittx.png)
+
 - V/M long: split. RX on the VFO in use (+ RIT), TX on the other VFO with its mode and
   filter (+ XIT). The TX check and the OOB marker use the TX frequency.
 - AGC long: RIT / XIT panel (green). One offset for both, as on Icom radios: MFK turn
@@ -222,6 +224,9 @@ Type a line + Enter while running; tokens can be combined (`14074000 usb`).
 - CI-V: 0F (split), 21 00 / 01 / 02 (offset, RIT, XIT).
 
 ## 60 m channels (FST: CH)
+
+FST to CH on 60 m: the MFK knob steps through the channels (RF gain / power wait
+until you leave CH), the VFO knob fine-tunes around them in 100 Hz steps.
 
 | Region | Channels (dial, USB) |
 |---|---|
