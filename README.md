@@ -43,6 +43,10 @@ the flow IQ reaches its clip level.
 Audio scope (F3): the demodulated RX audio, 0-3 or 0-6 kHz (F2), with the receive
 passband and the manual notch (render with synthetic speech and a CW tone).
 
+![x6100_trx RF and audio scope](docs/images/x6100_trx_split.png)
+
+F3 long: RF scope on the left, audio scope on the right.
+
 ## Status
 
 Verified on hardware (BASE 1.1.9), see `docs/x6100_control_interface.md` §9:
