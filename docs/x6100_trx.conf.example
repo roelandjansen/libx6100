@@ -29,6 +29,7 @@
 #   atunet 40m L C S                tuned network of a band
 #   mute nomute                     audio mute
 #   cat 19200 | cat off             CI-V on ttyS2 (DEV USB-C), as an IC-705; start only
+#   ntp pool.ntp.org | ntp off      server for the one NTP sync at start
 
 # Examples (remove the # to use):
 # vol 20
