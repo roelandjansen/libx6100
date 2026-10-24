@@ -2400,7 +2400,7 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 			// Fixed slots: NB left, NR right, so neither moves when the other changes
 			char dsp[12];
 
-			snprintf(dsp, sizeof(dsp), "%s %s %s", rx->nb ? "NB" : "  ", rx->nr ? "NR" : "  ", rx->dnf ? "NT" : "  ");
+			snprintf(dsp, sizeof(dsp), "%s %s %s", rx->nb ? "NB" : "  ", rx->nr ? "NR" : "  ", rx->dnf ? "MN" : "  ");
 
 			x6100_lcd_text(lcd, VU_X + VU_W - 8 - x6100_lcd_text_width(dsp, 2), VU_Y + 6, 2, dsp, SCR_ACCENT);
 		}

@@ -34,7 +34,7 @@ MFK adjusts the selected value, DFN / DFL switch NR, NB and notch.
 
 ![x6100_trx dial indicators](docs/images/x6100_trx_indicators.png)
 
-Indicators on the S-meter dial (2x): NB, NR and NT (notch) each in a fixed place at
+Indicators on the S-meter dial (2x): NB, NR and MN (manual notch, as on Icom) each in a fixed place at
 the top right, so none moves when another switches; OVF in red at the top left when
 the flow IQ reaches its clip level.
 

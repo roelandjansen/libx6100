@@ -99,7 +99,7 @@ Values are not saved yet: x6100_trx starts with NR 20, NB 10 / 10, notch 1000 / 
 - AGC default AUTO; AM / FM SLOW (AUTO squashes AM)
 - F1-F5 tags along the bottom edge: SCOPE, SPAN, (free), METER, FIL
 - OVF (red, top left of the dial): flow IQ at its clip level
-- NB / NR / NT (blue, top right of the dial) in fixed places, e.g. `NB    NT`, `   NR   `, `NB NR NT`
+- NB / NR / MN (blue, top right of the dial) in fixed places, e.g. `NB    MN`, `   NR   `, `NB NR MN`; MN = manual notch, as on Icom radios
 - Tune panel (ATU long press / CAT): amber TUNING with live PO and SWR bars (SWR green / yellow / red), then green TUNED for 4 s with the time taken and the network (L, C, S in decimal, relay bits and hex)
 - Clock under the filter label: system time, UTC, ISO 8601 (`2026-10-24T10:08:27Z`); hidden behind the filter panel while that is open. At start x6100_trx runs one NTP sync with the image's own client (`ntpd -q`, servers from its config) and reports the result on the console
 
