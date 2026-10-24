@@ -164,6 +164,15 @@ typedef struct
 	bool att;
 	bool mute;
 	bool lock;
+
+	//
+	// Baseband noise reduction and noise blanker (register 23)
+	//
+	bool nr;
+	bool nb;
+	int nr_lvl;		/* 0-60 */
+	int nb_lvl;		/* 0-100 */
+	int nb_w;		/* 0-100 */
 	uint32_t band_freq[11];
 
 	//
@@ -523,6 +532,7 @@ static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 	x6100_ctl_set(ctl, X6100_REG_VFOB_ATT, rx->att);
 	x6100_ctl_set(ctl, X6100_REG_VFOA_PRE, rx->pre);
 	x6100_ctl_set(ctl, X6100_REG_VFOB_PRE, rx->pre);
+	x6100_ctl_set(ctl, X6100_REG_NR_NB, X6100_R23(rx->nr_lvl, rx->nb_w, rx->nb_lvl, rx->nr, rx->nb));
 	x6100_set_filter(ctl, rx->mode, low, high);
 	x6100_ctl_set(ctl, X6100_REG_RXVOL, rx->mute ? 0 : (uint32_t) rx->vol);
 	x6100_ctl_update(ctl, X6100_REG_RFG_TXPWR_FFTDEC, 0xFF, (uint32_t) rx->rfg);
@@ -754,6 +764,9 @@ static bool on_key(rx_t *rx, int key)
 	case X6100_KEY_LOCK:
 		rx->lock = !rx->lock;
 		break;
+	case X6100_KEY_DFN:	/* short: NR on / off; long: NB on / off */
+		rx->nr = !rx->nr;
+		break;
 	case X6100_KEY_FST:
 		if (am_broadcast(rx))	/* LW / MW in AM: channel steps 9 kHz (EU) and 10 kHz (US) */
 			rx->step = rx->step == 100 ? 1000 : rx->step == 1000 ? 5000 : rx->step == 5000 ? 9000
@@ -843,7 +856,7 @@ typedef struct
 static bool has_long(int key)
 {
 	return key == X6100_KEY_PRE || key == X6100_KEY_FST || key == X6100_KEY_ATU || key == X6100_KEY_MFK_PUSH
-		|| key == X6100_KEY_F1 || key == X6100_KEY_F5;
+		|| key == X6100_KEY_F1 || key == X6100_KEY_F5 || key == X6100_KEY_DFN;
 }
 
 static bool on_long_key(rx_t *rx, int key)
@@ -892,6 +905,9 @@ static bool on_long_key(rx_t *rx, int key)
 		rx->tune_since = now_ms();
 		rx->tune_seen_tx = false;
 		rx->warn = NULL;
+		return true;
+	case X6100_KEY_DFN:
+		rx->nb = !rx->nb;
 		return true;
 	case X6100_KEY_FST:
 		rx->step = rx->step == 1 ? 10 : 1;
@@ -2240,6 +2256,13 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 		// Overload (flow IQ at its ceiling), top left of the dial
 		if (now_ms() < scr->ovf_until)
 			x6100_lcd_text(lcd, VU_X + 8, VU_Y + 6, 2, "OVF", SCR_WARN);
+
+		// Baseband noise reduction / blanker on, top right of the dial
+		{
+			const char *dsp = rx->nr && rx->nb ? "NR NB" : rx->nr ? "NR" : rx->nb ? "NB" : "";
+
+			x6100_lcd_text(lcd, VU_X + VU_W - 8 - x6100_lcd_text_width(dsp, 2), VU_Y + 6, 2, dsp, SCR_ACCENT);
+		}
 		// TX meter selection (F4) shown dimmed, so RX already tells what TX will show
 		x6100_lcd_text(lcd, VU_X + 8, VU_Y + VU_H - 20, 2, meter_names[rx->meter], SCR_DIM);
 	}
@@ -2525,6 +2548,16 @@ static bool console_token(rx_t *rx, const char *t)
 		return true;
 	}
 
+	if (strcasecmp(t, "nr") == 0 || strcasecmp(t, "nonr") == 0) {
+		rx->nr = strcasecmp(t, "nr") == 0;
+		return true;
+	}
+
+	if (strcasecmp(t, "nb") == 0 || strcasecmp(t, "nonb") == 0) {
+		rx->nb = strcasecmp(t, "nb") == 0;
+		return true;
+	}
+
 	if (strcasecmp(t, "att") == 0 || strcasecmp(t, "noatt") == 0) {
 		rx->att = strcasecmp(t, "att") == 0;
 		return true;
@@ -2584,6 +2617,8 @@ static bool console_line(rx_t *rx, char *line)
 	bool want_step = false;
 	bool want_pwr = false;
 	bool want_vol = false;
+	int *want_lvl = NULL;	/* nrl / nbl / nbw: the level the next token sets */
+	int lvl_max = 0;
 
 	for (char *t = strtok(line, " \t"); t != NULL; t = strtok(NULL, " \t")) {
 		if (want_step) {
@@ -2598,6 +2633,21 @@ static bool console_line(rx_t *rx, char *line)
 				fprintf(stderr, "\nstep must be 1, 10, 100, 1000, 5000 (9000, 10000 on LW / MW AM)\n");
 			}
 
+			continue;
+		}
+
+		if (want_lvl != NULL) {
+			char *end;
+			long v = strtol(t, &end, 10);
+
+			if (*end == '\0' && v >= 0 && v <= lvl_max) {
+				*want_lvl = (int) v;
+				changed = true;
+			} else {
+				fprintf(stderr, "\nlevel must be 0 to %d\n", lvl_max);
+			}
+
+			want_lvl = NULL;
 			continue;
 		}
 
@@ -2622,6 +2672,12 @@ static bool console_line(rx_t *rx, char *line)
 				fprintf(stderr, "\npwr must be 0.1 to %d W\n", TXPWR_MAX / 10);
 			}
 
+			continue;
+		}
+
+		if (strcasecmp(t, "nrl") == 0 || strcasecmp(t, "nbl") == 0 || strcasecmp(t, "nbw") == 0) {
+			want_lvl = strcasecmp(t, "nrl") == 0 ? &rx->nr_lvl : strcasecmp(t, "nbl") == 0 ? &rx->nb_lvl : &rx->nb_w;
+			lvl_max = want_lvl == &rx->nr_lvl ? 60 : 100;
 			continue;
 		}
 
@@ -2918,6 +2974,18 @@ static bool cat_get(void *ctx, x6100_civ_item_t item, int vfo, int32_t *v)
 
 		return true;
 	}
+	case X6100_CIV_NR:
+		*v = rx->nr;
+		return true;
+	case X6100_CIV_NB:
+		*v = rx->nb;
+		return true;
+	case X6100_CIV_LVL_NR:
+		*v = rx->nr_lvl * 255 / 60;
+		return true;
+	case X6100_CIV_LVL_NB:
+		*v = rx->nb_lvl * 255 / 100;
+		return true;
 	case X6100_CIV_ATU:
 		*v = rx->tuning ? 2 : rx->atu_on;
 		return true;
@@ -3102,6 +3170,18 @@ static bool cat_set(void *ctx, x6100_civ_item_t item, int vfo, int32_t v)
 	case X6100_CIV_BAND_MODE:
 	case X6100_CIV_BAND_FIL:
 		return civ_band(vfo) >= 0;	/* no per-band mode / filter memory */
+	case X6100_CIV_NR:
+		rx->nr = v != 0;
+		break;
+	case X6100_CIV_NB:
+		rx->nb = v != 0;
+		break;
+	case X6100_CIV_LVL_NR:
+		rx->nr_lvl = (v * 60 + 127) / 255;
+		break;
+	case X6100_CIV_LVL_NB:
+		rx->nb_lvl = (v * 100 + 127) / 255;
+		break;
 	case X6100_CIV_ATU:
 		if (v == 2) {
 			if (rx->ptt || rx->tuning || !tx_allowed(rx))
@@ -3411,7 +3491,8 @@ int main(int argc, char **argv)
 	int cat_baud = 0;	/* 0 = no CAT */
 	static cat_t cat = { .fd = -1 };
 	rx_t rx = { .vol = 20, .rfg = 100, .step = 100, .agc = (x6100_agc_t) -1, .mode = X6100_MODE_USB,
-		.txpwr = TXPWR_DEF, .scope = SCOPE_CENTER, .span = SPAN_HZ };
+		.txpwr = TXPWR_DEF, .scope = SCOPE_CENTER, .span = SPAN_HZ,
+		.nr_lvl = 20, .nb_lvl = 10, .nb_w = 10 };	/* NB 10 / 10 as the stock defaults; NR 20 of 60 */
 	int rc;
 
 	fil_load();

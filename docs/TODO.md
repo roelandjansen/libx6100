@@ -21,7 +21,8 @@ Status: 2026-10-24.
 ## From the stock UI, not yet in x6100_trx
 
 - Settings menu (GEN key); keyer settings (KEY), messages (MSG), apps (APP).
-- NB, NR, DNF (notch) with levels; compressor; VOX / anti-VOX; squelch; monitor;
+- NR / NB levels from the panel (now console / CAT only; DFN switches them).
+- DNF (notch); compressor; VOX / anti-VOX; squelch; monitor;
   mic select and gain; line in / out levels (registers known, defaults set at start).
 - CW keyer: speed, iambic A / B, sidetone, break-in delay.
 - VFO A / B, memory channels.
