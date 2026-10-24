@@ -212,7 +212,9 @@ Type a line + Enter while running; tokens can be combined (`14074000 usb`).
 - AGC long: RIT / XIT panel (green). One offset for both, as on Icom radios: MFK turn
   = offset in 10 Hz steps (±9990), on the RIT / XIT rows on (right) / off (left); MFK
   push = next row; MFK long = offset 0 (CLEAR); AGC long, other key or 10 s closes.
-- Top left of the spectrum (amber): `SPLIT TX 7.120.00 LSB  RIT +120` while in use.
+- Top left of the spectrum (amber): `SPLIT TX 7.120.00 LSB  RIT +120` while in use; on
+  the RF scope a green line at the RX frequency and a red one, marked TX, at the TX
+  frequency (the receive passband shading follows RIT).
 - The baseband gets the TX frequency and mode just before PTT goes out and keeps it
   until the PTT drop has gone out. Front panel PTT, CAT PTT and tune follow split;
   the hand mic PTT keys the baseband directly and does not (it transmits on the RX

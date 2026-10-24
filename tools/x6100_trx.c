@@ -3631,8 +3631,8 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 	passband(rx, &pb_lo, &pb_hi);
 
 	{
-		int x0 = f_to_x(&v, (int64_t) rx->freq + pb_lo);
-		int x1 = f_to_x(&v, (int64_t) rx->freq + pb_hi);
+		int x0 = f_to_x(&v, (int64_t) rx_hz(rx) + pb_lo);	/* receive passband, RIT included */
+		int x1 = f_to_x(&v, (int64_t) rx_hz(rx) + pb_hi);
 
 		x0 = x0 < 0 ? 0 : x0;
 		x1 = x1 >= SW ? SW - 1 : x1;
@@ -3724,7 +3724,19 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 	//
 	// VFO cursor; in a fixed window an arrow at the edge when the VFO is outside it
 	//
-	{
+	// With split / RIT / XIT: green line at the RX frequency, red at TX (when in view)
+	if (rx->split || rx->rit || rx->xit) {
+		int rxx = f_to_x(&v, rx_hz(rx)), txx = f_to_x(&v, tx_hz(rx));
+
+		if (rxx >= 0 && rxx < SW)
+			x6100_lcd_fill(lcd, rxx, SPEC_Y, 2, SPEC_H, 0x3CC83C);
+
+		if (txx >= 0 && txx < SW) {
+			x6100_lcd_fill(lcd, txx, SPEC_Y, 2, SPEC_H, SCR_WARN);
+			x6100_lcd_fill(lcd, txx + 3, SPEC_Y + 44, x6100_lcd_text_width("TX", 2) + 4, 17, 0x000000);
+			x6100_lcd_text(lcd, txx + 5, SPEC_Y + 46, 2, "TX", SCR_WARN);
+		}
+	} else {
 		int cx = f_to_x(&v, rx->freq);
 
 		if (cx >= 0 && cx < SW)
