@@ -342,6 +342,8 @@ static int g_bright;		/* backlight level, % (10-100); 0 = leave as the OS set it
 static unsigned g_conf_set;	/* GEN rows that x6100_trx.conf fixes (bit = row): shown CONF, locked */
 static bool g_conf_reading;	/* conf_load of CONF_PATH in progress */
 static char g_ntp_msg[64] = "not run";	/* last NTP result, for the status page */
+static char g_toast[24];		/* short confirmation over the scope (VFO A / B, A=B) */
+static uint64_t g_toast_until;	/* ms; shown while now_ms() is before this */
 
 enum { GEN_BRIGHT, GEN_CAT, GEN_NTP, GEN_WIFI, GEN_WNET, GEN_BT, GEN_BTPAIR, GEN_BTDEV, GEN_ROWS };	/* GEN rows */
 
@@ -359,6 +361,15 @@ static uint64_t now_ms(void)
 
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 	return (uint64_t) ts.tv_sec * 1000 + (uint64_t) ts.tv_nsec / 1000000;
+}
+
+// Short confirmation over the scope for TOAST_MS (VFO A / B, A=B)
+#define TOAST_MS	1500
+
+static void toast(const char *msg)
+{
+	snprintf(g_toast, sizeof(g_toast), "%s", msg);
+	g_toast_until = now_ms() + TOAST_MS;
 }
 
 //
@@ -747,6 +758,7 @@ static void vfo_swap(rx_t *rx)
 	rx->b_mode = m;
 	rx->b_fil = fil;
 	rx->on_b = !rx->on_b;
+	toast(rx->on_b ? "VFO B" : "VFO A");
 }
 
 // The other VFO takes over the one in use (A/B long, CI-V 07 A0)
@@ -755,6 +767,7 @@ static void vfo_equal(rx_t *rx)
 	rx->b_freq = rx->freq;
 	rx->b_mode = rx->mode;
 	rx->b_fil = rx->fil;
+	toast(rx->on_b ? "A COPIED FROM B" : "B COPIED FROM A");	/* the font has no = */
 }
 
 static void band_step(rx_t *rx, int dir)
@@ -3566,6 +3579,19 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 	}
 
 overlays:
+	//
+	// Toast: a short confirmation in the middle of the spectrum (VFO A / B, A=B)
+	//
+	if (g_toast[0] != '\0' && now_ms() < g_toast_until) {
+		int tw = x6100_lcd_text_width(g_toast, 3);
+		int tx = (W - tw) / 2, ty = SPEC_Y + SPEC_H / 2 - 16;
+
+		x6100_lcd_fill(lcd, tx - 14, ty - 8, tw + 28, 38, 0x000000);
+		x6100_lcd_hline(lcd, tx - 14, tx + tw + 13, ty - 8, SCR_ACCENT);
+		x6100_lcd_hline(lcd, tx - 14, tx + tw + 13, ty + 29, SCR_ACCENT);
+		x6100_lcd_text(lcd, tx, ty, 3, g_toast, SCR_ACCENT);
+	}
+
 	//
 	// Reference level edit (F2 long): which scope and its level, bottom left of
 	// that scope part; amber while editing

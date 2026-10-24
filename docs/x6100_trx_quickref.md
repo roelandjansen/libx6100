@@ -96,7 +96,7 @@ Values are kept in the last state (see Settings); defaults NR 20, NB 10 / 10, no
 
 ## Display
 
-- VFO A / VFO B above the TX box: the VFO in use
+- VFO A / VFO B above the TX box: the VFO in use; A/B and A=B also show a 1.5 s note in the middle of the scope
 - TX box left of the frequency: red outline / red TX = RX, red fill / white TX = TX
 - STEP and status fields right-aligned, fixed width
 - S-meter: S0-S9, then S9+10 .. S9+60 in rounded 10 dB steps; dBm line exact
