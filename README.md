@@ -65,7 +65,11 @@ Verified on hardware (BASE 1.1.9), see `docs/x6100_control_interface.md` §9:
 - RX audio capture over ALSA (48 kHz stereo, no libasound); FT8 recording decodes in `jt9`
 - TX: ATU tune, carrier, and codec audio as modulation (tone into a dummy load, verified on a separate receiver)
 
-Not yet: GPIO, CI-V, TX from the receiver UI.
+- x6100_trx: transceiver front end (TX with PTT / ATU, split, RIT / XIT, VFO A / B), CI-V
+  as an IC-705 on the DEV USB-C port, settings files, GEN settings; `x6100_rx` is the
+  same program built receive only (TX refused by design)
+
+Not yet: GPIO (hand mic PTT is invisible to Linux), Icom LAN server, keyer, memories.
 
 ## Layout
 
