@@ -1026,7 +1026,12 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 
 // Tag centre x above F1-F5 (screen 800 px); F3 slightly left of centre, F1 / F5
 // further out than a 160 px grid
-static const int g_tag_x[5] = { 60, 224, 393, 567, 742 };	/* fitted to a photo of the keys */
+static const int g_tag_x[5] = { 52, 224, 393, 567, 742 };	/* fitted to photos of the keys */
+
+#define TAG_W		104		/* key cap width, about the key on screen */
+#define TAG_FILL	0x1C2633
+#define TAG_EDGE	0x4A5A70
+#define TAG_EDGE_OFF	0x232B36
 #define DISP_MS		70
 #define SPEC_DB_MIN	-130.0f
 #define SPEC_DB_MAX	-30.0f
@@ -1997,22 +2002,36 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 	x6100_lcd_text(lcd, INFO_COL_FIL, INFO_Y, 2, s, SCR_DIM);
 
 	//
-	// F1-F5 tags along the bottom, centred above each key. The keys are not on
-	// a 160 px grid: F3 sits a little left of the screen centre and the row is
-	// wider than the screen thirds suggest. Dividers halfway between the tags.
-	// Tune g_tag_x[] by eye on the radio.
+	// F1-F5 tags along the bottom: a key cap above each key (about the key's
+	// width on screen, rounded corners), label centred. Positions in g_tag_x[].
 	//
 	{
 		static const char *tag[5] = { "SCOPE", "SPAN", "", "METER", "FIL" };
-		const int y = lcd->h - TAG_H;
+		const int y = lcd->h - TAG_H, bw = TAG_W, bh = TAG_H - 2;
 
 		x6100_lcd_fill(lcd, 0, y, W, TAG_H, SCR_BG);
 
 		for (int i = 0; i < 5; i++) {
-			x6100_lcd_text(lcd, g_tag_x[i] - x6100_lcd_text_width(tag[i], 2) / 2, y + 3, 2, tag[i], SCR_DIM);
+			int x = g_tag_x[i] - bw / 2, by = y + 1;
+			bool used = tag[i][0] != '\0';
+			uint32_t edge = used ? TAG_EDGE : TAG_EDGE_OFF;
 
-			if (i > 0)
-				x6100_lcd_fill(lcd, (g_tag_x[i - 1] + g_tag_x[i]) / 2, y + 2, 1, TAG_H - 4, SCR_DIM);
+			// Body, then a 1 px edge with the corner pixels left out (rounded look)
+			if (used)
+				x6100_lcd_fill(lcd, x + 1, by + 1, bw - 2, bh - 2, TAG_FILL);
+
+			x6100_lcd_fill(lcd, x + 2, by, bw - 4, 1, edge);
+			x6100_lcd_fill(lcd, x + 2, by + bh - 1, bw - 4, 1, edge);
+			x6100_lcd_fill(lcd, x, by + 2, 1, bh - 4, edge);
+			x6100_lcd_fill(lcd, x + bw - 1, by + 2, 1, bh - 4, edge);
+			x6100_lcd_fill(lcd, x + 1, by + 1, 1, 1, edge);
+			x6100_lcd_fill(lcd, x + bw - 2, by + 1, 1, 1, edge);
+			x6100_lcd_fill(lcd, x + 1, by + bh - 2, 1, 1, edge);
+			x6100_lcd_fill(lcd, x + bw - 2, by + bh - 2, 1, 1, edge);
+
+			if (used)
+				x6100_lcd_text(lcd, g_tag_x[i] - x6100_lcd_text_width(tag[i], 2) / 2 + 1, by + 2, 2,
+					tag[i], SCR_FG);
 		}
 	}
 
