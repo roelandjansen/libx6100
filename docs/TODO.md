@@ -16,7 +16,9 @@ Status: 2026-10-24.
   an IC-7851 comparison, then 6 dB lower); also the overload point with PRE / ATT.
 - Codec level vs ALC test (x6100_tx codec at -40 / -30 / -20 dBFS).
 - Register 35 LO offset for FIX mode; span edges in FIX mode.
-- Linux-side DSP with liquid-dsp (static build).
+- liquid-dsp (static), only per function where audio passes through Linux anyway:
+  RADE / network audio (resampling, TX audio shaping), recordings (image lowpass),
+  decoders later. Local listening stays on the baseband DSP (NR / NB / notch).
 
 ## From the stock UI, not yet in x6100_trx
 
