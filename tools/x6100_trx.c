@@ -2984,7 +2984,13 @@ static bool cat_set(void *ctx, x6100_civ_item_t item, int vfo, int32_t v)
 	case X6100_CIV_PTT:
 		// CAT PTT latches like a PTT tap; same band check, timeout and SWR trip
 		if (v) {
-			if (rx->ptt || rx->tuning)
+			// During a tune: abort it, as the PTT key does (no TX from this command)
+			if (rx->tuning) {
+				tx_drop(rx, "TUNE ABORTED");
+				break;
+			}
+
+			if (rx->ptt)
 				return true;
 
 			if (!tx_allowed(rx))
