@@ -211,6 +211,11 @@ typedef struct
 	bool ascope;		/* F3: audio scope instead of the RF scope */
 	bool asplit;		/* F3 long: RF scope left, audio scope right */
 	int arange;		/* audio scope range: 0 = 0-3 kHz, 1 = 0-6 kHz */
+	int rref;		/* RF scope reference level, dB (+ = trace up) */
+	int aref;		/* audio scope reference level, dB */
+	bool redit;		/* F2 long: MFK sets the scope reference level */
+	bool redit_af;		/* reference edit acts on the audio scope */
+	uint64_t redit_since;	/* last reference edit activity, for the idle close */
 
 	//
 	// Meter shown on the dial during TX (F4): 0 Po, 1 SWR, 2 ALC
@@ -775,6 +780,8 @@ static int *dsp_value(rx_t *rx, int i)
 	}
 }
 
+#define REF_MAX_DB	30		/* scope reference level range, +- dB (F2 long + MFK) */
+
 static bool on_key(rx_t *rx, int key)
 {
 	//
@@ -787,6 +794,21 @@ static bool on_key(rx_t *rx, int key)
 	if ((rx->ptt_latch || rx->tuning) && !display_key) {
 		tx_drop(rx, rx->tuning ? "TUNE ABORTED" : NULL);
 		return true;
+	}
+
+	//
+	// Reference level edit open (F2 long): MFK push switches RF <-> audio scope;
+	// any other key closes it and then does its normal job
+	//
+	if (rx->redit) {
+		rx->redit_since = now_ms();
+
+		if (key == X6100_KEY_MFK_PUSH) {
+			rx->redit_af = !rx->redit_af;
+			return true;
+		}
+
+		rx->redit = false;
 	}
 
 	//
@@ -937,7 +959,7 @@ typedef struct
 static bool has_long(int key)
 {
 	return key == X6100_KEY_PRE || key == X6100_KEY_FST || key == X6100_KEY_ATU || key == X6100_KEY_MFK_PUSH
-		|| key == X6100_KEY_F1 || key == X6100_KEY_F3 || key == X6100_KEY_F5 || key == X6100_KEY_DFN || key == X6100_KEY_DFL;
+		|| key == X6100_KEY_F1 || key == X6100_KEY_F2 || key == X6100_KEY_F3 || key == X6100_KEY_F5 || key == X6100_KEY_DFN || key == X6100_KEY_DFL;
 }
 
 static bool on_long_key(rx_t *rx, int key)
@@ -992,6 +1014,12 @@ static bool on_long_key(rx_t *rx, int key)
 		rx->tune_since = now_ms();
 		rx->tune_seen_tx = false;
 		rx->warn = NULL;
+		return true;
+	case X6100_KEY_F2:
+		// Long: reference level edit; starts on the scope that is shown (split: RF)
+		rx->redit = !rx->redit;
+		rx->redit_af = rx->ascope;
+		rx->redit_since = now_ms();
 		return true;
 	case X6100_KEY_F3:
 		rx->asplit = !rx->asplit;
@@ -1086,6 +1114,14 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 		rx->vol = clampi(rx->vol + value * X6100_DIR_VOL, 0, 100);
 		return true;
 	case IN_MFK:
+		if (rx->redit) {
+			int *p = rx->redit_af ? &rx->aref : &rx->rref;
+
+			*p = clampi(*p + value * X6100_DIR_MFK, -REF_MAX_DB, REF_MAX_DB);
+			rx->redit_since = now_ms();
+			return true;
+		}
+
 		if (rx->dedit) {
 			int *p = dsp_value(rx, rx->dedit_par);
 			const dsp_par_t *d = &g_dsp[rx->dedit_par];
@@ -1255,6 +1291,7 @@ typedef struct
 	float aspec[AS_N / 2];	/* dB, smoothed */
 	float apeak[AS_N / 2];
 	float afloor;
+	int apb_lo, apb_hi;	/* receive passband in FFT bins, for the floor; 0 = not known yet */
 	bool aspec_valid;
 	int wf_view;		/* waterfall holds: 0 RF, 1 AF, 2 RF + AF (split) */
 	double wf_ref;		/* window left edge the waterfall rows are aligned to, Hz */
@@ -1495,6 +1532,8 @@ static void passband(const rx_t *rx, int *lo, int *hi)
 	}
 }
 
+static float g_rf_ref;	/* RF scope reference level, dB, from rx->rref */
+
 static float spec_norm(float db);
 
 static int spec_y(float db)
@@ -1507,7 +1546,7 @@ static int spec_y(float db)
 
 static float spec_norm(float db)
 {
-	return (db - SPEC_DB_MIN) / (SPEC_DB_MAX - SPEC_DB_MIN);
+	return (db - SPEC_DB_MIN + g_rf_ref) / (SPEC_DB_MAX - SPEC_DB_MIN);
 }
 
 //
@@ -2253,12 +2292,14 @@ static void audio_feed(screen_t *scr, const int16_t *buf, unsigned frames, unsig
 				? scr->apeak[k] - PEAK_DECAY_DB : scr->aspec[k];
 		}
 
-		// Floor: 20th percentile of the bins up to 6 kHz, smoothed
+		// Floor: 20th percentile of the bins inside the receive passband (outside it the
+		// filter leaves near silence, which would put the floor far under the noise), smoothed
 		{
 			static float s[AS_N / 2];
-			const int n = 6000 * AS_N / AS_RATE;
+			const int b0 = scr->apb_hi > scr->apb_lo + 8 ? scr->apb_lo : 0;
+			const int n = scr->apb_hi > scr->apb_lo + 8 ? scr->apb_hi - scr->apb_lo : 6000 * AS_N / AS_RATE;
 
-			memcpy(s, scr->aspec, sizeof(float) * (size_t) n);
+			memcpy(s, scr->aspec + b0, sizeof(float) * (size_t) n);
 
 			for (int i = 1; i < n; i++) {
 				float x = s[i];
@@ -2317,12 +2358,14 @@ static void draw_audio_spec(screen_t *scr, const rx_t *rx, int x0, int w)
 	uint32_t lo, hi;
 	int prev_y = -1;
 
-	g_as_bottom = scr->aspec_valid ? scr->afloor - AS_FLOOR_DB : AS_DB_MIN;
+	g_as_bottom = (scr->aspec_valid ? scr->afloor - AS_FLOOR_DB : AS_DB_MIN) - (float) rx->aref;
 
 	x6100_lcd_fill(lcd, x0, SPEC_Y, w, SPEC_H, 0x05080C);
 
 	// Passband in audio Hz: the filter edges (AM / FM: 0 .. high)
 	mode_filter(rx->mode, rx->fil, &lo, &hi);
+	scr->apb_lo = (int) ((long) lo * AS_N / AS_RATE);
+	scr->apb_hi = (int) ((long) (hi > 6000 ? 6000 : hi) * AS_N / AS_RATE);
 
 	{
 		int p0 = (int) ((long) lo * w / range), p1 = (int) ((long) hi * w / range);
@@ -2393,7 +2436,7 @@ static void draw_audio_wf_line(screen_t *scr, const rx_t *rx, int x0, int w)
 
 	for (int x = 0; x < w; x++) {
 		uint32_t c = !scr->aspec_valid ? 0x000000
-			: wf_colour((audio_db_at(scr->aspec, x, w, range) - (scr->afloor - WF_BELOW_DB)) / WF_RANGE_DB);
+			: wf_colour((audio_db_at(scr->aspec, x, w, range) - (scr->afloor - WF_BELOW_DB - (float) rx->aref)) / WF_RANGE_DB);
 
 		x6100_lcd_fill(&scr->lcd, x0 + x, WF_Y, 1, 1, c);
 	}
@@ -2633,6 +2676,8 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 	// AF right). A change of view starts a fresh waterfall.
 	//
 	int view = rx->asplit ? 2 : rx->ascope ? 1 : 0;
+
+	g_rf_ref = (float) rx->rref;
 	const int SW = view == 2 ? W * 5 / 8 : W;	/* RF scope width; the audio part gets 3 / 8 */
 
 	if (view != scr->wf_view) {
@@ -2736,7 +2781,7 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 		}
 	}
 
-	for (int db = (int) SPEC_DB_MAX - GRID_DB; db > (int) SPEC_DB_MIN; db -= GRID_DB) {
+	for (int db = (int) floorf((SPEC_DB_MAX - g_rf_ref) / GRID_DB) * GRID_DB; db > SPEC_DB_MIN - g_rf_ref; db -= GRID_DB) {
 		int gy = SPEC_Y + SPEC_H - 1 - (int) (spec_norm((float) db) * (float) (SPEC_H - 1));
 
 		x6100_lcd_hline(lcd, 0, SW - 1, gy, 0x1A2430);
@@ -2763,7 +2808,7 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 	//
 	// dB labels in a left margin box, drawn over the trace
 	//
-	for (int db = (int) SPEC_DB_MAX - GRID_DB; db > (int) SPEC_DB_MIN; db -= GRID_DB) {
+	for (int db = (int) floorf((SPEC_DB_MAX - g_rf_ref) / GRID_DB) * GRID_DB; db > SPEC_DB_MIN - g_rf_ref; db -= GRID_DB) {
 		char lbl[8];
 		int gy = spec_y((float) db);
 
@@ -2802,6 +2847,21 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 	}
 
 overlays:
+	//
+	// Reference level edit (F2 long): which scope and its level, bottom left of
+	// that scope part; amber while editing
+	//
+	if (rx->redit) {
+		char m[24];
+		int x0 = view == 2 && rx->redit_af ? SW : 0;
+		int tw;
+
+		snprintf(m, sizeof(m), "REF %s %+ddB", rx->redit_af ? "AF" : "RF", rx->redit_af ? rx->aref : rx->rref);
+		tw = x6100_lcd_text_width(m, 2);
+		x6100_lcd_fill(lcd, x0 + LBL_W + 4, SPEC_Y + SPEC_H - 24, tw + 8, 20, 0x000000);
+		x6100_lcd_text(lcd, x0 + LBL_W + 8, SPEC_Y + SPEC_H - 22, 2, m, 0xFFB020);
+	}
+
 	//
 	// Scope mode, top right of the spectrum
 	//
@@ -3092,6 +3152,13 @@ static bool console_line(rx_t *rx, char *line)
 			want_lvl = dsp_value(rx, i);
 			lvl_min = g_dsp[i].min;
 			lvl_max = g_dsp[i].max;
+			continue;
+		}
+
+		if (strcasecmp(t, "ref") == 0 || strcasecmp(t, "aref") == 0) {
+			want_lvl = strcasecmp(t, "ref") == 0 ? &rx->rref : &rx->aref;
+			lvl_min = -REF_MAX_DB;
+			lvl_max = REF_MAX_DB;
 			continue;
 		}
 
@@ -4252,6 +4319,12 @@ int main(int argc, char **argv)
 			dirty = true;
 		}
 
+
+		// Reference level edit closes after 10 s without activity
+		if (rx.redit && t - rx.redit_since >= 10000) {
+			rx.redit = false;
+			dirty = true;
+		}
 
 		// DSP panel closes after 10 s without activity
 		if (rx.dedit && t - rx.dedit_since >= 10000) {

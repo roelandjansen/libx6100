@@ -39,7 +39,7 @@ Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
 | DFL | notch on / off | DSP panel (NR, NB, notch levels) |
 | AGC | off / slow / fast / auto, per mode group | |
 | F1 | scroll on / off: CENTER <-> SCROLL-C, FIX <-> SCROLL-F | CENTER family <-> FIX family |
-| F2 | span ±48 / 24 / 12 / 6 / 3 / 1.5 kHz; audio scope: 0-3 / 0-6 kHz | |
+| F2 | span ±48 / 24 / 12 / 6 / 3 / 1.5 kHz; audio scope: 0-3 / 0-6 kHz | reference level: MFK turn = ±1 dB (±30), MFK push = RF <-> AF scope; F2 long, other key or 10 s idle closes |
 | F3 | audio scope on / off (RF <-> AF) | RF scope left (5/8) + audio scope right (3/8), on / off |
 | F4 | TX meter: PO / SWR / ALC | |
 | F5 | filter FIL1 / FIL2 / FIL3 | filter panel |
@@ -99,7 +99,7 @@ Values are not saved yet: x6100_trx starts with NR 20, NB 10 / 10, notch 1000 / 
 - S-meter: S0-S9, then S9+10 .. S9+60 in rounded 10 dB steps; dBm line exact
 - AGC default AUTO; AM / FM SLOW (AUTO squashes AM)
 - F1-F5 tags along the bottom edge: SCOPE, SPAN, AUDIO, METER, FIL
-- Audio scope (F3; F3 long: next to the RF scope, RF left / AF right): spectrum and waterfall of the demodulated RX audio (codec capture, 48 kHz), 0-3 or 0-6 kHz (F2), normalised dBFS scale (80 dB window, its bottom 10 dB under the audio noise floor, so the picture stays put with volume and band noise), receive passband shaded, MN line at the notch when on. The capture is opened only while the audio scope is shown
+- Audio scope (F3; F3 long: next to the RF scope, RF left / AF right): spectrum and waterfall of the demodulated RX audio (codec capture, 48 kHz), 0-3 or 0-6 kHz (F2), normalised dBFS scale (80 dB window, its bottom 10 dB under the noise floor measured inside the receive passband, so the picture stays put with volume and band noise; shifted by the AF reference level), receive passband shaded, MN line at the notch when on. The capture is opened only while the audio scope is shown
 - OVF (red, top left of the dial): flow IQ at its clip level
 - NB / NR / MN (blue, top right of the dial) in fixed places, e.g. `NB    MN`, `   NR   `, `NB NR MN`; MN = manual notch, as on Icom radios
 - Tune panel (ATU long press / CAT): amber TUNING with live PO and SWR bars (SWR green / yellow / red), then green TUNED for 4 s with the time taken and the network (L, C, S in decimal, relay bits and hex)
@@ -123,6 +123,7 @@ Type a line + Enter while running; tokens can be combined (`14074000 usb`).
 | `nr nonr nb nonb notch nonotch` | noise reduction / blanker / notch on, off |
 | `nrl 0-60`, `nbl 0-100`, `nbw 0-100` | NR level, NB level, NB width (start: 20, 10, 10) |
 | `ntf 100-3000`, `ntw 10-100` | notch frequency, notch width in Hz (start: 1000, 50) |
+| `ref -30-30`, `aref -30-30` | RF / audio scope reference level in dB (+ = trace up) |
 
 ## TX safety
 
