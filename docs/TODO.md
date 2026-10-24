@@ -5,7 +5,6 @@ Status: 2026-10-24.
 ## Display
 
 - Clock: own time source / sync check (now: system time, one `ntpd -q` at start).
-- Brightness (GEN): backlight inverted, 1 = full, 0 = off; check 5 % is still readable.
 
 ## Radio
 
