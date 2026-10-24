@@ -8,8 +8,8 @@ panel. `x6100_rx` is the same program, receive only (PTT and tune refused).
 Stop the stock GUI first (`scripts/x6100_ui.sh stop`).
 
 ```
-x6100_trx [--oob] [--no-limit] [--cat[=baud]] [--cat-log] [--probe] [freq] [mode] [agc] [att|noatt] [pre|nopre]
-x6100_trx 7074000 lsb
+x6100_trx [--oob] [--no-limit] [--cat[=baud]] [--cat-log] [--probe] [freq] [mode] [agc] [att|noatt] [pre|nopre] [vol 0-100]
+x6100_trx 7074000 lsb vol 30
 x6100_trx --oob 5450000 usb slow
 ```
 
@@ -97,6 +97,7 @@ Type a line + Enter while running; tokens can be combined (`14074000 usb`).
 | `fil1 fil2 fil3` | receive filter |
 | `step 1\|10\|100\|1000\|5000` | tuning step |
 | `pwr 0.1-10` | TX power in W |
+| `vol 0-100` | volume (also unmutes) |
 
 ## TX safety
 

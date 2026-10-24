@@ -46,6 +46,7 @@
  *     fil1 fil2 fil3                  receive filter
  *     step 1|10|100|1000|5000         tuning step
  *     pwr 0.1-10                      TX power in W
+ *     vol 0-100                       volume (also unmutes)
  *   tokens can be combined: "14074000 usb"
  *
  * Built twice: x6100_trx, and x6100_rx with -DX6100_RX_ONLY (PTT and tune refused,
@@ -2393,11 +2394,31 @@ static bool console_token(rx_t *rx, const char *t)
 	return false;
 }
 
+//
+// Volume 0-100 from a token; also unmutes
+//
+
+static bool vol_parse(rx_t *rx, const char *t)
+{
+	char *end;
+	long v = strtol(t, &end, 10);
+
+	if (*t == '\0' || *end != '\0' || v < 0 || v > 100) {
+		fprintf(stderr, "\nvol must be 0 to 100\n");
+		return false;
+	}
+
+	rx->vol = (int) v;
+	rx->mute = false;
+	return true;
+}
+
 static bool console_line(rx_t *rx, char *line)
 {
 	bool changed = false;
 	bool want_step = false;
 	bool want_pwr = false;
+	bool want_vol = false;
 
 	for (char *t = strtok(line, " \t"); t != NULL; t = strtok(NULL, " \t")) {
 		if (want_step) {
@@ -2415,6 +2436,15 @@ static bool console_line(rx_t *rx, char *line)
 			continue;
 		}
 
+		if (want_vol) {
+			want_vol = false;
+
+			if (vol_parse(rx, t))
+				changed = true;
+
+			continue;
+		}
+
 		if (want_pwr) {
 			double w = atof(t);
 
@@ -2427,6 +2457,11 @@ static bool console_line(rx_t *rx, char *line)
 				fprintf(stderr, "\npwr must be 0.1 to %d W\n", TXPWR_MAX / 10);
 			}
 
+			continue;
+		}
+
+		if (strcasecmp(t, "vol") == 0) {
+			want_vol = true;
 			continue;
 		}
 
@@ -3171,8 +3206,15 @@ int main(int argc, char **argv)
 			continue;
 		}
 
+		if (strcasecmp(argv[i], "vol") == 0 && i + 1 < argc) {
+			if (!vol_parse(&rx, argv[++i]))
+				return 1;
+
+			continue;
+		}
+
 		if (!console_token(&rx, argv[i])) {
-			fprintf(stderr, "usage: %s [--oob] [--no-limit] [--cat[=baud]] [--cat-log] [--probe] [freq] [usb|lsb|cw|cwr|am|nfm] [off|slow|fast|auto] [att|noatt] [pre|nopre]\n", argv[0]);
+			fprintf(stderr, "usage: %s [--oob] [--no-limit] [--cat[=baud]] [--cat-log] [--probe] [freq] [usb|lsb|cw|cwr|am|nfm] [off|slow|fast|auto] [att|noatt] [pre|nopre] [vol 0-100]\n", argv[0]);
 			return 1;
 		}
 	}
