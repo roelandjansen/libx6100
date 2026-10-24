@@ -95,6 +95,7 @@ static bool g_cat_log;	/* --cat-log: print CI-V frames in and out */
 #define SWR_LIMIT	3.0
 #define SWR_TRIP_MS	300
 #define TUNE_TIMEOUT_MS	20000
+#define TUNE_SHOW_MS	4000	/* TUNED result stays on screen */
 #define TXPWR_DEF	50	/* 0.1 W units */
 #define TXPWR_MAX	100
 
@@ -173,6 +174,10 @@ typedef struct
 	bool tuning;
 	uint64_t tune_since;
 	bool tune_seen_tx;
+	uint64_t tune_done;	/* tune finished at (ms), TUNED shown for TUNE_SHOW_MS */
+	uint32_t tune_ms;	/* how long the last tune took */
+	double tune_pwr;	/* last PO and SWR seen while tuning */
+	double tune_swr;
 	x6100_atu_t atu_net[11];	/* tuned network per band */
 	bool atu_valid[11];
 	const char *warn;	/* last TX refusal / trip reason, shown until next TX */
@@ -1887,6 +1892,122 @@ static void draw_filter_panel(x6100_lcd_t *lcd, const rx_t *rx)
 }
 
 //
+// Tune panel: shown over the scope while the tuner searches (ATU long press or
+// CAT 1C 01 02). Amber, to tell it apart from the blue filter panel: what is
+// happening, for how long, and the two numbers that matter while tuning,
+// forward power and SWR, as segmented bars with SWR zones (green to 1.5,
+// amber to 2.5, red above).
+//
+
+static void tune_bar(x6100_lcd_t *lcd, int x, int y, double frac, bool swr)
+{
+	const int segs = 20, sw = 14, gap = 3, sh = 14;
+	const uint32_t off = 0x23303F, po = 0x40C0FF;
+	const uint32_t ok = 0x3CC83C, warn = 0xFFB020, bad = 0xFF4030;
+
+	for (int i = 0; i < segs; i++) {
+		double f = (i + 1.0) / segs;
+		uint32_t c = po;
+
+		if (swr)
+			c = f <= swr_frac(1.5) + 0.01 ? ok : f <= swr_frac(2.5) + 0.01 ? warn : bad;
+
+		x6100_lcd_fill(lcd, x + i * (sw + gap), y, sw, sh, f <= frac + 1e-9 ? c : off);
+	}
+}
+
+static void draw_tune_panel(x6100_lcd_t *lcd, const rx_t *rx, const screen_t *scr)
+{
+	const int px = LBL_W + 8, py = SPEC_Y + 16, pw = 500, ph = 132;	/* narrower than the filter panel: the clock stays clear */
+	const int bx = px + 64, bar_w = 20 * 17 - 3;
+	const uint32_t bg = 0x161208, amber = 0xFFB020, green = 0x3CC83C, dim = 0x8A8070, white = 0xF0F0F0;
+	bool done = !rx->tuning;
+	uint32_t accent = done ? green : amber;
+	uint64_t ms = done ? rx->tune_ms : now_ms() - rx->tune_since;
+	double pwr = done ? rx->tune_pwr : scr->tx ? scr->pwr : 0.0;
+	double swr = done ? rx->tune_swr : scr->tx ? scr->swr : 0.0;
+	bool have = done || scr->tx;
+	char s[64];
+
+	x6100_lcd_fill(lcd, px, py, pw, ph, bg);
+	x6100_lcd_fill(lcd, px, py, pw, 3, accent);	/* top rule: amber searching, green tuned */
+	x6100_lcd_vline(lcd, px, py, py + ph - 1, 0x4A3A18);
+	x6100_lcd_vline(lcd, px + pw - 1, py, py + ph - 1, 0x4A3A18);
+	x6100_lcd_hline(lcd, px, px + pw - 1, py + ph - 1, 0x4A3A18);
+
+	//
+	// Title, band / frequency, elapsed (or total) time
+	//
+	x6100_lcd_text(lcd, px + 12, py + 12, 2, done ? "TUNED" : "TUNING", accent);
+	snprintf(s, sizeof(s), "%s  %u.%03u.%03u", rx->band >= 0 ? g_bands[rx->band].name : "-",
+		rx->freq / 1000000, rx->freq / 1000 % 1000, rx->freq % 1000);
+	x6100_lcd_text(lcd, px + 120, py + 12, 2, s, white);
+	snprintf(s, sizeof(s), "%2u.%u S", (unsigned) (ms / 1000), (unsigned) (ms / 100 % 10));
+	x6100_lcd_text(lcd, px + pw - 12 - x6100_lcd_text_width(s, 2), py + 12, 2, s, white);
+
+	//
+	// PO and SWR bars (live while searching, the last reading once tuned)
+	//
+	x6100_lcd_text(lcd, px + 14, py + 42, 2, "PO", dim);
+	tune_bar(lcd, bx, py + 42, have ? pwr / 10.0 : 0.0, false);
+	snprintf(s, sizeof(s), "%4.1f W", have ? pwr : 0.0);
+	x6100_lcd_text(lcd, px + pw - 12 - x6100_lcd_text_width(s, 2), py + 42, 2, s, white);
+
+	x6100_lcd_text(lcd, px + 14, py + 70, 2, "SWR", dim);
+	tune_bar(lcd, bx, py + 70, have ? swr_frac(swr) : 0.0, true);
+
+	if (have)
+		snprintf(s, sizeof(s), "%4.1f", swr);
+	else
+		snprintf(s, sizeof(s), " -.-");
+
+	x6100_lcd_text(lcd, px + pw - 12 - x6100_lcd_text_width(s, 2), py + 70, 2, s, white);
+
+	// SWR scale marks under the bar
+	{
+		static const struct { double swr; const char *s; } mk[] = {
+			{ 1.0, "1" }, { 1.5, "1.5" }, { 2.0, "2" }, { 3.0, "3" }, { 5.0, "5" },
+		};
+
+		for (size_t i = 0; i < sizeof(mk) / sizeof(mk[0]); i++) {
+			int x = bx + (int) (swr_frac(mk[i].swr) * bar_w);
+
+			x6100_lcd_text(lcd, x - x6100_lcd_text_width(mk[i].s, 1) / 2, py + 88, 1, mk[i].s, dim);
+		}
+	}
+
+	//
+	// Status line. Searching: animated dots. Tuned: the network the tuner
+	// settled on, as numbers and as relay bit patterns (L and C are relay
+	// banks, S the side the capacitor sits on), and in hex.
+	//
+	if (!done) {
+		static const char *dots[4] = { "", ".", "..", "..." };
+
+		snprintf(s, sizeof(s), "SEARCHING%s", dots[ms / 400 % 4]);
+		x6100_lcd_text(lcd, px + 14, py + ph - 24, 2, s, amber);
+		x6100_lcd_text(lcd, px + pw - 12 - x6100_lcd_text_width("ANY KEY: ABORT", 1), py + ph - 20, 1,
+			"ANY KEY: ABORT", dim);
+	} else if (rx->band >= 0 && rx->atu_valid[rx->band]) {
+		const x6100_atu_t *n = &rx->atu_net[rx->band];
+		char lb[9], cb[9];
+
+		for (int i = 0; i < 8; i++) {
+			lb[i] = (char) ('0' + (n->l >> (7 - i) & 1));
+			cb[i] = (char) ('0' + (n->c >> (7 - i) & 1));
+		}
+
+		lb[8] = cb[8] = '\0';
+		snprintf(s, sizeof(s), "L %3u  C %3u  S %u", n->l, n->c, n->s);
+		x6100_lcd_text(lcd, px + 14, py + ph - 26, 2, s, green);
+		snprintf(s, sizeof(s), "L %s  C %s  S %u", lb, cb, n->s);
+		x6100_lcd_text(lcd, px + pw - 12 - x6100_lcd_text_width(s, 1), py + ph - 24, 1, s, dim);
+		snprintf(s, sizeof(s), "HEX %02X %02X %02X", n->l, n->c, n->s);
+		x6100_lcd_text(lcd, px + pw - 12 - x6100_lcd_text_width(s, 1), py + ph - 13, 1, s, dim);
+	}
+}
+
+//
 // Shift a band of rows horizontally by dx pixels (positive = right), fill the gap black
 //
 
@@ -2276,6 +2397,9 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 
 	if (rx->fedit)
 		draw_filter_panel(lcd, rx);
+
+	if (rx->tuning || (rx->tune_done && now_ms() - rx->tune_done < TUNE_SHOW_MS))
+		draw_tune_panel(lcd, rx, scr);
 
 	//
 	// Clock under the filter label, drawn after the filter panel so it stays on
@@ -3553,8 +3677,15 @@ int main(int argc, char **argv)
 			if (rx.tuning) {
 				rx.tune_seen_tx |= tx;
 
+				if (tx) {
+					rx.tune_pwr = scr.pwr;
+					rx.tune_swr = scr.swr;
+				}
+
 				if ((frame.flags & X6100_FLOW_ATU) && (rx.tune_seen_tx || t - rx.tune_since > 500)) {
 					rx.tuning = false;
+					rx.tune_done = t;
+					rx.tune_ms = (uint32_t) (t - rx.tune_since);
 
 					if (rx.band >= 0) {
 						x6100_atu_from_frame(&frame, &rx.atu_net[rx.band]);
