@@ -2657,6 +2657,10 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 		if (now_ms() < scr->ovf_until)
 			x6100_lcd_text(lcd, VU_X + 8, VU_Y + 6, 2, "OVF", SCR_WARN);
 
+		// Band check off (--oob / conf oob): a standing reminder, under OVF
+		if (g_allow_oob)
+			x6100_lcd_text(lcd, VU_X + 8, VU_Y + 24, 2, "OOB", SCR_WARN);
+
 		// Baseband noise blanker / reduction on, top right of the dial
 		{
 			// Fixed slots: NB left, NR right, so neither moves when the other changes
@@ -3039,6 +3043,17 @@ static bool console_token(rx_t *rx, const char *t)
 		return true;
 	}
 
+	// Safety checks off, as --oob / --no-limit (the operator's responsibility)
+	if (strcasecmp(t, "oob") == 0) {
+		g_allow_oob = true;
+		return true;
+	}
+
+	if (strcasecmp(t, "nolimit") == 0) {
+		g_no_limit = true;
+		return true;
+	}
+
 	if (strcasecmp(t, "mute") == 0 || strcasecmp(t, "nomute") == 0) {
 		rx->mute = strcasecmp(t, "mute") == 0;
 		return true;
@@ -3366,7 +3381,7 @@ static bool console_line(rx_t *rx, char *line)
 #define CONF_PATH	"/etc/x6100/x6100_trx.conf"
 #define STATE_PATH	"/etc/x6100/x6100_trx.state"
 
-static void conf_load(rx_t *rx, const char *path)
+static void conf_load(rx_t *rx, const char *path, bool quiet)
 {
 	FILE *fp;
 	char line[256];
@@ -3384,7 +3399,8 @@ static void conf_load(rx_t *rx, const char *path)
 	}
 
 	fclose(fp);
-	fprintf(stderr, "settings: %s\n", path);
+	if (!quiet)
+		fprintf(stderr, "settings: %s\n", path);
 }
 
 static void state_save(const rx_t *rx)
@@ -4301,13 +4317,13 @@ int main(int argc, char **argv)
 	set_freq(&rx, 14074000);
 
 	// Last state, then the user's settings; the command line below goes last
-	conf_load(&rx, STATE_PATH);
-	conf_load(&rx, CONF_PATH);
+	conf_load(&rx, CONF_PATH, true);	/* first for oob / nolimit, so the state frequency fits */
+	conf_load(&rx, STATE_PATH, false);
+	conf_load(&rx, CONF_PATH, false);
 
 	for (int i = 1; i < argc; i++) {
 		if (strcmp(argv[i], "--no-limit") == 0) {
 			g_no_limit = true;
-			fprintf(stderr, "warning: --no-limit, tuning 10 kHz - 100 MHz\n");
 			continue;
 		}
 
@@ -4335,7 +4351,6 @@ int main(int argc, char **argv)
 
 		if (strcmp(argv[i], "--oob") == 0) {
 			g_allow_oob = true;
-			fprintf(stderr, "warning: --oob, band check off: you are responsible for where you transmit\n");
 			continue;
 		}
 
@@ -4351,6 +4366,13 @@ int main(int argc, char **argv)
 			return 1;
 		}
 	}
+
+	// Safety checks off: said at every start (and OOB on the dial); the operator decides
+	if (g_no_limit)
+		fprintf(stderr, "warning: no-limit, tuning 10 kHz - 100 MHz\n");
+
+	if (g_allow_oob)
+		fprintf(stderr, "warning: oob, band check off: you are responsible for where you transmit\n");
 
 	// AGC given with a mode (state, conf, command line) belongs to the start mode's group
 	rx.agc_last_group = mode_group(rx.mode);

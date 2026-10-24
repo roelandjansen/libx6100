@@ -101,6 +101,7 @@ Values are kept in the last state (see Settings); defaults NR 20, NB 10 / 10, no
 - F1-F5 tags along the bottom edge: SCOPE, SPAN, AUDIO, METER, FIL
 - Audio scope (F3; F3 long: next to the RF scope, RF left / AF right): spectrum and waterfall of the demodulated RX audio (codec capture, 48 kHz), 0-3 or 0-6 kHz (F2), normalised dBFS scale (80 dB window, its bottom 10 dB under the noise floor measured inside the receive passband, so the picture stays put with volume and band noise; shifted by the AF reference level), receive passband shaded, MN line at the notch when on. The capture is opened only while the audio scope is shown
 - OVF (red, top left of the dial): flow IQ at its clip level
+- OOB (red, under OVF): band check off (`--oob` or `oob` in the conf); where you transmit is your responsibility
 - NB / NR / MN (blue, top right of the dial) in fixed places, e.g. `NB    MN`, `   NR   `, `NB NR MN`; MN = manual notch, as on Icom radios
 - Tune panel (ATU long press / CAT): amber TUNING with live PO and SWR bars (SWR green / yellow / red), then green TUNED for 4 s with the time taken and the network (L, C, S in decimal, relay bits and hex)
 - Clock under the filter label: system time, UTC, ISO 8601 (`2026-10-24T10:08:27Z`); hidden behind the filter panel while that is open. At start x6100_trx runs one NTP sync with the image's busybox `ntpd -q` (server: `ntp` in the conf, else /etc/ntp.conf, else pool.ntp.org) and reports the result on the console; skipped when the OS already runs a time daemon, or with `ntp off`
@@ -155,6 +156,7 @@ Type a line + Enter while running; tokens can be combined (`14074000 usb`).
 | `mute nomute` | audio mute |
 | `cat 19200`, `cat off` | CI-V at start (settings file; `--cat` overrides) |
 | `ntp <server>`, `ntp off` | NTP sync at start (settings file) |
+| `oob`, `nolimit` | as `--oob` / `--no-limit` (settings file): warned at every start, red OOB on the dial |
 
 ## TX safety
 

@@ -14,6 +14,8 @@ Status: 2026-10-24.
 
 - TX ranges config file and transverter profile (frequency offset, TX enable).
 - Split and RIT / XIT (TX / RX frequency handling).
+- 60 m channels (the allowed channel / segment list as a band with fixed steps).
+- 10 m repeater split (FM, -100 kHz shift, CTCSS), with split above.
 - S-meter calibration (signal generator): SMETER_CAL_DB is provisional (-21: -15 from
   an IC-7851 comparison, then 6 dB lower); also the overload point with PRE / ATT.
 - Codec level vs ALC test (x6100_tx codec at -40 / -30 / -20 dBFS).
