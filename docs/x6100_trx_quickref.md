@@ -219,8 +219,9 @@ Type a line + Enter while running; tokens can be combined (`14074000 usb`).
   frequency (the receive passband shading follows RIT).
 - The baseband gets the TX frequency and mode just before PTT goes out and keeps it
   until the PTT drop has gone out. Front panel PTT, CAT PTT and tune follow split;
-  the hand mic PTT keys the baseband directly and does not (it transmits on the RX
-  frequency: do not use the hand mic PTT with split).
+  the hand mic PTT keys the baseband directly: x6100_trx moves to the TX side as soon
+  as the baseband reports TX, so the first few ms go out on the RX frequency (avoid
+  the hand mic PTT with split across a band edge).
 - CI-V: 0F (split), 21 00 / 01 / 02 (offset, RIT, XIT).
 
 ## 60 m channels (FST: CH)

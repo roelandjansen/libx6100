@@ -196,6 +196,7 @@ typedef struct
 	x6100_mode_t b_mode;
 	int b_fil;
 	bool on_b;
+	bool bb_tx;		/* baseband reports TX (any PTT, hand mic included) */
 	bool split;		/* RX on the VFO in use, TX on the other (V/M long) */
 	int rit_hz;		/* RIT / XIT offset, Hz (Icom: one offset, RIT and XIT on / off) */
 	bool rit;
@@ -652,7 +653,7 @@ static x6100_mode_t tx_mode(const rx_t *rx)
 static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 {
 	uint32_t low, high;
-	bool keyed = rx->ptt || rx->tuning || (ctl->sent[X6100_REG_FLAGS] & (X6100_FLAG_IPTT | X6100_FLAG_ATU_TUNE));
+	bool keyed = rx->ptt || rx->tuning || rx->bb_tx || (ctl->sent[X6100_REG_FLAGS] & (X6100_FLAG_IPTT | X6100_FLAG_ATU_TUNE));
 	uint32_t hz = keyed ? tx_hz(rx) : rx_hz(rx);
 	x6100_mode_t mode = keyed ? tx_mode(rx) : rx->mode;
 
@@ -5885,6 +5886,7 @@ int main(int argc, char **argv)
 				dirty = true;
 
 			scr.tx = tx;
+			rx.bb_tx = tx;	/* hand mic PTT too: apply() then moves to the TX side */
 			scr.pwr = frame.tx_power * 0.1;
 			scr.swr = swr < 1.0 ? 1.0 : swr;
 			scr.alc = frame.alc_level;
