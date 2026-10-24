@@ -3728,7 +3728,7 @@ int main(int argc, char **argv)
 					(unsigned) frame.tx_power);
 			} else {
 				show(&rx);
-				printf("iq %6.1f dB  vbat %.1f", scr.meter_db, frame.vbat * 0.1);
+				printf("iq %6.1f dB  vbat %.1fV", scr.meter_db, frame.vbat * 0.1);
 			}
 			fflush(stdout);
 			level = 0.0;
