@@ -35,12 +35,14 @@ Verified on the radio:
 - TX readings folded into the console status line
 - WiFi: connecting to a saved network from the GEN panel
 - 60 m channel mode on the MFK (FST: CH)
+- TX frequency on the display while keyed with a duplex shift (AUTO, DUP- / DUP+; PTT
+  key, mic PTT, tune); the scope stays on RX
 - tuner memories per frequency (nearest within 0.5 % of the TX frequency): relays click
   when the VFO crosses into another memory with the tuner in, none with it out
 
 Built, not yet tried on the radio (2026-10-25):
 
-- TX frequency on the display while transmitting with split or a duplex shift
+- state saved right after every tune (fsync; tuner memories safe over a power loss)
 
 ## Open items to check on the radio
 
@@ -51,9 +53,11 @@ Built, not yet tried on the radio (2026-10-25):
    bluez agent; see S39btpairings), panel stutter from polling.
 4. wfview over CAT: VFO A / B, split, duplex, RIT / XIT, band buttons, keyer levels;
    ATT / PRE (socat trace against IU1WXY).
-5. Repeater duplex, the rest: display shows 29.520 while keyed (PTT key, hand mic, CAT
-   PTT), mem 22 (AUTO) and a memory with dup- 100, state after a restart, split over
-   duplex, MFK hold resets, panel layout. Scope TX line: only when in view (by design).
+5. Repeater duplex, the rest: CAT PTT, mem 22 (AUTO) and a memory with dup- 100, state
+   after a restart, split over duplex, MFK hold resets, panel layout. Scope TX line:
+   only when in view (by design).
+6. TX frequency on the display with split (VFO B while keyed) and with XIT alone (stays
+   on the VFO frequency).
 
 ## Next steps (suggested order)
 
