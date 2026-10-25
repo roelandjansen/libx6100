@@ -26,8 +26,8 @@ Verified on the radio:
 - liquid-dsp v1.8.3 static build, `x6100_liquid` runs on the radio
 - CW keyer (KEY short key type, KEY long panel; registers 33 / 34; CI-V 14 09 / 0C / 0F):
   pitch 300-900 Hz (600 out of the box), sidetone 0-100 % over the full register; key
-  types straight / paddle / reversed switch and work (paddle had dot and dash swapped:
-  fixed 2026-10-25, recheck dot left on PADDLE)
+  types straight / paddle (dot left) / reversed work (polarity fixed 2026-10-25);
+  iambic B out of the box
 - repeater duplex (AGC long panel): AUTO -100 kHz in NFM on 29.620-29.680 MHz, manual
   DUP- / DUP+ (also in SSB), console status line; PTT key and front (hand) mic; no CTCSS
 - battery charge / external supply: percentage and CHARGING plausible (info line, status
@@ -45,7 +45,7 @@ Built, not yet tried on the radio (2026-10-25):
 
 1. Tuner memories: a tune stores, a retune nearby replaces, recall within the window.
 2. Battery low notes at 20 / 10 % (on battery only).
-3. Keyer: PADDLE gives dots on the left paddle after the fix; iambic A and B differ
+3. Keyer: iambic A and B differ
    (squeeze and release: B adds one opposite element).
 4. GEN WiFi / Bluetooth rows: WiFi / Bluetooth on / off, pair a headset (may need a
    bluez agent; see S39btpairings), panel stutter from polling.
