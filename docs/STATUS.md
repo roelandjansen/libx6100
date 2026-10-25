@@ -36,7 +36,7 @@ Verified on the radio:
 - WiFi: connecting to a saved network from the GEN panel
 - 60 m channel mode on the MFK (FST: CH)
 - TX frequency on the display while keyed with a duplex shift (AUTO, DUP- / DUP+; PTT
-  key, mic PTT, tune); the scope stays on RX
+  key, mic PTT, tune), DUPLEX OFF stays on RX; the scope stays on RX
 - tuner memories per frequency (nearest within 0.5 % of the TX frequency): relays click
   when the VFO crosses into another memory with the tuner in, none with it out
 
