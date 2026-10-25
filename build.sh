@@ -193,6 +193,13 @@ deploy() {
 
 	scp -- "${C_DEPLOY[@]}" "${G_HOST}:/root/"
 	printf 'deployed to %s:/root: %s\n' "${G_HOST}" "${C_DEPLOY[*]}"
+
+	# Built only with cmake present: copied when there
+	if [[ -f "${C_OUT}/x6100_liquid" ]]; then
+		scp -q -- "${C_OUT}/x6100_liquid" "${G_HOST}:/root/"
+		printf 'deployed %s\n' "${C_OUT}/x6100_liquid"
+	fi
+
 	settings_seed
 }
 
@@ -281,7 +288,8 @@ usage() {
 		'       build.sh backup | restore' \
 		'' \
 		'  (none)       git pull, then build only if a source changed' \
-		'  deploy       the same, then scp x6100_trx, x6100_ui.sh and the quick reference' \
+		'  deploy       the same, then scp x6100_trx, x6100_ui.sh, the quick reference and' \
+		'               x6100_liquid (when built)' \
 		'               to $X6100_HOST:/root (default root@x6100)' \
 		'               and settings missing on the radio from $X6100_CONFIG (or the example)' \
 		'  backup       copy the radio settings (/etc/x6100) to $X6100_CONFIG' \
