@@ -48,6 +48,9 @@ Built, not yet tried on the radio (2026-10-25):
 
 - TX panel (F4 long): mic select and gains, compressor, VOX, monitor, squelch; state,
   console, CI-V 14 03 / 0B / 0E / 15-17 and 16 44-46
+- birdies: scan (GEN BIRDIE SCAN / `birdiescan`), birdies.conf, yellow ticks on the
+  scope, automatic notch in USB / LSB / AM (BIRDIE NOTCH, off for now); host simulation
+  of 80 m finds the IU1WXY reference list within 3 Hz
 
 ## Open items to check on the radio
 
@@ -64,6 +67,8 @@ Built, not yet tried on the radio (2026-10-25):
 6. TX panel: each row audible / visible on TX (mic gain on ALC, compressor, VOX keys
    and drops with the delay, anti-VOX against the speaker, monitor heard while keyed,
    squelch closes in FM); the gain ranges (0-50, 0-100) against the stock UI.
+7. Birdies: 80 m scan against the IU1WXY list (TODO), tick on the scope line, the
+   notch on 3837.014 (LSB, dial 3838.000: 986 Hz), PRE / ATT.
 
 ## Next steps (suggested order)
 
@@ -74,8 +79,6 @@ Built, not yet tried on the radio (2026-10-25):
    `x6100_netaudio_design.md`), recordings, RX / TX equaliser.
 5. Measurements: S-meter calibration, codec level against ALC.
 6. CTCSS for the repeaters (see TODO: no tone encoder known, mic bypasses Linux).
-7. Birdie calibration: scan, marks on the scope, auto notch in SSB / AM (own design;
-   functional idea from the IU1WXY release notes, see TODO).
 
 ## Working notes
 

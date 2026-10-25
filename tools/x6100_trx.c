@@ -400,7 +400,8 @@ static char g_ntp_msg[64] = "not run";	/* last NTP result, for the status page *
 static char g_toast[24];		/* short confirmation over the scope (VFO A / B, A=B) */
 static uint64_t g_toast_until;	/* ms; shown while now_ms() is before this */
 
-enum { GEN_BRIGHT, GEN_CAT, GEN_NTP, GEN_WIFI, GEN_WNET, GEN_BT, GEN_BTPAIR, GEN_BTDEV, GEN_ROWS };	/* GEN rows */
+enum { GEN_BRIGHT, GEN_CAT, GEN_NTP, GEN_WIFI, GEN_WNET, GEN_BT, GEN_BTPAIR, GEN_BTDEV, GEN_BSCAN, GEN_BMARK, GEN_BNOTCH,
+	GEN_ROWS };	/* GEN rows */
 
 static void gen_adjust(int row, int dir, bool def);
 
@@ -740,6 +741,122 @@ static x6100_mode_t tx_mode(const rx_t *rx)
 //
 
 //
+// Birdies: carriers from the radio's own oscillators, fixed lines on the scope and a
+// whistle in SSB. A receive-only scan (antenna off or a dummy load; GEN row BIRDIE
+// SCAN or the console) finds them, BIRDIE_PATH keeps them as birdie <Hz> <dB over
+// the noise>. With BIRDIE MARKS a tick on the scope marks each one; with BIRDIE
+// NOTCH the baseband notch (register 24, one notch) sits on the strongest birdie in
+// the passband, in USB, LSB and AM, unless the notch is on by hand (DFL). Own design;
+// the idea of a scan and an automatic notch comes from the IU1WXY release notes.
+//
+
+#define BIRDIE_PATH	"/etc/x6100/birdies.conf"
+#define BIRDIE_MAX	256
+#define BIRDIE_NOTCH_W	40		/* notch width, Hz */
+
+typedef struct
+{
+	uint32_t hz;
+	int snr;			/* dB over the noise floor */
+} birdie_t;
+
+static birdie_t g_birdie[BIRDIE_MAX];
+static int g_nbirdie;
+static bool g_bmarks = true;		/* ticks on the scope */
+static bool g_bnotch;			/* automatic notch; off until checked on the radio */
+static int g_bscan_req;			/* GEN / console: 1 start a scan, -1 stop it (main loop) */
+
+static void passband(const rx_t *rx, int *lo, int *hi);
+static bool bscan_running(void);
+
+// Add a birdie; one within 150 Hz of it is the same one: the stronger reading stays
+static void birdie_add(uint32_t hz, int snr)
+{
+	for (int i = 0; i < g_nbirdie; i++) {
+		uint32_t d = g_birdie[i].hz > hz ? g_birdie[i].hz - hz : hz - g_birdie[i].hz;
+
+		if (d <= 150) {
+			if (snr > g_birdie[i].snr) {
+				g_birdie[i].hz = hz;
+				g_birdie[i].snr = snr;
+			}
+
+			return;
+		}
+	}
+
+	if (g_nbirdie < BIRDIE_MAX) {
+		g_birdie[g_nbirdie].hz = hz;
+		g_birdie[g_nbirdie].snr = snr;
+		g_nbirdie++;
+	}
+}
+
+// Drop the birdies in low .. high (a band about to be scanned again)
+static void birdie_clear(uint32_t low, uint32_t high)
+{
+	int n = 0;
+
+	for (int i = 0; i < g_nbirdie; i++)
+		if (g_birdie[i].hz < low || g_birdie[i].hz > high)
+			g_birdie[n++] = g_birdie[i];
+
+	g_nbirdie = n;
+}
+
+static int birdie_cmp(const void *a, const void *b)
+{
+	const birdie_t *x = a, *y = b;
+
+	return x->hz < y->hz ? -1 : x->hz > y->hz;
+}
+
+static void birdie_save(void)
+{
+	char tmp[] = BIRDIE_PATH ".tmp";
+	FILE *fp;
+
+	qsort(g_birdie, (size_t) g_nbirdie, sizeof(g_birdie[0]), birdie_cmp);
+
+	if ((fp = fopen(tmp, "w")) == NULL) {
+		fprintf(stderr, "\nbirdies: cannot write %s: %s\n", tmp, strerror(errno));
+		return;
+	}
+
+	fprintf(fp, "# x6100_trx birdies (receive-only scan): birdie <Hz> <dB over the noise>\n");
+
+	for (int i = 0; i < g_nbirdie; i++)
+		fprintf(fp, "birdie %u %d\n", (unsigned) g_birdie[i].hz, g_birdie[i].snr);
+
+	if (fclose(fp) != 0 || rename(tmp, BIRDIE_PATH) != 0)
+		fprintf(stderr, "\nbirdies: cannot save %s: %s\n", BIRDIE_PATH, strerror(errno));
+}
+
+// Notch frequency in the audio for the strongest birdie in the passband, 0 for none
+static int birdie_notch(const rx_t *rx)
+{
+	int lo, hi, best = 0, best_snr = -1;
+
+	if (!g_bnotch || rx->dnf
+		|| (rx->mode != X6100_MODE_USB && rx->mode != X6100_MODE_LSB && rx->mode != X6100_MODE_AM))
+		return 0;
+
+	passband(rx, &lo, &hi);
+
+	for (int i = 0; i < g_nbirdie; i++) {
+		int64_t rel = (int64_t) g_birdie[i].hz - (int64_t) rx_hz(rx);
+		int audio = (int) (rel < 0 ? -rel : rel);
+
+		if (rel >= lo && rel <= hi && audio >= 100 && audio <= 3000 && g_birdie[i].snr > best_snr) {
+			best = audio;
+			best_snr = g_birdie[i].snr;
+		}
+	}
+
+	return best;
+}
+
+//
 // Tuner memories: every tune stores its network (L, C, S) with the frequency it was
 // tuned on; the network for the TX frequency is the nearest memory within 0.5 % of
 // it (9 kHz at 1.8 MHz, 35 kHz at 7 MHz, 140 kHz at 28 MHz), else straight through.
@@ -829,7 +946,15 @@ static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 	x6100_ctl_set(ctl, X6100_REG_VFOA_PRE, rx->pre);
 	x6100_ctl_set(ctl, X6100_REG_VFOB_PRE, rx->pre);
 	x6100_ctl_set(ctl, X6100_REG_NR_NB, X6100_R23(rx->nr_lvl, rx->nb_w, rx->nb_lvl, rx->nr, rx->nb));
-	x6100_ctl_set(ctl, X6100_REG_DNF, X6100_R24(rx->dnf_f, rx->dnf_w, rx->dnf));
+
+	// Notch: by hand (DFL), else on the strongest birdie in the passband (BIRDIE NOTCH)
+	int bn = birdie_notch(rx);
+
+	if (bn > 0)
+		x6100_ctl_set(ctl, X6100_REG_DNF, X6100_R24(bn, BIRDIE_NOTCH_W, 1));
+	else
+		x6100_ctl_set(ctl, X6100_REG_DNF, X6100_R24(rx->dnf_f, rx->dnf_w, rx->dnf));
+
 	x6100_ctl_set(ctl, X6100_REG_KEYER, X6100_R33(rx->wpm, rx->keymode ? 3 - rx->keymode : 0, rx->iambic, rx->cwtone, (rx->cwvol * 63 + 50) / 100, 0));
 	x6100_ctl_set(ctl, X6100_REG_QSK_KR, X6100_R34(rx->qsk, rx->ratio));
 
@@ -884,6 +1009,11 @@ static bool tx_allowed(rx_t *rx)
 	rx->warn = "RX ONLY";
 	return false;
 #endif
+
+	if (bscan_running()) {
+		rx->warn = "BIRDIE SCAN";
+		return false;
+	}
 
 	if (g_allow_oob)
 		return true;
@@ -1495,6 +1625,11 @@ static int *dsp_value(rx_t *rx, int i)
 
 static bool on_key(rx_t *rx, int key)
 {
+	if (bscan_running()) {
+		g_bscan_req = -1;	/* any key stops a birdie scan, and does nothing else */
+		return true;
+	}
+
 	//
 	// Any other key drops a latched TX or aborts a tune, and does nothing else;
 	// F1-F5 are exempt (scope, meter, receive filter)
@@ -1791,6 +1926,11 @@ static bool has_long(int key)
 
 static bool on_long_key(rx_t *rx, int key)
 {
+	if (bscan_running()) {
+		g_bscan_req = -1;	/* any key stops a birdie scan */
+		return true;
+	}
+
 	if (rx->lock)
 		return false;
 
@@ -1993,6 +2133,9 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 {
 	if (rx->lock)
 		return false;
+
+	if (bscan_running() && in != IN_VOL)
+		return true;	/* the scan owns the VFO; volume still works */
 
 	switch (in) {
 	case IN_VFO:
@@ -2348,6 +2491,216 @@ static void spectrum_update(screen_t *scr, const x6100_flow_frame_t *f)
 
 	scr->floor_db = scr->spec_valid ? scr->floor_db * 0.95f + fl * 0.05f : fl;
 	scr->spec_valid = true;
+}
+
+//
+// Birdie scan: windows BS_STEP_HZ apart over each band, so every frequency is in two
+// of them and the centre bins (DC, left out) of one are covered by the next. Per
+// window: BS_SETTLE_MS after the VFO moves, then BS_FRAMES flow frames averaged in
+// power; a bin is a birdie when it is a local peak at least BS_SNR_DB over the
+// median of the window and narrow (BS_WIDE_BINS away it is 6 dB down); its frequency
+// is interpolated between the bins (parabola on dB, Hann window: ~10 Hz at 20 dB).
+// TX is refused while it runs; the VFO, band and RIT come back at the end.
+//
+
+#define BS_STEP_HZ	36000
+#define BS_EDGE_BINS	200		/* usable: centre +- 200 bins, +- 37.5 kHz */
+#define BS_DC_BINS	4		/* centre +- 4 bins left out */
+#define BS_SETTLE_MS	300
+#define BS_FRAMES	32
+#define BS_SNR_DB	10
+#define BS_WIDE_BINS	3
+
+typedef struct
+{
+	bool on;
+	bool all;
+	int band;			/* band being scanned */
+	int last;			/* last band to scan */
+	uint32_t hz;			/* window centre */
+	uint64_t settle_until;
+	int frames;
+	int found;			/* birdies found in this scan */
+	int steps, step;		/* windows in this scan, done so far */
+	double acc[X6100_FLOW_SAMPLES];	/* summed power, frequency order (low to high) */
+	uint32_t ret_freq;
+	int ret_band;
+	bool ret_rit;
+} bscan_t;
+
+static bscan_t g_bs;
+
+static bool bscan_running(void)
+{
+	return g_bs.on;
+}
+static bool g_bscan_all;		/* GEN BIRDIE SCAN: this band or all bands */
+
+static int bscan_windows(int band)
+{
+	return (int) ((g_bands[band].high - g_bands[band].low + BS_STEP_HZ - 1) / BS_STEP_HZ) + 1;	/* low .. first one >= high */
+}
+
+static void bscan_tune(rx_t *rx, uint32_t hz)
+{
+	g_bs.hz = hz;
+	rx->freq = hz;			/* not set_freq: the band memories stay as they are */
+	rx->band = band_of(hz);
+	g_bs.frames = 0;
+	memset(g_bs.acc, 0, sizeof(g_bs.acc));
+	g_bs.settle_until = now_ms() + BS_SETTLE_MS;
+}
+
+static bool bscan_start(rx_t *rx, bool all)
+{
+	if (g_bs.on || rx->ptt || rx->tuning || rx->bb_tx)
+		return false;
+
+	if (!all && rx->band < 0) {
+		toast("NOT ON A BAND");
+		return false;
+	}
+
+	memset(&g_bs, 0, sizeof(g_bs));
+	g_bs.on = true;
+	g_bs.all = all;
+	g_bs.band = all ? 0 : rx->band;
+	g_bs.last = all ? BAND_COUNT - 1 : rx->band;
+	g_bs.ret_freq = rx->freq;
+	g_bs.ret_band = rx->band;
+	g_bs.ret_rit = rx->rit;
+	rx->rit = false;
+
+	for (int b = g_bs.band; b <= g_bs.last; b++) {
+		birdie_clear(g_bands[b].low, g_bands[b].high);
+		g_bs.steps += bscan_windows(b);
+	}
+
+	printf("\nbirdie scan: %s, antenna off or a dummy load; any key stops\n", all ? "all bands" : g_bands[g_bs.band].name);
+	bscan_tune(rx, g_bands[g_bs.band].low);
+
+	return true;
+}
+
+static void bscan_stop(rx_t *rx, bool done)
+{
+	char s[24];	/* the toast takes 23 characters */
+
+	if (!g_bs.on)
+		return;
+
+	g_bs.on = false;
+	rx->freq = g_bs.ret_freq;
+	rx->band = g_bs.ret_band;
+	rx->rit = g_bs.ret_rit;
+	birdie_save();
+
+	snprintf(s, sizeof(s), "%s: %u FOUND", done ? "BIRDIES" : "SCAN STOPPED", (unsigned) g_bs.found % 1000u);
+	toast(s);
+	printf("\nbirdie scan %s: %d found, %d stored in %s\n", done ? "done" : "stopped", g_bs.found, g_nbirdie, BIRDIE_PATH);
+}
+
+// One averaged window: peaks into the birdie list
+static void bscan_window(void)
+{
+	const int n = X6100_FLOW_SAMPLES, c = n / 2;
+	static float db[X6100_FLOW_SAMPLES], sorted[2 * BS_EDGE_BINS];
+	int m = 0;
+
+	for (int i = 0; i < n; i++)
+		db[i] = g_bs.acc[i] > 1e-30 ? (float) (10.0 * log10(g_bs.acc[i] / g_bs.frames)) : -300.0f;
+
+	for (int i = c - BS_EDGE_BINS; i <= c + BS_EDGE_BINS; i++)
+		if (abs(i - c) > BS_DC_BINS && m < (int) (sizeof(sorted) / sizeof(sorted[0])))
+			sorted[m++] = db[i];
+
+	for (int i = 1; i < m; i++) {
+		float v = sorted[i];
+		int j = i - 1;
+
+		while (j >= 0 && sorted[j] > v) {
+			sorted[j + 1] = sorted[j];
+			j--;
+		}
+
+		sorted[j + 1] = v;
+	}
+
+	float noise = sorted[m / 2];
+	const band_t *b = &g_bands[g_bs.band];
+
+	for (int i = c - BS_EDGE_BINS + BS_WIDE_BINS; i <= c + BS_EDGE_BINS - BS_WIDE_BINS; i++) {
+		if (abs(i - c) <= BS_DC_BINS + 1 || db[i] <= db[i - 1] || db[i] < db[i + 1] || db[i] - noise < BS_SNR_DB
+			|| db[i] - db[i - BS_WIDE_BINS] < 6.0f || db[i] - db[i + BS_WIDE_BINS] < 6.0f)
+			continue;
+
+		float den = db[i - 1] - 2.0f * db[i] + db[i + 1];
+		float d = den < 0.0f ? 0.5f * (db[i - 1] - db[i + 1]) / den : 0.0f;
+		int64_t hz = (int64_t) g_bs.hz + (int64_t) lround((i + (d < -0.5f ? -0.5f : d > 0.5f ? 0.5f : d) - c)
+			* (double) SPAN_HZ / n);
+		int snr = (int) lround(db[i] - noise);
+
+		if (hz < b->low || hz > b->high)
+			continue;
+
+		int before = g_nbirdie;
+
+		birdie_add((uint32_t) hz, snr);
+
+		if (g_nbirdie > before) {
+			g_bs.found++;
+			printf("\nbirdie %.3f kHz, %d dB over the noise\n", hz / 1000.0, snr);
+		}
+	}
+}
+
+// Every flow frame while a scan runs
+static void bscan_feed(rx_t *rx, const x6100_flow_frame_t *f)
+{
+	static float buf[X6100_FLOW_SAMPLES][2];
+	const int n = X6100_FLOW_SAMPLES;
+
+	if (!g_bs.on || now_ms() < g_bs.settle_until)
+		return;
+
+	for (int i = 0; i < n; i++) {
+		float w = 0.5f - 0.5f * cosf(2.0f * (float) M_PI * (float) i / (float) (n - 1));
+
+		buf[i][0] = f->iq[i][0] * w;
+		buf[i][1] = f->iq[i][1] * w;
+	}
+
+	fft(buf, n);
+
+	for (int i = 0; i < n; i++) {
+		int k = (i + n / 2) % n;	/* centred, as the scope */
+		int pos = X6100_FLOW_IQ_MIRRORED ? (n - i) % n : i;	/* mirrored: offset n / 2 - i bins */
+
+		g_bs.acc[pos] += (double) buf[k][0] * buf[k][0] + (double) buf[k][1] * buf[k][1];
+	}
+
+	if (++g_bs.frames < BS_FRAMES)
+		return;
+
+	bscan_window();
+	g_bs.step++;
+
+	// Next window, next band, or done
+	if (g_bs.hz < g_bands[g_bs.band].high) {
+		bscan_tune(rx, g_bs.hz + BS_STEP_HZ);
+	} else if (g_bs.band < g_bs.last) {
+		g_bs.band++;
+		bscan_tune(rx, g_bands[g_bs.band].low);
+	} else {
+		bscan_stop(rx, true);
+	}
+}
+
+// Progress for the scope and the GEN row
+static void bscan_text(char *s, size_t n)
+{
+	snprintf(s, n, "BIRDIE SCAN %s %d %%  %d FOUND", g_bands[g_bs.band].name,
+		g_bs.steps > 0 ? g_bs.step * 100 / g_bs.steps : 0, g_bs.found);
 }
 
 static uint32_t wf_colour(float t)
@@ -3053,6 +3406,7 @@ static void draw_filter_panel(x6100_lcd_t *lcd, const rx_t *rx)
 
 static const char *g_gen_name[GEN_ROWS] = {
 	"BRIGHTNESS", "CAT CI-V", "NTP SYNC", "WIFI", "WIFI NETWORK", "BLUETOOTH", "BT PAIRING", "BT DEVICE",
+	"BIRDIE SCAN", "BIRDIE MARKS", "BIRDIE NOTCH",
 };
 static const int g_cat_rates[] = { 0, 4800, 9600, 19200, 38400, 57600, 115200 };
 
@@ -3361,6 +3715,18 @@ static void gen_value(int row, char *s, size_t n)
 		else
 			snprintf(s, n, "%s", g_sys.bt_visible ? "VISIBLE" : "OFF");
 		break;
+	case GEN_BSCAN:
+		if (bscan_running())
+			snprintf(s, n, "%s %d %%", g_bands[g_bs.band].name, g_bs.steps > 0 ? g_bs.step * 100 / g_bs.steps : 0);
+		else
+			snprintf(s, n, "%s", g_bscan_all ? "ALL BANDS" : "THIS BAND");
+		break;
+	case GEN_BMARK:
+		snprintf(s, n, "%s", g_bmarks ? "ON" : "OFF");
+		break;
+	case GEN_BNOTCH:
+		snprintf(s, n, "%s", g_bnotch ? "ON" : "OFF");
+		break;
 	default:
 		snprintf(s, n, "%s", g_sys.ndev > 0 ? g_sys.dev_name[g_sys.dev_sel] : "NONE PAIRED");
 		break;
@@ -3395,13 +3761,23 @@ static void gen_hint(int row, char *s, size_t n)
 		else
 			s[0] = '\0';
 		break;
+	case GEN_BSCAN:
+		snprintf(s, n, "%s", bscan_running() ? "ANY KEY STOPS" : "ANTENNA OFF, HOLD MFK: START");
+		break;
+	case GEN_BMARK:
+		snprintf(s, n, "%d STORED, TICKS ON THE SCOPE", g_nbirdie);
+		break;
+	case GEN_BNOTCH:
+		snprintf(s, n, "USB / LSB / AM, NOT WITH DFL ON");
+		break;
 	default:
 		s[0] = '\0';
 		break;
 	}
 }
 
-// MFK turn on a row (dir +-1); def: MFK long (default, or connect on the WiFi / BT rows)
+// MFK turn on a row (dir +-1); def: MFK long (default, or connect on the WiFi / BT rows,
+// start on BIRDIE SCAN)
 static void gen_adjust(int row, int dir, bool def)
 {
 	if (g_conf_set & (1u << row))
@@ -3455,6 +3831,18 @@ static void gen_adjust(int row, int dir, bool def)
 			bt_cmd("pairable", "off");
 			g_sys.bt_visible_until = 0;
 		}
+		break;
+	case GEN_BSCAN:
+		if (def)
+			g_bscan_req = 1;	/* started by the main loop */
+		else
+			g_bscan_all = dir > 0;
+		break;
+	case GEN_BMARK:
+		g_bmarks = def ? true : dir > 0;
+		break;
+	case GEN_BNOTCH:
+		g_bnotch = def ? false : dir > 0;
 		break;
 	default:
 		if (g_sys.ndev == 0)
@@ -3529,7 +3917,7 @@ static void draw_gen_panel(x6100_lcd_t *lcd, const rx_t *rx)
 
 	// Position in the list, top right: the panel shows five of the rows
 	{
-		char pos[12];
+		char pos[24];
 
 		snprintf(pos, sizeof(pos), "%d/%d", rx->gedit_par + 1, GEN_ROWS);
 		x6100_lcd_text(lcd, px + pw - 12 - x6100_lcd_text_width(pos, 1), py + 11, 1, pos, violet);
@@ -4101,6 +4489,16 @@ static void draw_audio_spec(screen_t *scr, const rx_t *rx, int x0, int w)
 		x6100_lcd_vline(lcd, nx, SPEC_Y, SPEC_Y + SPEC_H - 1, 0x30D0B0);
 		x6100_lcd_text(lcd, nx + 4, SPEC_Y + SPEC_H - 18, 2, "MN", 0x30D0B0);
 	}
+
+	// Automatic notch on a birdie (BIRDIE NOTCH), yellow as the birdie ticks
+	int bn = birdie_notch(rx);
+
+	if (bn > 0 && bn < range) {
+		int nx = x0 + bn * w / range;
+
+		x6100_lcd_vline(lcd, nx, SPEC_Y, SPEC_Y + SPEC_H - 1, 0xE0E040);
+		x6100_lcd_text(lcd, nx + 4, SPEC_Y + SPEC_H - 18, 2, "BN", 0xE0E040);
+	}
 }
 
 // One audio waterfall line (row WF_Y) in columns x0 .. x0 + w - 1; the caller scrolls
@@ -4545,6 +4943,18 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 	}
 
 	//
+	// Birdies in view (BIRDIE MARKS): a short yellow tick at the top of the RF scope
+	//
+	if (g_bmarks) {
+		for (int i = 0; i < g_nbirdie; i++) {
+			int bx = f_to_x(&v, g_birdie[i].hz);
+
+			if (bx > LBL_W && bx < SW - 1)
+				x6100_lcd_fill(lcd, bx, SPEC_Y, 2, 10, 0xE0E040);
+		}
+	}
+
+	//
 	// F3 long: the audio scope in the right half, a divider between the two
 	//
 	if (view == 2) {
@@ -4580,6 +4990,17 @@ overlays:
 
 		x6100_lcd_fill(lcd, LBL_W + 4, SPEC_Y + 22, x6100_lcd_text_width(m, 2) + 8, 18, 0x000000);
 		x6100_lcd_text(lcd, LBL_W + 8, SPEC_Y + 24, 2, m, 0xFFB020);
+
+	//
+	// Birdie scan running: progress under the split note, cyan
+	//
+	if (bscan_running()) {
+		char m[48];
+
+		bscan_text(m, sizeof(m));
+		x6100_lcd_fill(lcd, LBL_W + 4, SPEC_Y + 44, x6100_lcd_text_width(m, 2) + 8, 18, 0x000000);
+		x6100_lcd_text(lcd, LBL_W + 8, SPEC_Y + 46, 2, m, 0x40C0FF);
+	}
 	}
 
 	//
@@ -4816,6 +5237,17 @@ static bool console_token(rx_t *rx, const char *t)
 
 	if (strcasecmp(t, "xit") == 0 || strcasecmp(t, "noxit") == 0) {
 		rx->xit = strcasecmp(t, "xit") == 0;
+		return true;
+	}
+
+	// Birdies: ticks on the scope, automatic notch
+	if (strcasecmp(t, "birdiemarks") == 0 || strcasecmp(t, "nobirdiemarks") == 0) {
+		g_bmarks = strcasecmp(t, "birdiemarks") == 0;
+		return true;
+	}
+
+	if (strcasecmp(t, "birdienotch") == 0 || strcasecmp(t, "nobirdienotch") == 0) {
+		g_bnotch = strcasecmp(t, "birdienotch") == 0;
 		return true;
 	}
 
@@ -5140,6 +5572,51 @@ static bool console_line(rx_t *rx, char *line)
 				changed = true;
 				continue;
 			}
+		}
+
+		// Birdies: birdie <Hz> <dB> (birdies.conf), birdies (list), birdiescan [all],
+		// birdiestop, birdieclear (all stored ones)
+		if (strcasecmp(t, "birdie") == 0) {
+			const char *hs = strtok(NULL, " \t\r\n"), *ds = strtok(NULL, " \t\r\n");
+			uint32_t hz = hs == NULL ? 0 : (uint32_t) strtoul(hs, NULL, 10);
+
+			if (hz < FREQ_MIN || hz > FREQ_MAX || ds == NULL)
+				fprintf(stderr, "\nbirdie: <Hz> <dB over the noise>\n");
+			else
+				birdie_add(hz, atoi(ds));
+
+			continue;
+		}
+
+		if (strcasecmp(t, "birdies") == 0) {
+			for (int i = 0; i < g_nbirdie; i++) {
+				int b = band_of(g_birdie[i].hz);
+
+				printf("%12.3f kHz  %3d dB  %s\n", g_birdie[i].hz / 1000.0, g_birdie[i].snr, b >= 0 ? g_bands[b].name : "");
+			}
+
+			printf("%d birdies stored; marks %s, notch %s\n\n", g_nbirdie, g_bmarks ? "on" : "off", g_bnotch ? "on" : "off");
+			continue;
+		}
+
+		if (strcasecmp(t, "birdiescan") == 0) {
+			const char *as = strtok(NULL, " \t\r\n");
+
+			g_bscan_all = as != NULL && strcasecmp(as, "all") == 0;
+			g_bscan_req = 1;
+			continue;
+		}
+
+		if (strcasecmp(t, "birdiestop") == 0) {
+			g_bscan_req = -1;
+			continue;
+		}
+
+		if (strcasecmp(t, "birdieclear") == 0) {
+			g_nbirdie = 0;
+			birdie_save();
+			printf("birdies cleared\n");
+			continue;
 		}
 
 		// mem <n> <Hz> <mode> fil<n> [tx <Hz> <mode>] [name <text>]: memory channel
@@ -5507,6 +5984,8 @@ static void state_save(const rx_t *rx)
 		xpar_token(rx, i, v, sizeof(v));
 		fprintf(fp, "%s %s%s", g_xpar[i].token, v, i == XPARS - 1 ? "\n" : " ");
 	}
+
+	fprintf(fp, "%s %s\n", g_bmarks ? "birdiemarks" : "nobirdiemarks", g_bnotch ? "birdienotch" : "nobirdienotch");
 	fprintf(fp, "%s %s %s\n", rx->att ? "att" : "noatt", rx->pre ? "pre" : "nopre", rx->atu_on ? "atu" : "noatu");
 	fprintf(fp, "%s %s %s\n", rx->nr ? "nr" : "nonr", rx->nb ? "nb" : "nonb", rx->dnf ? "notch" : "nonotch");
 	fprintf(fp, "nrl %d nbl %d nbw %d ntf %d ntw %d\n", rx->nr_lvl, rx->nb_lvl, rx->nb_w, rx->dnf_f, rx->dnf_w);
@@ -6604,6 +7083,7 @@ int main(int argc, char **argv)
 	// Last state, then the user's settings; the command line below goes last
 	conf_load(&rx, CONF_PATH, true);	/* first for oob / nolimit, so the state frequency fits */
 	conf_load(&rx, MEM_PATH, false);
+	conf_load(&rx, BIRDIE_PATH, false);
 	conf_load(&rx, STATE_PATH, false);
 	conf_load(&rx, CONF_PATH, false);
 
@@ -6953,6 +7433,17 @@ int main(int argc, char **argv)
 			dirty = true;
 		}
 
+		// Birdie scan asked for (GEN row, console): start / stop here, with rx at hand
+		if (g_bscan_req != 0) {
+			if (g_bscan_req > 0)
+				bscan_start(&rx, g_bscan_all);
+			else
+				bscan_stop(&rx, false);
+
+			g_bscan_req = 0;
+			dirty = true;
+		}
+
 		// Keyer panel after 10 s
 		if (rx.kedit && t - rx.kedit_since >= 10000) {
 			rx.kedit = false;
@@ -7149,6 +7640,11 @@ int main(int argc, char **argv)
 				}
 			}
 
+			if (bscan_running()) {
+				bscan_feed(&rx, &frame);
+				dirty = true;
+			}
+
 			level += iq_level_db(&frame);
 			level_n++;
 
@@ -7210,6 +7706,7 @@ int main(int argc, char **argv)
 	apply_flags(&ctl, &rx);
 	x6100_ctl_sync(&ctl);
 	fil_save();
+	bscan_stop(&rx, false);	/* quit during a scan: the VFO comes back first */
 	state_save(&rx);
 
 	if (!lcd_on)

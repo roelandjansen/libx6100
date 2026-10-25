@@ -19,20 +19,20 @@ Status: 2026-10-25 (after v0.10.0). Summary and next steps: `STATUS.md`.
 - Hand mic PTT with split: x6100_trx follows the baseband TX flag (verified), the first
   ms go out on the RX side; the baseband split flag (register 12 b1, VFO A RX / VFO B TX)
   could make that clean: to test.
-- Birdie calibration (idea from IU1WXY v0.128 release notes; their software is closed
-  and its terms forbid reproducing or imitating its screens: own design and UI only).
-  What it does there: birdies = carriers from the radio's own oscillators (fixed lines
-  on the scope, a whistle in SSB). A receive-only scan, antenna off or dummy load, one
-  band or all; a narrow peak at least 10 dB over the noise counts. Then a mark on the
-  spectrum per birdie and, in USB / LSB / AM, a narrow notch when one falls in the
-  passband; not in CW, digital modes or with the own DNF on.
-  Sketch for x6100_trx: scan per band in scope windows (fixed PRE / ATT / RF gain),
-  average N spectrum frames, noise floor = median, peaks >= 10 dB and <= 2 bins wide,
-  refine with a narrow span; store `birdie <Hz> <dB>` in /etc/x6100/birdies.conf (also
-  in build.sh backup); ticks on the scope; auto notch through register 24 (one DNF in
-  the baseband: the strongest birdie in the passband) unless DNF is on by hand.
-  To find out: spectrum bin width per span, whether birdies move with PRE / ATT or
-  temperature, and how many there are per band on this radio.
+- Birdies: scan, store, scope ticks and automatic notch built (2026-10-25, own design;
+  the idea from the IU1WXY v0.128 release notes: their software is closed and its
+  terms forbid reproducing or imitating its screens). Host simulation of 80 m with the
+  list below: all 7 found within 3 Hz, no false hits. To check on the radio:
+  - the scan on 80 m against this IU1WXY reference scan of the same radio (2026-10-25,
+    antenna off): 3773.987 (-122 dB), 3833.664 (-118), 3834.641 (-118), 3837.014
+    (-96), 3840.834 (-112), 3908.134 (-116), 3959.191 (-120); 9 found, 7 in the photo
+  - whether the IQ centre is the dial frequency exactly (an offset would shift every
+    birdie and the notch) and whether the yellow tick sits on the scope line: the scope
+    maps bins as n - 1 - i, the scan as n - i (one bin, 187.5 Hz, apart); fix the scope
+    if the tick is right
+  - the notch: 3837.014 in LSB at dial 3838.000 = 986 Hz; does a 40 Hz notch take it
+    out, how far off may it be; then BIRDIE NOTCH on as the default
+  - birdies with PRE / ATT, and drift with temperature (scan again later)
 - S-meter calibration (signal generator): SMETER_CAL_DB is provisional (-21: -15 from
   an IC-7851 comparison, then 6 dB lower); also the overload point with PRE / ATT.
 - Codec level vs ALC test (x6100_tx codec at -40 / -30 / -20 dBFS).

@@ -127,10 +127,13 @@ Values are kept in the last state (see Settings); defaults NR 20, NB 10 / 10, no
 | BLUETOOTH | ON / OFF | at once |
 | BT PAIRING | turn right: visible as X6100 for 120 s to pair, left: hidden | at once |
 | BT DEVICE | turn: choose a paired device, hold MFK: connect / disconnect | at once |
+| BIRDIE SCAN | turn: THIS BAND / ALL BANDS, hold MFK: start (antenna off); any key stops | at once |
+| BIRDIE MARKS | ON / OFF (ON): yellow ticks on the scope | at once |
+| BIRDIE NOTCH | ON / OFF (OFF): automatic notch on a birdie in USB / LSB / AM | at once |
 
 The panel shows five rows and scrolls with the selection (position top right). WiFi and
 Bluetooth are the image's own (NetworkManager, bluez) and keep their state themselves;
-brightness, CAT and NTP go to `x6100_trx.state` at exit. A row set in `x6100_trx.conf` shows CONF and
+brightness, CAT, NTP and the birdie switches go to `x6100_trx.state` at exit. A row set in `x6100_trx.conf` shows CONF and
 cannot be changed here: the conf wins at start, so change it there.
 
 GEN long: status page (IP address, battery with charge and external supply, CAT, last
@@ -148,6 +151,7 @@ Two files in `/etc/x6100`, both in console tokens (`#` = comment):
 | `x6100_trx.conf` | you, never x6100_trx | what must be the same at every start (example: `docs/x6100_trx.conf.example`) |
 | `filters.conf` | filter panel | filter widths and shifts per mode group |
 | `memories.conf` | memory panel / console | memory channels 1-99 |
+| `birdies.conf` | birdie scan / console | birdies: `birdie <Hz> <dB>` |
 
 At start: defaults, then `x6100_trx.state`, then `x6100_trx.conf`, then the command line;
 later wins. Command-line values apply to that run only (but end up in the state at exit).
@@ -208,6 +212,8 @@ The status line starts with the VFO in use (A / B); with split, RIT or XIT it ad
 | `memr` | list the used memory channels |
 | `memr 5`, `memw 5`, `memc 5` | recall / write the VFO into / clear memory channel 5 |
 | `mem 5 7074000 lsb fil1 [tx 7076000 lsb] [dupoff \| dup- 100 \| dup+ 100] [name text]` | set a memory channel (as in memories.conf) |
+| `birdiescan [all]`, `birdiestop`, `birdies`, `birdieclear` | birdie scan (this band / all), stop, list, clear |
+| `birdiemarks`, `nobirdiemarks`, `birdienotch`, `nobirdienotch` | birdie ticks, automatic notch on / off |
 | `vfob 7074000 lsb fil1`, `vfo a\|b` | the VFO not in use; which one is in use (state file) |
 | `region r1\|r2\|r3\|nl` | transmit allocations for the TX check and the OOB marker (default r1) |
 | `oob`, `nolimit` | as `--oob` / `--no-limit` (settings file): warned at every start, red OOB on the dial |
@@ -222,6 +228,30 @@ The status line starts with the VFO in use (A / B); with split, RIT or XIT it ad
   Abort a tune with the PTT key, any other key or CAT PTT
 - transient I2C errors are retried; quits after 2 s of failures
   (the baseband keeps its last state, so audio continues)
+
+## Birdies
+
+Birdies are carriers from the radio's own oscillators: fixed narrow lines on the scope,
+a whistle in SSB. A receive-only scan finds them; disconnect the antenna or use a dummy
+load, and keep PRE / ATT as you normally listen.
+
+- Start: GEN, row BIRDIE SCAN, turn for THIS BAND or ALL BANDS, hold MFK. Console:
+  `birdiescan` (this band) or `birdiescan all`. Any key or `birdiestop` stops; TX is
+  refused while it runs, the VFO comes back at the end.
+- The scan steps 36 kHz windows over the band (80 m about 20 s, all bands about 6 min),
+  averages 32 spectrum frames per window and keeps narrow peaks at least 10 dB over the
+  noise. Progress shows on the scope (cyan); the console prints each birdie.
+- Kept in `/etc/x6100/birdies.conf` (`birdie <Hz> <dB over the noise>`); a scan of a
+  band replaces that band's entries. `birdies` lists them, `birdieclear` empties the
+  list. Part of `build.sh backup`.
+- BIRDIE MARKS: a yellow tick at the top of the RF scope at each birdie.
+- BIRDIE NOTCH (off until checked on the radio): in USB, LSB and AM the baseband notch
+  (40 Hz wide) sits on the strongest birdie in the passband and follows the tuning;
+  shown as BN on the audio scope. Not in CW, digital or FM, and not while the notch is
+  on by hand (DFL): that one wins. The baseband has one notch.
+
+Own design; the idea of a birdie scan with an automatic notch comes from the IU1WXY
+release notes (v0.128).
 
 ## Tuner memories
 
