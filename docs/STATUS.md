@@ -28,21 +28,22 @@ Verified on the radio:
   pitch 300-900 Hz (600 out of the box), sidetone 0-100 % over the full register
 - repeater duplex (AGC long panel): AUTO -100 kHz in NFM on 29.620-29.680 MHz, manual
   DUP- / DUP+ (also in SSB), console status line; no CTCSS
+- battery charge / external supply: percentage and CHARGING plausible (info line, status
+  page, console)
+- TX readings folded into the console status line
+- WiFi: connecting to a saved network from the GEN panel
 
 Built, not yet tried on the radio (2026-10-25):
 
 - tuner memories per frequency (nearest within 0.5 % of the TX frequency)
-- battery charge / external supply (info line colour, status page, console, 20 / 10 % notes)
-- TX readings folded into the console status line
 - 60 m channel mode on the MFK (FST: CH)
 - TX frequency on the display while transmitting with split or a duplex shift
 
 ## Open items to check on the radio
 
 1. Tuner memories: a tune stores, a retune nearby replaces, recall within the window.
-2. Battery: percentage and CHARGING plausible on external power (the baseband's own
-   charge flag is not identified; CHARGING = external power and below 100 %).
-3. GEN WiFi / Bluetooth rows: switch, connect a saved network, pair a headset (may need a
+2. Battery low notes at 20 / 10 % (on battery only).
+3. GEN WiFi / Bluetooth rows: WiFi / Bluetooth on / off, pair a headset (may need a
    bluez agent; see S39btpairings), panel stutter from polling.
 4. wfview over CAT: VFO A / B, split, duplex, RIT / XIT, band buttons, keyer levels;
    ATT / PRE (socat trace against IU1WXY).
