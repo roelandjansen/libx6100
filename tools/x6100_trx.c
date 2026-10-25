@@ -1126,7 +1126,7 @@ typedef struct
 static const kpar_t g_kpar[] = {
 	{ "KEY TYPE", "keytype", 0, 2, 1, 0 },
 	{ "SPEED", "wpm", 5, 50, 1, 20 },
-	{ "IAMBIC", "iambic", 0, 1, 1, 0 },
+	{ "IAMBIC", "iambic", 0, 1, 1, 1 },
 	{ "PITCH", "cwpitch", 300, 900, 10, 600 },
 	{ "SIDETONE", "cwvol", 0, 100, 5, 20 },
 	{ "BREAK-IN", "qsk", 0, 1000, 10, 100 },

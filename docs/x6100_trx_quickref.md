@@ -250,7 +250,7 @@ or 10 s idle closes. The baseband keys and times the CW itself (registers 33 / 3
 |---|---|
 | KEY TYPE | STRAIGHT, PADDLE (dot on the left paddle), PADDLE REV (straight) |
 | SPEED | 5-50 WPM (20) |
-| IAMBIC | A / B (A) |
+| IAMBIC | A / B (B, as Icom) |
 | PITCH | 300-900 Hz in 10 Hz steps (600): sidetone and CW pitch, the IC-705 range |
 | SIDETONE | volume 0-100 % in 5 % steps (20 %), full register range |
 | BREAK-IN | delay 0-1000 ms in 10 ms steps (100) |
