@@ -154,6 +154,9 @@ settings_seed() {
 		if [[ -f "${G_CONFIG}/${L_FILE}" ]]; then
 			scp -q -- "${G_CONFIG}/${L_FILE}" "${G_HOST}:${C_RADIO_SETTINGS}/${L_FILE}"
 			printf 'restored %s from %s\n' "${L_FILE}" "${G_CONFIG}"
+		elif [[ "${L_FILE}" == memories.conf ]]; then
+			scp -q -- docs/x6100_memories.conf.example "${G_HOST}:${C_RADIO_SETTINGS}/${L_FILE}"
+			printf 'installed %s from the example\n' "${L_FILE}"
 		elif [[ "${L_FILE}" == x6100_trx.conf ]]; then
 			scp -q -- docs/x6100_trx.conf.example "${G_HOST}:${C_RADIO_SETTINGS}/${L_FILE}"
 			printf 'installed %s from the example\n' "${L_FILE}"

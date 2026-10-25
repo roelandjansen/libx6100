@@ -154,7 +154,7 @@ A new SD card image wipes `/etc/x6100`. On the PC:
 sh ./build.sh backup     # radio -> ~/.config/x6100 (or $X6100_CONFIG), WiFi profiles included
 sh ./build.sh restore    # ~/.config/x6100 -> radio, overwriting; restarts NetworkManager
                          # for the WiFi profiles (an ssh session over WiFi drops)
-sh ./build.sh deploy     # also puts back settings the radio lacks (conf: the example)
+sh ./build.sh deploy     # also puts back settings the radio lacks (conf, memories: the examples)
 ```
 
 ## Console (ssh)
@@ -233,6 +233,17 @@ mem 5 29620000 nfm fil2 tx 29520000 nfm name RPT 10m
 ```
 
 Names are set in that file or from the console (`mem ...`); the radio has no keyboard.
+`build.sh deploy` installs `docs/x6100_memories.conf.example` (FT8 on 160-6 m, a 60 m
+spot, a 10 m repeater as a split channel) when the radio has no memories.conf and
+there is no local backup.
+
+`memr` on the console lists them:
+
+```
+ 6   14074.000 kHz USB  fil1  FT8 20m
+20   29620.000 kHz NFM  fil1  TX 29520.000 NFM  10m RPT 29.62
+13 of 99 channels used
+```
 
 ## Split, RIT / XIT
 

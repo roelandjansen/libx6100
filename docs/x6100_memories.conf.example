@@ -1,0 +1,26 @@
+# x6100_trx memory channels: /etc/x6100/memories.conf
+#
+# One channel per line, 1-99:
+#   mem <n> <Hz> <mode> fil<n> [tx <Hz> <mode>] [name <text>]
+# mode: lsb usb cw cwr am nfm; fil1-3 as on the radio; tx ... makes it a split
+# channel (TX frequency and mode); name runs to the end of the line, 15 characters.
+# x6100_trx rewrites this file on every write / clear from the memory panel
+# (V/M) or the console (memw, memc), without these comments. memr lists the channels.
+#
+# Example set: FT8 dial frequencies (USB), a 60 m spot, and a 10 m FM repeater pair
+# as a split channel. Check repeater frequencies against your national list.
+
+mem 1 1840000 usb fil1 name FT8 160m
+mem 2 3573000 usb fil1 name FT8 80m
+mem 3 5357000 usb fil1 name FT8 60m
+mem 4 7074000 usb fil1 name FT8 40m
+mem 5 10136000 usb fil1 name FT8 30m
+mem 6 14074000 usb fil1 name FT8 20m
+mem 7 18100000 usb fil1 name FT8 17m
+mem 8 21074000 usb fil1 name FT8 15m
+mem 9 24915000 usb fil1 name FT8 12m
+mem 10 28074000 usb fil1 name FT8 10m
+mem 11 50313000 usb fil1 name FT8 6m
+
+mem 20 29620000 nfm fil1 tx 29520000 nfm name 10m RPT 29.62
+mem 21 29500000 nfm fil1 name 10m FM simplex
