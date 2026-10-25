@@ -32,11 +32,11 @@ Verified on the radio:
   page, console)
 - TX readings folded into the console status line
 - WiFi: connecting to a saved network from the GEN panel
+- 60 m channel mode on the MFK (FST: CH)
 
 Built, not yet tried on the radio (2026-10-25):
 
 - tuner memories per frequency (nearest within 0.5 % of the TX frequency)
-- 60 m channel mode on the MFK (FST: CH)
 - TX frequency on the display while transmitting with split or a duplex shift
 
 ## Open items to check on the radio
