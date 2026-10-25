@@ -46,7 +46,7 @@ Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
 | F4 | TX meter: PO / SWR / ALC | |
 | F5 | filter FIL1 / FIL2 / FIL3 | filter panel |
 | PTT | hold = TX; tap (< 400 ms) = latch, next press drops | |
-| ATU | tuner in / out | tune (keys TX at tune power) |
+| ATU | tuner in / out | tune (keys TX at tune power); the result becomes a tuner memory |
 | LOCK | lock knobs and keys (PTT still works) | |
 | PWR | display on / off | release after 1.5-4 s: quit; hold 4 s: power off (as the stock UI). TX is dropped and filters saved first |
 | GEN | settings panel: brightness, CAT, NTP (MFK turn = change, push = next row, long = default; GEN, other key or 10 s idle closes) | status page: IP, uptime, battery, CAT, NTP result, build (any key or 30 s closes) |
@@ -140,7 +140,7 @@ Two files in `/etc/x6100`, both in console tokens (`#` = comment):
 
 | File | Written by | Holds |
 |---|---|---|
-| `x6100_trx.state` | x6100_trx, at exit | last state: frequency, mode, filter, VFO B, split, RIT / XIT, volume / mute, gains, AGC per mode group, DSP, scope, REF, band memories, tuned ATU networks |
+| `x6100_trx.state` | x6100_trx, at exit | last state: frequency, mode, filter, VFO B, split, RIT / XIT, volume / mute, gains, AGC per mode group, DSP, scope, REF, band memories, tuner memories |
 | `x6100_trx.conf` | you, never x6100_trx | what must be the same at every start (example: `docs/x6100_trx.conf.example`) |
 | `filters.conf` | filter panel | filter widths and shifts per mode group |
 | `memories.conf` | memory panel / console | memory channels 1-99 |
@@ -189,7 +189,7 @@ The status line starts with the VFO in use (A / B); with split, RIT or XIT it ad
 | `span 96000-3000` | scope span in Hz |
 | `band 40m 7074000` | remembered frequency of a band |
 | `agc ssb|ssbd|cw|am|fm off|slow|fast|auto` | AGC of a mode group |
-| `atunet 40m L C S` | tuned network of a band |
+| `atumem 7120000 L C S` | a tuner memory (state file; `atunet 40m L C S` from older ones still loads) |
 | `mute nomute` | audio mute |
 | `cat 19200`, `cat off` | CI-V at start (settings file; `--cat` overrides) |
 | `ntp <server>`, `ntp on`, `ntp off` | NTP sync at start (settings file) |
@@ -215,6 +215,21 @@ The status line starts with the VFO in use (A / B); with split, RIT or XIT it ad
   Abort a tune with the PTT key, any other key or CAT PTT
 - transient I2C errors are retried; quits after 2 s of failures
   (the baseband keeps its last state, so audio continues)
+
+## Tuner memories
+
+Every tune (ATU long, CAT) stores its network (L, C, S) with the TX frequency it was
+tuned on, up to 200. With the tuner in, x6100_trx sets the network of the memory
+nearest the TX frequency, within 0.5 % (9 kHz at 1.8 MHz, 35 kHz at 7 MHz, 70 kHz
+at 14 MHz, 140 kHz at 28 MHz); outside that the tuner goes straight through until
+you tune there. A new tune within half that window replaces the old memory. Split
+and XIT count: the TX frequency decides. The console reports each tune:
+
+```
+ATU tuned at 7123.000 kHz: L=12 C=34 S=1 (7 tuner memories)
+```
+
+Kept in `x6100_trx.state` as `atumem <Hz> <L> <C> <S>` (and so in `build.sh backup`).
 
 ## Memory channels (V/M)
 

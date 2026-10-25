@@ -26,7 +26,7 @@
 #   ref -30-30 aref -30-30          RF / audio scope reference level (dB)
 #   band 40m 7074000                remembered frequency of a band
 #   agc ssb|ssbd|cw|am|fm <agc>     AGC of a mode group
-#   atunet 40m L C S                tuned network of a band
+#   atumem 7120000 L C S            a tuner memory (normally in the state file)
 #   mute nomute                     audio mute
 #   cat 19200 | cat off             CI-V on ttyS2 (DEV USB-C), as an IC-705; start only
 #   ntp pool.ntp.org | on | off     server for the one NTP sync at start

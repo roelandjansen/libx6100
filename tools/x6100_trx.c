@@ -225,8 +225,8 @@ typedef struct
 	uint32_t tune_ms;	/* how long the last tune took */
 	double tune_pwr;	/* last PO and SWR seen while tuning */
 	double tune_swr;
-	x6100_atu_t atu_net[11];	/* tuned network per band */
-	bool atu_valid[11];
+	x6100_atu_t atu_last;	/* network of the last tune (tune panel); memories: g_atum */
+	bool atu_last_valid;
 	const char *warn;	/* last TX refusal / trip reason, shown until next TX */
 
 	//
@@ -656,6 +656,66 @@ static x6100_mode_t tx_mode(const rx_t *rx)
 // otherwise the RX ones. Called on every pass of the main loop.
 //
 
+//
+// Tuner memories: every tune stores its network (L, C, S) with the frequency it was
+// tuned on; the network for the TX frequency is the nearest memory within 0.5 % of
+// it (9 kHz at 1.8 MHz, 35 kHz at 7 MHz, 140 kHz at 28 MHz), else straight through.
+// A tune near an existing memory (within half that) replaces it. Kept in the state
+// file as atumem <Hz> <L> <C> <S>.
+//
+
+#define ATU_MEMS	200
+
+typedef struct
+{
+	uint32_t hz;
+	x6100_atu_t net;
+} atum_t;
+
+static atum_t g_atum[ATU_MEMS];
+static int g_natum;
+
+static const atum_t *atu_find(uint32_t hz)
+{
+	const atum_t *best = NULL;
+	uint32_t best_d = hz / 200 + 1;
+
+	for (int i = 0; i < g_natum; i++) {
+		uint32_t d = g_atum[i].hz > hz ? g_atum[i].hz - hz : hz - g_atum[i].hz;
+
+		if (d < best_d) {
+			best = &g_atum[i];
+			best_d = d;
+		}
+	}
+
+	return best;
+}
+
+static void atu_store(uint32_t hz, const x6100_atu_t *net)
+{
+	int i;
+
+	for (i = 0; i < g_natum; i++) {
+		uint32_t d = g_atum[i].hz > hz ? g_atum[i].hz - hz : hz - g_atum[i].hz;
+
+		if (d <= hz / 400)
+			break;
+	}
+
+	if (i == g_natum) {
+		if (g_natum == ATU_MEMS) {	/* full: the oldest goes */
+			memmove(&g_atum[0], &g_atum[1], sizeof(g_atum[0]) * (ATU_MEMS - 1));
+			i = ATU_MEMS - 1;
+		} else {
+			g_natum++;
+		}
+	}
+
+	g_atum[i].hz = hz;
+	g_atum[i].net = *net;
+}
+
 static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 {
 	uint32_t low, high;
@@ -694,10 +754,12 @@ static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 	x6100_cal_apply(ctl, cal, x6100_band_index(hz));
 
 	//
-	// Tuner: stored network for this band, or straight through
+	// Tuner: the memory nearest the TX frequency, or straight through
 	//
-	if (rx->atu_on && rx->band >= 0 && rx->atu_valid[rx->band]) {
-		x6100_atu_set_network(ctl, &rx->atu_net[rx->band]);
+	const atum_t *am = rx->atu_on ? atu_find(tx_hz(rx)) : NULL;
+
+	if (am != NULL) {
+		x6100_atu_set_network(ctl, &am->net);
 	} else {
 		x6100_atu_t none = { 0, 0, 0 };
 
@@ -3373,8 +3435,8 @@ static void draw_tune_panel(x6100_lcd_t *lcd, const rx_t *rx, const screen_t *sc
 		x6100_lcd_text(lcd, px + 14, py + ph - 24, 2, s, amber);
 		x6100_lcd_text(lcd, px + pw - 12 - x6100_lcd_text_width("ANY KEY: ABORT", 1), py + ph - 20, 1,
 			"ANY KEY: ABORT", dim);
-	} else if (rx->band >= 0 && rx->atu_valid[rx->band]) {
-		const x6100_atu_t *n = &rx->atu_net[rx->band];
+	} else if (rx->atu_last_valid) {
+		const x6100_atu_t *n = &rx->atu_last;
 		char lb[9], cb[9];
 
 		for (int i = 0; i < 8; i++) {
@@ -4703,24 +4765,30 @@ static bool console_line(rx_t *rx, char *line)
 			continue;
 		}
 
-		// atunet 40m L C S: tuned network of a band (as the tuner found it)
-		if (strcasecmp(t, "atunet") == 0) {
-			const char *bs = strtok(NULL, " \t\r\n");
+		// atumem <Hz> L C S: a tuner memory; atunet <band> L C S (older state files):
+		// the same, at the band's default frequency
+		if (strcasecmp(t, "atumem") == 0 || strcasecmp(t, "atunet") == 0) {
+			bool old = strcasecmp(t, "atunet") == 0;
+			const char *fs = strtok(NULL, " \t\r\n");
 			const char *ls = strtok(NULL, " \t\r\n"), *cs = strtok(NULL, " \t\r\n"), *ss = strtok(NULL, " \t\r\n");
-			int b = -1;
+			uint32_t hz = 0;
+			x6100_atu_t net;
 
-			for (int i = 0; bs != NULL && i < BAND_COUNT; i++)
-				b = strcasecmp(bs, g_bands[i].name) == 0 ? i : b;
+			for (int i = 0; old && fs != NULL && i < BAND_COUNT; i++)
+				hz = strcasecmp(fs, g_bands[i].name) == 0 ? g_bands[i].def : hz;
 
-			if (b < 0 || ls == NULL || cs == NULL || ss == NULL) {
-				fprintf(stderr, "\natunet: <band> <L> <C> <S>\n");
+			if (!old && fs != NULL)
+				hz = (uint32_t) strtoul(fs, NULL, 10);
+
+			if (hz == 0 || ls == NULL || cs == NULL || ss == NULL) {
+				fprintf(stderr, "\n%s: <%s> <L> <C> <S>\n", t, old ? "band" : "Hz");
 				continue;
 			}
 
-			rx->atu_net[b].l = (uint8_t) atoi(ls);
-			rx->atu_net[b].c = (uint8_t) atoi(cs);
-			rx->atu_net[b].s = (uint8_t) atoi(ss);
-			rx->atu_valid[b] = true;
+			net.l = (uint8_t) atoi(ls);
+			net.c = (uint8_t) atoi(cs);
+			net.s = (uint8_t) atoi(ss);
+			atu_store(hz, &net);
 			changed = true;
 			continue;
 		}
@@ -4834,10 +4902,8 @@ static void state_save(const rx_t *rx)
 	for (int i = 0; i < BAND_COUNT; i++)
 		fprintf(fp, "band %s %u\n", g_bands[i].name, (unsigned) rx->band_freq[i]);
 
-	for (int i = 0; i < BAND_COUNT; i++) {
-		if (rx->atu_valid[i])
-			fprintf(fp, "atunet %s %u %u %u\n", g_bands[i].name, rx->atu_net[i].l, rx->atu_net[i].c, rx->atu_net[i].s);
-	}
+	for (int i = 0; i < g_natum; i++)
+		fprintf(fp, "atumem %u %u %u %u\n", (unsigned) g_atum[i].hz, g_atum[i].net.l, g_atum[i].net.c, g_atum[i].net.s);
 
 	fprintf(fp, "\n");
 
@@ -6363,12 +6429,12 @@ int main(int argc, char **argv)
 					rx.tune_done = t;
 					rx.tune_ms = (uint32_t) (t - rx.tune_since);
 
-					if (rx.band >= 0) {
-						x6100_atu_from_frame(&frame, &rx.atu_net[rx.band]);
-						rx.atu_valid[rx.band] = true;
-						printf("\nATU tuned: L=%u C=%u S=%u\n", rx.atu_net[rx.band].l, rx.atu_net[rx.band].c,
-							rx.atu_net[rx.band].s);
-					}
+					// The network becomes the tuner memory for the TX frequency
+					x6100_atu_from_frame(&frame, &rx.atu_last);
+					rx.atu_last_valid = true;
+					atu_store(tx_hz(&rx), &rx.atu_last);
+					printf("\nATU tuned at %.3f kHz: L=%u C=%u S=%u (%d tuner memories)\n", tx_hz(&rx) / 1000.0,
+						rx.atu_last.l, rx.atu_last.c, rx.atu_last.s, g_natum);
 
 					rx.atu_on = true;
 					apply(&ctl, &cal, &rx);
