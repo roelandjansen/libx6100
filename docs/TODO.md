@@ -9,7 +9,12 @@ Status: 2026-10-25 (after v0.9.0). Summary and next steps: `STATUS.md`.
 ## Radio
 
 - TX ranges config file and transverter profile (frequency offset, TX enable).
-- 10 m repeater split (FM, -100 kHz shift, CTCSS) on top of split.
+- Repeater duplex (AUTO / OFF / DUP- / DUP+, AGC long): test on the radio (TX on
+  29.520 from 29.620 with PTT key, hand mic, CAT; scope line; memories; CI-V 0F 1x).
+- CTCSS for the repeaters: no tone encoder known in the baseband, and the microphone
+  goes to the baseband directly (PTT + codec audio does not mix). To look for: an
+  unmapped bit in registers 21 / 36 / 38 (stock UI / IU1WXY trace in FM), or a
+  baseband with a sub-audible tone; else codec TX with Linux mic capture (none yet).
 - RIT / XIT: test on the radio (panel, offset on RX and TX, scope lines, CI-V 21).
 - Hand mic PTT with split: x6100_trx follows the baseband TX flag (verified), the first
   ms go out on the RX side; the baseband split flag (register 12 b1, VFO A RX / VFO B TX)

@@ -33,6 +33,8 @@ Built, not yet tried on the radio (2026-10-25):
 - battery charge / external supply (info line colour, status page, console, 20 / 10 % notes)
 - TX readings folded into the console status line
 - 60 m channel mode on the MFK (FST: CH)
+- repeater duplex (AGC long panel: AUTO = -100 kHz in NFM on 29.620-29.680 MHz, OFF,
+  DUP- / DUP+ with a shift; state, memories, console, CI-V 0F 10-12); no CTCSS
 
 ## Open items to check on the radio
 
@@ -41,19 +43,21 @@ Built, not yet tried on the radio (2026-10-25):
    charge flag is not identified; CHARGING = external power and below 100 %).
 3. GEN WiFi / Bluetooth rows: switch, connect a saved network, pair a headset (may need a
    bluez agent; see S39btpairings), panel stutter from polling.
-4. wfview over CAT: VFO A / B, split, RIT / XIT, band buttons, keyer levels; ATT / PRE
-   (socat trace against IU1WXY).
+4. wfview over CAT: VFO A / B, split, duplex, RIT / XIT, band buttons, keyer levels;
+   ATT / PRE (socat trace against IU1WXY).
+5. Repeater duplex: AUTO on 29.620-29.680 NFM keys on RX - 100 kHz (PTT key, hand mic,
+   CAT PTT), DUP- / DUP+ with another shift, scope TX line, a memory with dup- 100.
 
 ## Next steps (suggested order)
 
 1. Radio checks above.
-2. 10 m repeater shift (FM, -100 kHz, CTCSS) on top of split and memories.
-3. TX panel under GEN: mic select and gain, compressor, VOX, monitor, squelch.
-4. CI-V memory commands (08-0B, 1A 00) and 1A 05 0131 transceive switch.
-5. Band edge markers on the scope from the region table.
-6. liquid-dsp in use: network audio / RADE (Icom LAN server design in
+2. TX panel under GEN: mic select and gain, compressor, VOX, monitor, squelch.
+3. CI-V memory commands (08-0B, 1A 00) and 1A 05 0131 transceive switch.
+4. Band edge markers on the scope from the region table.
+5. liquid-dsp in use: network audio / RADE (Icom LAN server design in
    `x6100_netaudio_design.md`), recordings, RX / TX equaliser.
-7. Measurements: S-meter calibration, codec level against ALC.
+6. Measurements: S-meter calibration, codec level against ALC.
+7. CTCSS for the repeaters (see TODO: no tone encoder known, mic bypasses Linux).
 
 ## Working notes
 

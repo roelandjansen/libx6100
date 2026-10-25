@@ -144,7 +144,7 @@ Two files in `/etc/x6100`, both in console tokens (`#` = comment):
 
 | File | Written by | Holds |
 |---|---|---|
-| `x6100_trx.state` | x6100_trx, at exit | last state: frequency, mode, filter, VFO B, split, RIT / XIT, keyer, volume / mute, gains, AGC per mode group, DSP, scope, REF, band memories, tuner memories |
+| `x6100_trx.state` | x6100_trx, at exit | last state: frequency, mode, filter, VFO B, split, RIT / XIT, duplex, keyer, volume / mute, gains, AGC per mode group, DSP, scope, REF, band memories, tuner memories |
 | `x6100_trx.conf` | you, never x6100_trx | what must be the same at every start (example: `docs/x6100_trx.conf.example`) |
 | `filters.conf` | filter panel | filter widths and shifts per mode group |
 | `memories.conf` | memory panel / console | memory channels 1-99 |
@@ -172,7 +172,7 @@ battery (`iq -90.6 dB  bat 8.2V 87%`, `ext` on external power), while transmitti
 `TX 5.0 W  swr 1.2  alc 3`.
 
 The status line starts with the VFO in use (A / B); with split, RIT or XIT it adds
-`RX 7123.000 TX 7115.000 LSB SPLIT`.
+`RX 7123.000 TX 7115.000 LSB SPLIT`; with a duplex shift `... NFM DUP-`.
 
 | Token | Effect |
 |---|---|
@@ -203,10 +203,11 @@ The status line starts with the VFO in use (A / B); with split, RIT or XIT it ad
 | `ab`, `a=b` | VFO A <-> B, A=B |
 | `txsplit`, `notxsplit` | split on / off |
 | `rit`, `norit`, `xit`, `noxit`, `ritofs -9990-9990` | RIT / XIT on / off, offset in Hz |
+| `dupauto`, `dupoff`, `dup-`, `dup+`, `dupshift 10-10000` | repeater duplex, shift in kHz |
 | `step ch` | 60 m channel steps |
 | `memr` | list the used memory channels |
 | `memr 5`, `memw 5`, `memc 5` | recall / write the VFO into / clear memory channel 5 |
-| `mem 5 7074000 lsb fil1 [tx 7076000 lsb] [name text]` | set a memory channel (as in memories.conf) |
+| `mem 5 7074000 lsb fil1 [tx 7076000 lsb] [dupoff \| dup- 100 \| dup+ 100] [name text]` | set a memory channel (as in memories.conf) |
 | `vfob 7074000 lsb fil1`, `vfo a\|b` | the VFO not in use; which one is in use (state file) |
 | `region r1\|r2\|r3\|nl` | transmit allocations for the TX check and the OOB marker (default r1) |
 | `oob`, `nolimit` | as `--oob` / `--no-limit` (settings file): warned at every start, red OOB on the dial |
@@ -268,7 +269,7 @@ Kept in the state file. Console: `keytype straight|paddle|rev`, `wpm 22`, `iambi
 |---|---|
 | V/M | open / close the memory panel |
 | MFK turn | channel 1-99; a used channel is tuned at once (listen while scrolling) |
-| MFK long | write the VFO in use into the channel (frequency, mode, filter; with split also the TX side); a rewrite keeps the name |
+| MFK long | write the VFO in use into the channel (frequency, mode, filter; with split also the TX side; duplex unless AUTO); a rewrite keeps the name |
 | MFK push, twice within 3 s | clear the channel |
 | other key, 10 s idle | close; the VFO stays on the last channel tuned |
 
@@ -293,16 +294,30 @@ there is no local backup.
 13 of 99 channels used
 ```
 
-## Split, RIT / XIT
+## Split, repeater duplex, RIT / XIT
 
 ![split](images/x6100_trx_splittx.png)
 
 - V/M long: split. RX on the VFO in use (+ RIT), TX on the other VFO with its mode and
   filter (+ XIT). The TX check and the OOB marker use the TX frequency.
-- AGC long: RIT / XIT panel (green). One offset for both, as on Icom radios: MFK turn
-  = offset in 10 Hz steps (±9990), on the RIT / XIT rows on (right) / off (left); MFK
-  push = next row; MFK long = offset 0 (CLEAR); AGC long, other key or 10 s closes.
-- Top left of the spectrum (amber): `SPLIT TX 7.120.00 LSB  RIT +120` while in use; on
+- AGC long: RIT / XIT / DUP panel (green). One offset for both, as on Icom radios: MFK
+  turn = offset in 10 Hz steps (±9990), on the RIT / XIT rows on (right) / off (left);
+  MFK push = next row; MFK long = offset 0 (CLEAR); AGC long, other key or 10 s closes.
+- Repeater duplex, rows DUPLEX and SHIFT of the same panel: TX = RX - / + the shift,
+  without split.
+
+  | DUPLEX | TX |
+  |---|---|
+  | AUTO (default) | NFM on 29.620-29.680 MHz (10 m repeater outputs): RX - 100 kHz, shown as `AUTO -100 KHZ`; elsewhere simplex |
+  | OFF | always simplex |
+  | DUP- / DUP+ | RX - / + SHIFT (10-10000 kHz in 10 kHz steps, 100), any band and mode |
+
+  MFK long on DUPLEX = AUTO, on SHIFT = 100 kHz. Split takes precedence over duplex.
+  Tuning, the tuner memories, the TX check and the OOB marker use the TX frequency, as
+  with split. No CTCSS: the baseband has no known tone encoder and the microphone
+  audio does not pass through Linux, so repeaters that need a tone cannot be opened yet.
+- Top left of the spectrum (amber): `SPLIT TX 7.120.00 LSB  RIT +120` or
+  `DUP- TX 29.520.00` while in use; on
   the RF scope a green line at the RX frequency and a red one, marked TX, at the TX
   frequency (the receive passband shading follows RIT).
 - The baseband gets the TX frequency and mode just before PTT goes out and keeps it
@@ -311,7 +326,8 @@ there is no local backup.
   as the baseband reports TX, so the first few ms go out on the RX frequency (avoid
   the hand mic PTT with split across a band edge). Verified on the radio 2026-10-24:
   PTT key and hand mic both transmit on the split TX frequency.
-- CI-V: 0F (split), 21 00 / 01 / 02 (offset, RIT, XIT).
+- CI-V: 0F 00 / 01 (split), 0F 10 / 11 / 12 (simplex, DUP-, DUP+), 21 00 / 01 / 02
+  (offset, RIT, XIT).
 
 ## 60 m channels (FST: CH)
 

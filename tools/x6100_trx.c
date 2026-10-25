@@ -201,8 +201,10 @@ typedef struct
 	int rit_hz;		/* RIT / XIT offset, Hz (Icom: one offset, RIT and XIT on / off) */
 	bool rit;
 	bool xit;
-	bool tedit;		/* RIT / XIT panel (AGC long) */
-	int tedit_par;		/* 0 offset, 1 RIT, 2 XIT */
+	int dup;		/* repeater duplex: DUP_AUTO, DUP_OFF, DUP_MINUS, DUP_PLUS */
+	int dup_khz;		/* duplex shift for DUP_MINUS / DUP_PLUS, kHz */
+	bool tedit;		/* RIT / XIT / duplex panel (AGC long) */
+	int tedit_par;		/* 0 offset, 1 RIT, 2 XIT, 3 duplex, 4 shift */
 	uint64_t tedit_since;
 	bool medit;		/* memory panel (V/M short) */
 	int medit_ch;		/* selected channel 1-99 */
@@ -650,8 +652,44 @@ static void fil_default(fgroup_t g, int n)
 static bool g_allow_oob;	/* --oob: skip the band check, enable TX in the baseband everywhere */
 
 //
+// Repeater duplex: TX = RX - / + the shift. AUTO (the default) gives -100 kHz in
+// NFM on the 10 m repeater outputs (29.620-29.680 MHz, IARU and US band plans),
+// simplex elsewhere; OFF is always simplex. Split takes precedence: its TX VFO is
+// the TX frequency as set. No CTCSS: the baseband has no tone encoder that is
+// known, and the microphone audio does not pass through Linux.
+//
+
+enum { DUP_AUTO, DUP_OFF, DUP_MINUS, DUP_PLUS, DUP_COUNT };
+
+#define DUP_KHZ_DEF	100
+#define DUP_KHZ_MAX	10000
+#define RPT10_LO	29615000u	/* 10 m repeater outputs, with a few kHz off-tune */
+#define RPT10_HI	29685000u
+#define RPT10_SHIFT	(-100000)
+
+static const char *g_dup_tok[DUP_COUNT] = { "dupauto", "dupoff", "dup-", "dup+" };	/* console / state */
+
+static int dup_shift(const rx_t *rx)
+{
+	if (rx->split)
+		return 0;
+
+	switch (rx->dup) {
+	case DUP_MINUS:
+		return -rx->dup_khz * 1000;
+	case DUP_PLUS:
+		return rx->dup_khz * 1000;
+	case DUP_AUTO:
+		return rx->mode == X6100_MODE_NFM && rx->freq >= RPT10_LO && rx->freq <= RPT10_HI ? RPT10_SHIFT : 0;
+	default:
+		return 0;
+	}
+}
+
+//
 // RX and TX frequency: RX = the VFO in use + RIT; TX = the other VFO with split,
-// else the VFO in use, + XIT (one offset for both, as on Icom radios)
+// else the VFO in use + the duplex shift, + XIT (one offset for both, as on Icom
+// radios)
 //
 
 static uint32_t rx_hz(const rx_t *rx)
@@ -661,7 +699,13 @@ static uint32_t rx_hz(const rx_t *rx)
 
 static uint32_t tx_hz(const rx_t *rx)
 {
-	return (uint32_t) ((int64_t) (rx->split ? rx->b_freq : rx->freq) + (rx->xit ? rx->rit_hz : 0));
+	return (uint32_t) ((int64_t) (rx->split ? rx->b_freq : rx->freq) + dup_shift(rx) + (rx->xit ? rx->rit_hz : 0));
+}
+
+// RX and TX apart: both get a line on the scope and a note
+static bool tx_apart(const rx_t *rx)
+{
+	return rx->split || rx->rit || rx->xit || dup_shift(rx) != 0;
 }
 
 static x6100_mode_t tx_mode(const rx_t *rx)
@@ -846,10 +890,10 @@ static void show(const rx_t *rx)
 	else
 		snprintf(st, sizeof(st), "%4d", rx->step);
 
-	// RX / TX apart (split, RIT, XIT): both frequencies, TX with its mode
-	if (rx->split || rx->rit || rx->xit)
+	// RX / TX apart (split, RIT, XIT, duplex): both frequencies, TX with its mode
+	if (tx_apart(rx))
 		snprintf(sp, sizeof(sp), "  RX %.3f TX %.3f %s%s", rx_hz(rx) / 1000.0, tx_hz(rx) / 1000.0,
-			mode_name(tx_mode(rx)), rx->split ? " SPLIT" : "");
+			mode_name(tx_mode(rx)), rx->split ? " SPLIT" : dup_shift(rx) < 0 ? " DUP-" : dup_shift(rx) > 0 ? " DUP+" : "");
 
 	char line[256];
 	struct winsize ws;
@@ -944,10 +988,12 @@ static void vfo_equal(rx_t *rx)
 
 //
 // Memory channels 1-99 (V/M short: memory panel). A channel holds frequency, mode,
-// filter, split with its TX frequency and mode, and a name. Kept in MEM_PATH as
-// console tokens, one channel per line, written on every change:
+// filter, split with its TX frequency and mode, duplex and a name. Kept in MEM_PATH
+// as console tokens, one channel per line, written on every change:
 //   mem 5 7074000 usb fil1 tx 7076000 usb name FT8 40m
-// (tx ... only for split channels; name runs to the end of the line)
+//   mem 22 29660000 nfm fil1 dup- 100 name RPT 29.66
+// (tx ... only for split channels; dupoff, or dup- / dup+ with the shift in kHz,
+// only when not AUTO; name runs to the end of the line)
 //
 
 #define MEM_PATH	"/etc/x6100/memories.conf"
@@ -962,6 +1008,8 @@ typedef struct
 	bool split;
 	uint32_t tx_hz;
 	x6100_mode_t tx_mode;
+	int dup;		/* duplex; DUP_AUTO when the line has none */
+	int dup_khz;
 	char name[16];
 } mem_t;
 
@@ -979,7 +1027,7 @@ static void mem_save(void)
 		return;
 	}
 
-	fprintf(fp, "# x6100_trx memory channels: mem <n> <Hz> <mode> fil<n> [tx <Hz> <mode>] [name <text>]\n");
+	fprintf(fp, "# x6100_trx memory channels: mem <n> <Hz> <mode> fil<n> [tx <Hz> <mode>] [dupoff | dup- <kHz> | dup+ <kHz>] [name <text>]\n");
 
 	for (int i = 1; i <= MEM_COUNT; i++) {
 		const mem_t *m = &g_mem[i];
@@ -992,6 +1040,11 @@ static void mem_save(void)
 		if (m->split)
 			fprintf(fp, " tx %u %s", (unsigned) m->tx_hz, mn[m->tx_mode]);
 
+		if (m->dup == DUP_OFF)
+			fprintf(fp, " dupoff");
+		else if (m->dup == DUP_MINUS || m->dup == DUP_PLUS)
+			fprintf(fp, " %s %d", g_dup_tok[m->dup], m->dup_khz);
+
 		if (m->name[0] != '\0')
 			fprintf(fp, " name %s", m->name);
 
@@ -1002,7 +1055,7 @@ static void mem_save(void)
 		fprintf(stderr, "\nmemories: cannot save %s: %s\n", MEM_PATH, strerror(errno));
 }
 
-// Current VFO (and split TX side) into channel n
+// Current VFO (split TX side, duplex) into channel n
 static void mem_write(const rx_t *rx, int n)
 {
 	mem_t *m = &g_mem[n];
@@ -1017,6 +1070,8 @@ static void mem_write(const rx_t *rx, int n)
 	m->split = rx->split;
 	m->tx_hz = rx->b_freq;
 	m->tx_mode = rx->b_mode;
+	m->dup = rx->dup;
+	m->dup_khz = rx->dup_khz;
 	snprintf(m->name, sizeof(m->name), "%s", name);
 	mem_save();
 }
@@ -1033,6 +1088,10 @@ static bool mem_recall(rx_t *rx, int n)
 	rx->mode = m->mode;
 	rx->fil = m->fil;
 	rx->split = m->split;
+	rx->dup = m->dup;
+
+	if (m->dup == DUP_MINUS || m->dup == DUP_PLUS)
+		rx->dup_khz = m->dup_khz;
 
 	if (m->split) {
 		rx->b_freq = m->tx_hz;
@@ -1392,14 +1451,14 @@ static bool on_key(rx_t *rx, int key)
 	}
 
 	//
-	// RIT / XIT panel open: MFK push selects offset / RIT / XIT; any other key
+	// RIT / XIT panel open: MFK push selects the next row; any other key
 	// closes it and does its normal job (AGC long closes it too)
 	//
 	if (rx->tedit) {
 		rx->tedit_since = now_ms();
 
 		if (key == X6100_KEY_MFK_PUSH) {
-			rx->tedit_par = (rx->tedit_par + 1) % 3;
+			rx->tedit_par = (rx->tedit_par + 1) % 5;
 			return true;
 		}
 
@@ -1630,7 +1689,13 @@ static bool on_long_key(rx_t *rx, int key)
 		}
 
 		if (rx->tedit) {
-			rx->rit_hz = 0;	/* clear the offset, as Icom's CLEAR */
+			if (rx->tedit_par == 3)
+				rx->dup = DUP_AUTO;
+			else if (rx->tedit_par == 4)
+				rx->dup_khz = DUP_KHZ_DEF;
+			else
+				rx->rit_hz = 0;	/* clear the offset, as Icom's CLEAR */
+
 			rx->tedit_since = now_ms();
 			return true;
 		}
@@ -1810,8 +1875,12 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 				rx->rit_hz = clampi(rx->rit_hz + value * X6100_DIR_MFK * 10, -RIT_MAX_HZ, RIT_MAX_HZ);
 			else if (rx->tedit_par == 1)
 				rx->rit = dir > 0;
-			else
+			else if (rx->tedit_par == 2)
 				rx->xit = dir > 0;
+			else if (rx->tedit_par == 3)
+				rx->dup = (rx->dup + dir + DUP_COUNT) % DUP_COUNT;
+			else
+				rx->dup_khz = clampi(rx->dup_khz + value * X6100_DIR_MFK * 10, 10, DUP_KHZ_MAX);
 
 			rx->tedit_since = now_ms();
 			return true;
@@ -3433,6 +3502,8 @@ static void draw_mem_panel(x6100_lcd_t *lcd, const rx_t *rx)
 
 			if (m->split)
 				n += snprintf(s + n, sizeof(s) - (size_t) n, " TX %u.%03u", m->tx_hz / 1000000, m->tx_hz / 1000 % 1000);
+			else if (m->dup == DUP_MINUS || m->dup == DUP_PLUS)
+				n += snprintf(s + n, sizeof(s) - (size_t) n, " DUP%c %d", m->dup == DUP_MINUS ? '-' : '+', m->dup_khz);
 
 			snprintf(s + n, sizeof(s) - (size_t) n, "  %s", m->name);
 		} else {
@@ -3447,34 +3518,46 @@ static void draw_mem_panel(x6100_lcd_t *lcd, const rx_t *rx)
 }
 
 //
-// RIT / XIT panel (AGC long): one offset for both, as on Icom radios, and RIT /
-// XIT on or off. Green. MFK turn: offset in 10 Hz steps, or on / off on the
-// RIT and XIT rows; push: next row; hold: offset 0 (CLEAR).
+// RIT / XIT / duplex panel (AGC long): one offset for both, as on Icom radios,
+// RIT / XIT on or off, repeater duplex and its shift. Green. MFK turn: offset in
+// 10 Hz steps, on / off on the RIT and XIT rows, AUTO / OFF / DUP- / DUP+, shift in
+// 10 kHz steps; push: next row; hold: offset 0 (CLEAR), duplex AUTO, shift 100 kHz.
 //
 
 static void draw_rit_panel(x6100_lcd_t *lcd, const rx_t *rx)
 {
-	const int px = LBL_W + 8, py = SPEC_Y + 16, pw = 420, ph = 96;
+	static const char *hint = "MFK: ADJUST  PUSH: NEXT  HOLD: CLEAR";
+	static const char *dups[DUP_COUNT] = { "AUTO", "OFF", "DUP-", "DUP+" };
+	const int px = LBL_W + 8, py = SPEC_Y + 16, pw = 440, ph = 134;
 	const uint32_t bg = 0x0C180C, green = 0x60D060, sel = 0x1C3A1C, dim = 0x80A080, white = 0xF0F0F0;
 	const uint32_t on = 0x3CC83C, off = 0x5A6464;
-	char v[3][24];
+	const int shift = dup_shift(rx);
+	char v[5][24];
 
 	snprintf(v[0], sizeof(v[0]), "%+d HZ", rx->rit_hz);
 	snprintf(v[1], sizeof(v[1]), "%s", rx->rit ? "ON" : "OFF");
 	snprintf(v[2], sizeof(v[2]), "%s", rx->xit ? "ON" : "OFF");
+
+	if (rx->dup == DUP_AUTO && shift != 0)
+		snprintf(v[3], sizeof(v[3]), "AUTO %+d KHZ", shift / 1000);
+	else
+		snprintf(v[3], sizeof(v[3]), "%s", dups[rx->dup]);
+
+	snprintf(v[4], sizeof(v[4]), "%d KHZ", rx->dup_khz);
 
 	x6100_lcd_fill(lcd, px, py, pw, ph, bg);
 	x6100_lcd_fill(lcd, px, py, 3, ph, green);
 	x6100_lcd_hline(lcd, px, px + pw - 1, py, 0x2A4A2A);
 	x6100_lcd_hline(lcd, px, px + pw - 1, py + ph - 1, 0x2A4A2A);
 	x6100_lcd_vline(lcd, px + pw - 1, py, py + ph - 1, 0x2A4A2A);
-	x6100_lcd_text(lcd, px + 14, py + 7, 2, "RIT / XIT", green);
-	x6100_lcd_text(lcd, px + 140, py + 11, 1, "MFK: ADJUST  PUSH: NEXT  HOLD: CLEAR", dim);
+	x6100_lcd_text(lcd, px + 14, py + 7, 2, "RIT / XIT / DUP", green);
+	x6100_lcd_text(lcd, px + pw - 12 - x6100_lcd_text_width(hint, 1), py + 11, 1, hint, dim);
 
-	for (int i = 0; i < 3; i++) {
-		static const char *names[3] = { "OFFSET", "RIT  RX", "XIT  TX" };
+	for (int i = 0; i < 5; i++) {
+		static const char *names[5] = { "OFFSET", "RIT  RX", "XIT  TX", "DUPLEX", "SHIFT" };
+		const bool lit[5] = { true, rx->rit, rx->xit, shift != 0, rx->dup == DUP_MINUS || rx->dup == DUP_PLUS };
 		int y = py + 30 + i * 21;
-		uint32_t c = i == 0 ? white : (i == 1 ? rx->rit : rx->xit) ? on : off;
+		uint32_t c = i == 0 ? white : lit[i] ? on : off;
 
 		if (i == rx->tedit_par)
 			x6100_lcd_fill(lcd, px + 6, y - 3, pw - 12, 19, sel);
@@ -4232,7 +4315,7 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 	// VFO cursor; in a fixed window an arrow at the edge when the VFO is outside it
 	//
 	// With split / RIT / XIT: green line at the RX frequency, red at TX (when in view)
-	if (rx->split || rx->rit || rx->xit) {
+	if (tx_apart(rx)) {
 		int rxx = f_to_x(&v, rx_hz(rx)), txx = f_to_x(&v, tx_hz(rx));
 
 		if (rxx >= 0 && rxx < SW)
@@ -4268,9 +4351,9 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 
 overlays:
 	//
-	// Split / RIT / XIT in use: top left of the spectrum, amber
+	// Split / duplex / RIT / XIT in use: top left of the spectrum, amber
 	//
-	if (rx->split || rx->rit || rx->xit) {
+	if (tx_apart(rx)) {
 		static const char *mn[] = { [X6100_MODE_LSB] = "LSB", [X6100_MODE_USB] = "USB", [X6100_MODE_CW] = "CW",
 			[X6100_MODE_CWR] = "CWR", [X6100_MODE_AM] = "AM", [X6100_MODE_NFM] = "NFM" };
 		char m[48] = "";
@@ -4280,6 +4363,9 @@ overlays:
 		if (rx->split)
 			n += snprintf(m + n, sizeof(m) - (size_t) n, "SPLIT TX %u.%03u.%02u %s  ", f / 1000000, f / 1000 % 1000,
 				f % 1000 / 10, mn[tx_mode(rx)] ? mn[tx_mode(rx)] : "");
+		else if (dup_shift(rx) != 0)
+			n += snprintf(m + n, sizeof(m) - (size_t) n, "DUP%c TX %u.%03u.%02u  ", dup_shift(rx) < 0 ? '-' : '+',
+				f / 1000000, f / 1000 % 1000, f % 1000 / 10);
 
 		if (rx->rit || rx->xit)
 			snprintf(m + n, sizeof(m) - (size_t) n, "%s%s%s %+d", rx->rit ? "RIT" : "", rx->rit && rx->xit ? "/" : "",
@@ -4521,6 +4607,14 @@ static bool console_token(rx_t *rx, const char *t)
 	if (strcasecmp(t, "xit") == 0 || strcasecmp(t, "noxit") == 0) {
 		rx->xit = strcasecmp(t, "xit") == 0;
 		return true;
+	}
+
+	// Repeater duplex: dupauto (10 m repeaters), dupoff, dup- / dup+ by dupshift
+	for (int i = 0; i < DUP_COUNT; i++) {
+		if (strcasecmp(t, g_dup_tok[i]) == 0) {
+			rx->dup = i;
+			return true;
+		}
 	}
 
 	// VFO A <-> B, A=B (as the A/B key short / long)
@@ -4826,7 +4920,7 @@ static bool console_line(rx_t *rx, char *line)
 
 			if (n < 1 || n > MEM_COUNT || hz < FREQ_MIN || hz > FREQ_MAX || ms == NULL || !console_token(&tmp, ms)
 				|| ls == NULL || strncasecmp(ls, "fil", 3) != 0 || ls[3] < '1' || ls[3] > '3') {
-				fprintf(stderr, "\nmem: <1-99> <Hz> <mode> fil1|2|3 [tx <Hz> <mode>] [name <text>]\n");
+				fprintf(stderr, "\nmem: <1-99> <Hz> <mode> fil1|2|3 [tx <Hz> <mode>] [dupoff | dup- <kHz> | dup+ <kHz>] [name <text>]\n");
 				break;	/* the rest of the line belongs to this token */
 			}
 
@@ -4842,6 +4936,16 @@ static bool console_line(rx_t *rx, char *line)
 						m.split = true;
 						m.tx_hz = (uint32_t) strtoul(th, NULL, 10);
 						m.tx_mode = tmp.mode;
+					}
+				} else if (strcasecmp(w, "dupoff") == 0) {
+					m.dup = DUP_OFF;
+				} else if (strcasecmp(w, "dup-") == 0 || strcasecmp(w, "dup+") == 0) {
+					const char *ks = strtok(NULL, " \t\r\n");
+					int khz = ks == NULL ? 0 : atoi(ks);
+
+					if (khz >= 10 && khz <= DUP_KHZ_MAX) {
+						m.dup = w[3] == '-' ? DUP_MINUS : DUP_PLUS;
+						m.dup_khz = khz;
 					}
 				} else if (strcasecmp(w, "name") == 0) {
 					const char *rest = strtok(NULL, "\r\n");
@@ -4878,6 +4982,10 @@ static bool console_line(rx_t *rx, char *line)
 
 					if (m->split)
 						printf("  TX %.3f %s", m->tx_hz / 1000.0, mode_name(m->tx_mode));
+					else if (m->dup == DUP_MINUS || m->dup == DUP_PLUS)
+						printf("  %s %d kHz", m->dup == DUP_MINUS ? "DUP-" : "DUP+", m->dup_khz);
+					else if (m->dup == DUP_OFF)
+						printf("  simplex");
 
 					printf("%s%s\n", m->name[0] ? "  " : "", m->name);
 					used++;
@@ -5031,6 +5139,13 @@ static bool console_line(rx_t *rx, char *line)
 			continue;
 		}
 
+		if (strcasecmp(t, "dupshift") == 0) {
+			want_lvl = &rx->dup_khz;
+			lvl_min = 10;
+			lvl_max = DUP_KHZ_MAX;
+			continue;
+		}
+
 		if (strcasecmp(t, "rfg") == 0) {
 			want_lvl = &rx->rfg;
 			lvl_min = 0;
@@ -5144,6 +5259,7 @@ static void state_save(const rx_t *rx)
 	fprintf(fp, "\n%u %s %s fil%d step %d\n", (unsigned) rx->freq, modes[rx->mode], agcs[rx->agc], rx->fil + 1, rx->step);
 	fprintf(fp, "vfob %u %s fil%d vfo %s\n", (unsigned) rx->b_freq, modes[rx->b_mode], rx->b_fil + 1, rx->on_b ? "b" : "a");
 	fprintf(fp, "%s %s %s ritofs %d\n", rx->split ? "txsplit" : "notxsplit", rx->rit ? "rit" : "norit", rx->xit ? "xit" : "noxit", rx->rit_hz);
+	fprintf(fp, "%s dupshift %d\n", g_dup_tok[rx->dup], rx->dup_khz);
 	fprintf(fp, "vol %d %s rfg %d pwr %.1f\n", rx->vol, rx->mute ? "mute" : "nomute", rx->rfg, rx->txpwr / 10.0);
 	fprintf(fp, "keytype %d wpm %d iambic %d cwpitch %d cwvol %d qsk %d ratio %d.%d\n", rx->keymode, rx->wpm, rx->iambic,
 		rx->cwtone, rx->cwvol, rx->qsk, rx->ratio / 10, rx->ratio % 10);
@@ -5370,6 +5486,9 @@ static bool cat_get(void *ctx, x6100_civ_item_t item, int vfo, int32_t *v)
 	case X6100_CIV_SPLIT:
 		*v = rx->split;
 		return true;
+	case X6100_CIV_DUPLEX:
+		*v = dup_shift(rx) < 0 ? 1 : dup_shift(rx) > 0 ? 2 : 0;
+		return true;
 	case X6100_CIV_RIT:
 		*v = rx->rit;
 		return true;
@@ -5556,6 +5675,20 @@ static bool cat_set(void *ctx, x6100_civ_item_t item, int vfo, int32_t v)
 		break;
 	case X6100_CIV_SPLIT:
 		rx->split = v != 0;
+		break;
+	case X6100_CIV_DUPLEX:	/* 0 simplex, 1 DUP-, 2 DUP+ with the panel shift; a duplex ends split */
+		if (v < 0 || v > 2)
+			return false;
+
+		rx->split = v != 0 ? false : rx->split;
+
+		if (v == 0 && dup_shift(rx) != 0)
+			rx->dup = DUP_OFF;	/* simplex where AUTO would shift; elsewhere AUTO stays */
+		else if (v == 1 && dup_shift(rx) >= 0)
+			rx->dup = DUP_MINUS;	/* already DUP- (also AUTO): kept */
+		else if (v == 2 && dup_shift(rx) <= 0)
+			rx->dup = DUP_PLUS;
+
 		break;
 	case X6100_CIV_RIT:
 		rx->rit = v != 0;
@@ -6158,6 +6291,8 @@ int main(int argc, char **argv)
 		rx.band_freq[i] = g_bands[i].def;
 
 	kpar_defaults(&rx);
+	rx.dup = DUP_AUTO;
+	rx.dup_khz = DUP_KHZ_DEF;
 
 	for (int g = 0; g < FG_COUNT; g++)
 		rx.agc_group[g] = g == FG_AM || g == FG_FM ? X6100_AGC_SLOW : X6100_AGC_AUTO;

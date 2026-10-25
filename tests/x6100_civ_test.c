@@ -161,6 +161,16 @@ int main(void)
 	check(&civ, "03", "03 00 50 07 07 00");
 	check(&civ, "0F 01", "FB");
 	check(&civ, "0F", "0F 01");
+	check(&civ, "0F 00", "FB");
+	check(&civ, "0F 11", "FB");			/* DUP- */
+	check(&civ, "0F", "0F 11");
+	check(&civ, "0F 12", "FB");			/* DUP+ */
+	check(&civ, "0F", "0F 12");
+	check(&civ, "0F 10", "FB");			/* simplex */
+	check(&civ, "0F", "0F 00");
+	check(&civ, "0F 13", "FA");
+	check(&civ, "0F 02", "FA");
+	check(&civ, "0F 01", "FB");
 	check(&civ, "10", "10 01");
 	check(&civ, "10 04", "FB");
 	check(&civ, "10", "10 04");

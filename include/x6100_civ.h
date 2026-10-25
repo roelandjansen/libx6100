@@ -33,6 +33,7 @@
 //   FIL_WIDTH          passband width of the selected filter in Hz
 //   VFO                0 = A, 1 = B (set); VFO_SWAP / VFO_EQUAL: A <-> B / A = B
 //   SPLIT, ATT, PRE, NB, NR, DNF, COMP, VOX, MONI, LOCK, RIT, XIT   0 / 1
+//   DUPLEX             0 simplex, 1 DUP-, 2 DUP+ (0F 10 / 11 / 12)
 //   AGC                CI-V code 1 fast, 2 mid, 3 slow (set 1-3; get may report 0 = off)
 //   STEP               Hz
 //   RIT_HZ             signed Hz
@@ -66,6 +67,7 @@ typedef enum
 	X6100_CIV_VFO_SWAP,
 	X6100_CIV_VFO_EQUAL,
 	X6100_CIV_SPLIT,
+	X6100_CIV_DUPLEX,
 	X6100_CIV_STEP,
 	X6100_CIV_ATT,
 	X6100_CIV_PRE,

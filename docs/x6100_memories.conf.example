@@ -1,14 +1,17 @@
 # x6100_trx memory channels: /etc/x6100/memories.conf
 #
 # One channel per line, 1-99:
-#   mem <n> <Hz> <mode> fil<n> [tx <Hz> <mode>] [name <text>]
+#   mem <n> <Hz> <mode> fil<n> [tx <Hz> <mode>] [dupoff | dup- <kHz> | dup+ <kHz>] [name <text>]
 # mode: lsb usb cw cwr am nfm; fil1-3 as on the radio; tx ... makes it a split
-# channel (TX frequency and mode); name runs to the end of the line, 15 characters.
+# channel (TX frequency and mode); dupoff / dup- / dup+ set the repeater duplex (none:
+# AUTO, -100 kHz in NFM on 29.620-29.680 MHz); name runs to the end of the line, 15
+# characters.
 # x6100_trx rewrites this file on every write / clear from the memory panel
 # (V/M) or the console (memw, memc), without these comments. memr lists the channels.
 #
-# Example set: FT8 dial frequencies (USB), a 60 m spot, and a 10 m FM repeater pair
-# as a split channel. Check repeater frequencies against your national list.
+# Example set: FT8 dial frequencies (USB), a 60 m spot, 10 m FM repeaters (one as a
+# split channel, one on AUTO duplex) and FM simplex. Check repeater frequencies
+# against your national list; repeaters that need CTCSS cannot be opened yet.
 
 mem 1 1840000 usb fil1 name FT8 160m
 mem 2 3573000 usb fil1 name FT8 80m
@@ -24,3 +27,4 @@ mem 11 50313000 usb fil1 name FT8 6m
 
 mem 20 29620000 nfm fil1 tx 29520000 nfm name 10m RPT 29.62
 mem 21 29500000 nfm fil1 name 10m FM simplex
+mem 22 29660000 nfm fil1 name 10m RPT 29.66

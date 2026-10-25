@@ -444,20 +444,29 @@ static size_t cmd_vfo(req_t *r)
 	}
 }
 
-// Simple on / off item without subcommand (0F split)
-static size_t cmd_onoff(req_t *r, x6100_civ_item_t item)
+// 0F: 00 / 01 split off / on, 10 / 11 / 12 simplex / DUP- / DUP+. A read gives
+// 11 / 12 while a duplex shift is in use, else the split state.
+static size_t cmd_split(req_t *r)
 {
-	int32_t v;
+	int32_t v, dup = 0;
 
-	if (r->n >= 1)
-		return reply_ok(r, r->d[0] <= 1 && set(r, item, 0, r->d[0]));
+	if (r->n >= 1) {
+		if (r->d[0] <= 0x01)
+			return reply_ok(r, set(r, X6100_CIV_SPLIT, 0, r->d[0]));
 
-	if (!get(r, item, 0, &v))
+		return reply_ok(r, r->d[0] >= 0x10 && r->d[0] <= 0x12 && set(r, X6100_CIV_DUPLEX, 0, r->d[0] - 0x10));
+	}
+
+	if (!get(r, X6100_CIV_SPLIT, 0, &v))
 		return reply_ng(r);
 
 	reply_head(r);
 	out_byte(r->o, r->cmd);
-	out_byte(r->o, v ? 0x01 : 0x00);
+
+	if (!v && get(r, X6100_CIV_DUPLEX, 0, &dup) && (dup == 1 || dup == 2))
+		out_byte(r->o, (uint8_t) (0x10 + dup));
+	else
+		out_byte(r->o, v ? 0x01 : 0x00);
 
 	return out_end(r->o);
 }
@@ -1153,7 +1162,7 @@ size_t x6100_civ_process(x6100_civ_t *civ, const uint8_t *frame, size_t len, uin
 		n = cmd_vfo(&r);
 		break;
 	case 0x0F:
-		n = cmd_onoff(&r, X6100_CIV_SPLIT);
+		n = cmd_split(&r);
 		break;
 	case 0x10:
 		n = cmd_step(&r);
