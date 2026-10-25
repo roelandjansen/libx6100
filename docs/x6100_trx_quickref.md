@@ -250,13 +250,13 @@ or 10 s idle closes. The baseband keys and times the CW itself (registers 33 / 3
 | KEY TYPE | STRAIGHT, PADDLE, PADDLE REV (straight) |
 | SPEED | 5-50 WPM (20) |
 | IAMBIC | A / B (A) |
-| PITCH | 300-1000 Hz in 10 Hz steps (700): sidetone and CW pitch |
-| SIDETONE | volume 0-50 (10) |
+| PITCH | 300-900 Hz in 10 Hz steps (600): sidetone and CW pitch, the IC-705 range |
+| SIDETONE | volume 0-100 % in 5 % steps (20 %), full register range |
 | BREAK-IN | delay 0-1000 ms in 10 ms steps (100) |
 | RATIO | dash / dot 2.5-4.5 (3.0) |
 
 Kept in the state file. Console: `keytype straight|paddle|rev`, `wpm 22`, `iambic a|b`,
-`cwpitch 650`, `cwvol 12`, `qsk 150`, `ratio 3.2`. In CW the console status line shows
+`cwpitch 650`, `cwvol 25`, `qsk 150`, `ratio 3.2`. In CW the console status line shows
 `22 wpm paddle`. CI-V: 14 0C (speed, 6-48 WPM), 14 09 (pitch, 300-900 Hz), 14 0F
 (break-in delay, 0-1000 ms here).
 

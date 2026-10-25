@@ -24,10 +24,11 @@ Verified on the radio:
   frequency, mode, filters, gains, power, ATU, tune, meters, scope
 - memory channels (V/M), `memr` list; console with own line editing
 - liquid-dsp v1.8.3 static build, `x6100_liquid` runs on the radio
+- CW keyer (KEY short key type, KEY long panel; registers 33 / 34; CI-V 14 09 / 0C / 0F):
+  pitch 300-900 Hz (600 out of the box), sidetone 0-100 % over the full register
 
 Built, not yet tried on the radio (2026-10-25):
 
-- CW keyer (KEY short key type, KEY long panel; registers 33 / 34; CI-V 14 09 / 0C / 0F)
 - tuner memories per frequency (nearest within 0.5 % of the TX frequency)
 - battery charge / external supply (info line colour, status page, console, 20 / 10 % notes)
 - TX readings folded into the console status line
@@ -35,14 +36,12 @@ Built, not yet tried on the radio (2026-10-25):
 
 ## Open items to check on the radio
 
-1. Keyer: key type values (0 straight, 1 paddle, 2 reversed, from x6100_gui), sidetone
-   volume range (capped at 50 of 63), speed / break-in while sending.
-2. Tuner memories: a tune stores, a retune nearby replaces, recall within the window.
-3. Battery: percentage and CHARGING plausible on external power (the baseband's own
+1. Tuner memories: a tune stores, a retune nearby replaces, recall within the window.
+2. Battery: percentage and CHARGING plausible on external power (the baseband's own
    charge flag is not identified; CHARGING = external power and below 100 %).
-4. GEN WiFi / Bluetooth rows: switch, connect a saved network, pair a headset (may need a
+3. GEN WiFi / Bluetooth rows: switch, connect a saved network, pair a headset (may need a
    bluez agent; see S39btpairings), panel stutter from polling.
-5. wfview over CAT: VFO A / B, split, RIT / XIT, band buttons, keyer levels; ATT / PRE
+4. wfview over CAT: VFO A / B, split, RIT / XIT, band buttons, keyer levels; ATT / PRE
    (socat trace against IU1WXY).
 
 ## Next steps (suggested order)
@@ -65,3 +64,5 @@ Built, not yet tried on the radio (2026-10-25):
   backup` before flashing, `build.sh restore` after.
 - Commits as Roeland Jansen, no attribution lines, branch master. Tags are made locally
   and pushed with `git push origin <tag>` (v0.5.0-v0.7.0 were local only until 2026-10-24).
+- Keyer since v0.9.0: `cwvol` in the state file is now 0-100 %; an old 0-50 value is read
+  as a percentage (quieter), and a `cwpitch` above 900 is refused and falls back to 600.

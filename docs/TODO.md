@@ -29,8 +29,6 @@ Status: 2026-10-25 (after v0.9.0). Summary and next steps: `STATUS.md`.
 - CI-V rate: the example conf has `cat 19200`; raise it once ttyS2 runs faster.
 - Compressor; VOX / anti-VOX; squelch; monitor;
   mic select and gain; line in / out levels (registers known, defaults set at start).
-- CW keyer: verify the key type values (0 straight, 1 paddle, 2 paddle reversed, from
-  x6100_gui) and the sidetone volume range on the radio; trainer bit unused.
 - Memory channels over CI-V (08 select, 09 write, 0A M>VFO, 0B clear, 1A 00 contents).
 - SWR scan over a band (register 12 `swrscan`).
 - RX / TX equaliser (baseband or liquid-dsp; GEN TX panel).

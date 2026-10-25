@@ -215,8 +215,8 @@ typedef struct
 	int wpm;		/* 5-50 */
 	int keymode;		/* 0 straight key, 1 paddle, 2 paddle reversed */
 	int iambic;		/* 0 A, 1 B */
-	int cwtone;		/* sidetone / CW pitch, Hz */
-	int cwvol;		/* sidetone volume 0-50 */
+	int cwtone;		/* sidetone / CW pitch, 300-900 Hz (IC-705 range) */
+	int cwvol;		/* sidetone volume 0-100 %, register 0-63 */
 	int qsk;		/* break-in delay, ms */
 	int ratio;		/* dash / dot ratio x10 */
 	bool kedit;
@@ -767,7 +767,7 @@ static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 	x6100_ctl_set(ctl, X6100_REG_VFOB_PRE, rx->pre);
 	x6100_ctl_set(ctl, X6100_REG_NR_NB, X6100_R23(rx->nr_lvl, rx->nb_w, rx->nb_lvl, rx->nr, rx->nb));
 	x6100_ctl_set(ctl, X6100_REG_DNF, X6100_R24(rx->dnf_f, rx->dnf_w, rx->dnf));
-	x6100_ctl_set(ctl, X6100_REG_KEYER, X6100_R33(rx->wpm, rx->keymode, rx->iambic, rx->cwtone, rx->cwvol, 0));
+	x6100_ctl_set(ctl, X6100_REG_KEYER, X6100_R33(rx->wpm, rx->keymode, rx->iambic, rx->cwtone, (rx->cwvol * 63 + 50) / 100, 0));
 	x6100_ctl_set(ctl, X6100_REG_QSK_KR, X6100_R34(rx->qsk, rx->ratio));
 	x6100_set_filter(ctl, mode, low, high);
 	x6100_ctl_set(ctl, X6100_REG_RXVOL, rx->mute ? 0 : (uint32_t) rx->vol);
@@ -1066,8 +1066,8 @@ static const kpar_t g_kpar[] = {
 	{ "KEY TYPE", "keytype", 0, 2, 1, 0 },
 	{ "SPEED", "wpm", 5, 50, 1, 20 },
 	{ "IAMBIC", "iambic", 0, 1, 1, 0 },
-	{ "PITCH", "cwpitch", 300, 1000, 10, 700 },
-	{ "SIDETONE", "cwvol", 0, 50, 1, 10 },
+	{ "PITCH", "cwpitch", 300, 900, 10, 600 },
+	{ "SIDETONE", "cwvol", 0, 100, 5, 20 },
 	{ "BREAK-IN", "qsk", 0, 1000, 10, 100 },
 	{ "RATIO", "ratio", 25, 45, 1, 30 },
 };
@@ -1099,6 +1099,9 @@ static void kpar_text(const rx_t *rx, int i, char *s, size_t n)
 		break;
 	case 3:
 		snprintf(s, n, "%d HZ", v);
+		break;
+	case 4:
+		snprintf(s, n, "%d %%", v);
 		break;
 	case 5:
 		snprintf(s, n, "%d MS", v);
@@ -5713,7 +5716,7 @@ static bool cat_set(void *ctx, x6100_civ_item_t item, int vfo, int32_t v)
 		rx->wpm = clampi(6 + (v * 42 + 127) / 255, 5, 50);
 		break;
 	case X6100_CIV_LVL_CW_PITCH:
-		rx->cwtone = clampi(300 + (v * 600 + 127) / 255 / 10 * 10, 300, 1000);
+		rx->cwtone = clampi(300 + (v * 600 + 127) / 255 / 10 * 10, 300, 900);
 		break;
 	case X6100_CIV_LVL_QSK:
 		rx->qsk = (v * 1000 + 127) / 255 / 10 * 10;
