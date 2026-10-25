@@ -350,6 +350,9 @@ static volatile sig_atomic_t g_stop;
 static bool g_poweroff;	/* PWR held 4 s: power the radio off after the clean exit */
 static const char *g_cmd_view;	/* console line being typed, shown at the end of the status line */
 static double g_iq_db, g_vbat;	/* receive level and battery for the status line (0: not yet) */
+static bool g_tx_show;		/* status line shows TX readings instead of the RX level */
+static double g_tx_pwr, g_tx_swr;
+static int g_tx_alc;
 static int g_cat_baud;		/* CI-V baud, 0 = no CAT: conf token cat, or --cat */
 static char g_ntp_server[64];	/* conf token ntp <server> | off; empty = ntp.conf or pool.ntp.org */
 static int g_bright;		/* backlight level, % (10-100); 0 = leave as the OS set it */
@@ -839,7 +842,10 @@ static void show(const rx_t *rx)
 		mode_name(rx->mode), st, rx->vol, rx->mute ? " (mute)" : "", rx->rfg, rx->pre ? "on " : "off",
 		agc_name(rx->agc), sp, rx->lock ? "  LOCK" : "");
 
-	if (g_vbat > 0.0)
+	if (g_vbat > 0.0 && g_tx_show)
+		snprintf(line + strlen(line), sizeof(line) - strlen(line), "  TX %4.1f W  swr %3.1f  alc %3d  vbat %.1fV",
+			g_tx_pwr, g_tx_swr, g_tx_alc, g_vbat);
+	else if (g_vbat > 0.0)
 		snprintf(line + strlen(line), sizeof(line) - strlen(line), "  iq %6.1f dB  vbat %.1fV", g_iq_db, g_vbat);
 
 	//
@@ -6457,17 +6463,15 @@ int main(int argc, char **argv)
 
 		if (t - last_meter >= METER_MS && level_n > 0) {
 			scr.meter_db = level / level_n;
-			if (scr.tx) {
-				//
-				// TX: one line per update, so the readings stay on screen
-				//
-				printf("\nTX %4.1f W  swr %3.1f  alc %3d  (raw pwr %u)\n", scr.pwr, scr.swr, scr.alc,
-					(unsigned) frame.tx_power);
-			} else {
-				g_iq_db = scr.meter_db;	/* on the status line, before a line being typed */
-				g_vbat = frame.vbat * 0.1;
-				show(&rx);
-			}
+			// Readings go on the status line, before a line being typed: RX level, or
+			// while transmitting power, SWR and ALC
+			g_tx_show = scr.tx;
+			g_tx_pwr = scr.pwr;
+			g_tx_swr = scr.swr;
+			g_tx_alc = scr.alc;
+			g_iq_db = scr.meter_db;
+			g_vbat = frame.vbat * 0.1;
+			show(&rx);
 			fflush(stdout);
 			level = 0.0;
 			level_n = 0;

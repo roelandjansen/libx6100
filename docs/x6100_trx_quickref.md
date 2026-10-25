@@ -163,7 +163,8 @@ Type a line + Enter while running; tokens can be combined (`14074000 usb`).
 
 What you type is shown at the end of the status line (`> memw 5`), so redraws do not
 wipe it; Backspace and ^U (clear) work, Enter runs it and keeps it on its own line.
-The status line is cut to the terminal width.
+The status line is cut to the terminal width. It ends with the receive level and
+battery (`iq -90.6 dB  vbat 8.2V`), while transmitting with `TX 5.0 W  swr 1.2  alc 3`.
 
 The status line starts with the VFO in use (A / B); with split, RIT or XIT it adds
 `RX 7123.000 TX 7115.000 LSB SPLIT`.
