@@ -89,7 +89,8 @@ build_tools() {
 # (they would try to run ARM code here), no FFTW; out/liquid/lib/libliquid.a and
 # out/liquid/include/liquid/liquid.h. Needs cmake (zypper install cmake); without
 # it this step is skipped with a warning, the rest of the build does not use it yet.
-# -Wno-format: liquid-dsp prints time_t with %ld (64-bit time_t on 32-bit musl);
+# -Wno-format (last on the compiler line, after its -Wall): liquid-dsp prints time_t
+# with %ld (64-bit time_t on 32-bit musl);
 # harmless there, and we do not patch its source.
 #
 
@@ -116,7 +117,7 @@ build_liquid() {
 
 	for L_TOOL in cc ar ranlib; do
 		if [[ "${L_TOOL}" == cc ]]; then
-			printf '#!/usr/bin/env bash\nexec "%s" cc -target %s -mcpu=%s "$@"\n' "${G_ZIG}" "${C_TARGET}" "${C_CPU}" \
+			printf '#!/usr/bin/env bash\nexec "%s" cc -target %s -mcpu=%s "$@" -Wno-format\n' "${G_ZIG}" "${C_TARGET}" "${C_CPU}" \
 				> "${L_WRAP}/zig-${L_TOOL}"
 		else
 			printf '#!/usr/bin/env bash\nexec "%s" %s "$@"\n' "${G_ZIG}" "${L_TOOL}" > "${L_WRAP}/zig-${L_TOOL}"
@@ -128,7 +129,6 @@ build_liquid() {
 	cmake -S "${L_SRC}" -B "${L_BUILD}" -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=arm \
 		-DCMAKE_C_COMPILER="${L_WRAP}/zig-cc" -DCMAKE_CXX_COMPILER="${L_WRAP}/zig-cc" \
 		-DCMAKE_AR="${L_WRAP}/zig-ar" -DCMAKE_RANLIB="${L_WRAP}/zig-ranlib" -DCMAKE_BUILD_TYPE=Release \
-		-DCMAKE_C_FLAGS=-Wno-format \
 		-DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIBS=ON -DBUILD_EXAMPLES=OFF -DBUILD_AUTOTESTS=OFF \
 		-DBUILD_BENCHMARKS=OFF -DENABLE_SIMD=OFF -DFIND_SIMD=OFF -DFIND_FFTW=OFF -DENABLE_COLOR=OFF \
 		-DENABLE_TIMESTAMPS=OFF > "${C_OUT}/liquid-cmake.log"
