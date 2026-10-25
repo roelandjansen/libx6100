@@ -349,6 +349,7 @@ static const char *g_input_names[IN_COUNT] = {
 static volatile sig_atomic_t g_stop;
 static bool g_poweroff;	/* PWR held 4 s: power the radio off after the clean exit */
 static const char *g_cmd_view;	/* console line being typed, shown at the end of the status line */
+static double g_iq_db, g_vbat;	/* receive level and battery for the status line (0: not yet) */
 static int g_cat_baud;		/* CI-V baud, 0 = no CAT: conf token cat, or --cat */
 static char g_ntp_server[64];	/* conf token ntp <server> | off; empty = ntp.conf or pool.ntp.org */
 static int g_bright;		/* backlight level, % (10-100); 0 = leave as the OS set it */
@@ -837,6 +838,9 @@ static void show(const rx_t *rx)
 		rx->on_b ? 'B' : 'A', rx->freq / 1000.0, rx->band >= 0 ? g_bands[rx->band].name : "-",
 		mode_name(rx->mode), st, rx->vol, rx->mute ? " (mute)" : "", rx->rfg, rx->pre ? "on " : "off",
 		agc_name(rx->agc), sp, rx->lock ? "  LOCK" : "");
+
+	if (g_vbat > 0.0)
+		snprintf(line + strlen(line), sizeof(line) - strlen(line), "  iq %6.1f dB  vbat %.1fV", g_iq_db, g_vbat);
 
 	//
 	// One terminal row only: a line wider than the terminal wraps, and every redraw
@@ -4635,8 +4639,6 @@ static bool console_line(rx_t *rx, char *line)
 			if (ns == NULL && strcasecmp(t, "memr") == 0) {
 				int used = 0;
 
-				printf("\n");
-
 				for (int i = 1; i <= MEM_COUNT; i++) {
 					const mem_t *m = &g_mem[i];
 
@@ -4652,7 +4654,7 @@ static bool console_line(rx_t *rx, char *line)
 					used++;
 				}
 
-				printf("%d of %d channels used\n", used, MEM_COUNT);
+				printf("%d of %d channels used\n\n", used, MEM_COUNT);
 				continue;
 			}
 
@@ -6462,8 +6464,9 @@ int main(int argc, char **argv)
 				printf("\nTX %4.1f W  swr %3.1f  alc %3d  (raw pwr %u)\n", scr.pwr, scr.swr, scr.alc,
 					(unsigned) frame.tx_power);
 			} else {
+				g_iq_db = scr.meter_db;	/* on the status line, before a line being typed */
+				g_vbat = frame.vbat * 0.1;
 				show(&rx);
-				printf("iq %6.1f dB  vbat %.1fV", scr.meter_db, frame.vbat * 0.1);
 			}
 			fflush(stdout);
 			level = 0.0;
