@@ -10,7 +10,8 @@ Status: 2026-10-25 (after v0.9.0). Summary and next steps: `STATUS.md`.
 
 - TX ranges config file and transverter profile (frequency offset, TX enable).
 - Repeater duplex (AUTO / OFF / DUP- / DUP+, AGC long): test on the radio (TX on
-  29.520 from 29.620 verified with the PTT key; still: hand mic, CAT, memories, CI-V 0F 1x).
+  29.520 from 29.620 verified with the PTT key and the hand mic; still: CAT, memories,
+  CI-V 0F 1x).
 - CTCSS for the repeaters: no tone encoder known in the baseband, and the microphone
   goes to the baseband directly (PTT + codec audio does not mix). To look for: an
   unmapped bit in registers 21 / 36 / 38 (stock UI / IU1WXY trace in FM), or a

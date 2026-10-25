@@ -27,7 +27,7 @@ Verified on the radio:
 - CW keyer (KEY short key type, KEY long panel; registers 33 / 34; CI-V 14 09 / 0C / 0F):
   pitch 300-900 Hz (600 out of the box), sidetone 0-100 % over the full register
 - repeater duplex (AGC long panel): AUTO -100 kHz in NFM on 29.620-29.680 MHz, manual
-  DUP- / DUP+ (also in SSB), console status line; no CTCSS
+  DUP- / DUP+ (also in SSB), console status line; PTT key and front (hand) mic; no CTCSS
 - battery charge / external supply: percentage and CHARGING plausible (info line, status
   page, console)
 - TX readings folded into the console status line
