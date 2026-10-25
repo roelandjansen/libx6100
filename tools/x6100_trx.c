@@ -5197,7 +5197,7 @@ static bool console_line(rx_t *rx, char *line)
 
 //
 // Settings files, both in console tokens (one or more per line, # comment):
-//   STATE_PATH  last state, written by x6100_trx at exit
+//   STATE_PATH  last state, written by x6100_trx at exit and after every tune
 //   CONF_PATH   the user's own settings, never written by x6100_trx
 // Read at start in that order, then the command line: later wins.
 //
@@ -5289,7 +5289,10 @@ static void state_save(const rx_t *rx)
 	fprintf(fp, "%s span %d %s %s ref %d aref %d\n", scopes[rx->scope], rx->span,
 		rx->asplit ? "split" : rx->ascope ? "af" : "rf", rx->arange ? "af6" : "af3", rx->rref, rx->aref);
 
-	if (fclose(fp) != 0 || rename(tmp, STATE_PATH) != 0)
+	// fsync before the rename: also written after a tune, while the power may still go
+	bool ok = fflush(fp) == 0 && fsync(fileno(fp)) == 0;
+
+	if (fclose(fp) != 0 || !ok || rename(tmp, STATE_PATH) != 0)
 		fprintf(stderr, "\nstate: cannot save %s: %s\n", STATE_PATH, strerror(errno));
 }
 
@@ -6842,6 +6845,7 @@ int main(int argc, char **argv)
 						rx.atu_last.l, rx.atu_last.c, rx.atu_last.s, g_natum);
 
 					rx.atu_on = true;
+					state_save(&rx);	/* the new tuner memory on disk at once, not only at exit */
 					apply(&ctl, &cal, &rx);
 					apply_flags(&ctl, &rx);
 					dirty = true;

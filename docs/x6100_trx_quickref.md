@@ -144,7 +144,7 @@ Two files in `/etc/x6100`, both in console tokens (`#` = comment):
 
 | File | Written by | Holds |
 |---|---|---|
-| `x6100_trx.state` | x6100_trx, at exit | last state: frequency, mode, filter, VFO B, split, RIT / XIT, duplex, keyer, volume / mute, gains, AGC per mode group, DSP, scope, REF, band memories, tuner memories |
+| `x6100_trx.state` | x6100_trx, at exit and after every tune | last state: frequency, mode, filter, VFO B, split, RIT / XIT, duplex, keyer, volume / mute, gains, AGC per mode group, DSP, scope, REF, band memories, tuner memories |
 | `x6100_trx.conf` | you, never x6100_trx | what must be the same at every start (example: `docs/x6100_trx.conf.example`) |
 | `filters.conf` | filter panel | filter widths and shifts per mode group |
 | `memories.conf` | memory panel / console | memory channels 1-99 |
@@ -236,7 +236,8 @@ and XIT count: the TX frequency decides. The console reports each tune:
 ATU tuned at 7123.000 kHz: L=12 C=34 S=1 (7 tuner memories)
 ```
 
-Kept in `x6100_trx.state` as `atumem <Hz> <L> <C> <S>` (and so in `build.sh backup`).
+Kept in `x6100_trx.state` as `atumem <Hz> <L> <C> <S>`, written right after each tune
+(so a backup or a power loss does not miss it) and at exit; part of `build.sh backup`.
 
 ## CW keyer (KEY)
 
