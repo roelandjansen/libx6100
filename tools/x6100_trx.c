@@ -2500,7 +2500,8 @@ static void spectrum_update(screen_t *scr, const x6100_flow_frame_t *f)
 // power; a bin is a birdie when it is a local peak at least BS_SNR_DB over the
 // median of the window and narrow (BS_WIDE_BINS away it is 6 dB down); its frequency
 // is interpolated between the bins (parabola on dB, Hann window: ~10 Hz at 20 dB).
-// TX is refused while it runs; the VFO, band and RIT come back at the end.
+// TX is refused while it runs; the tuner is out (straight through), and the VFO,
+// band, RIT and tuner come back at the end.
 //
 
 #define BS_STEP_HZ	36000
@@ -2526,6 +2527,7 @@ typedef struct
 	uint32_t ret_freq;
 	int ret_band;
 	bool ret_rit;
+	bool ret_atu;
 } bscan_t;
 
 static bscan_t g_bs;
@@ -2569,7 +2571,9 @@ static bool bscan_start(rx_t *rx, bool all)
 	g_bs.ret_freq = rx->freq;
 	g_bs.ret_band = rx->band;
 	g_bs.ret_rit = rx->rit;
+	g_bs.ret_atu = rx->atu_on;
 	rx->rit = false;
+	rx->atu_on = false;	/* straight through: no relay switching between windows */
 
 	for (int b = g_bs.band; b <= g_bs.last; b++) {
 		birdie_clear(g_bands[b].low, g_bands[b].high);
@@ -2593,6 +2597,7 @@ static void bscan_stop(rx_t *rx, bool done)
 	rx->freq = g_bs.ret_freq;
 	rx->band = g_bs.ret_band;
 	rx->rit = g_bs.ret_rit;
+	rx->atu_on = g_bs.ret_atu;
 	birdie_save();
 
 	snprintf(s, sizeof(s), "%s: %u FOUND", done ? "BIRDIES" : "SCAN STOPPED", (unsigned) g_bs.found % 1000u);

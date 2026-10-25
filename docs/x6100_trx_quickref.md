@@ -237,7 +237,8 @@ load, and keep PRE / ATT as you normally listen.
 
 - Start: GEN, row BIRDIE SCAN, turn for THIS BAND or ALL BANDS, hold MFK. Console:
   `birdiescan` (this band) or `birdiescan all`. Any key or `birdiestop` stops; TX is
-  refused while it runs, the VFO comes back at the end.
+  refused and the tuner is out (straight through) while it runs; the VFO and the tuner
+  come back at the end.
 - The scan steps 36 kHz windows over the band (80 m about 20 s, all bands about 6 min),
   averages 32 spectrum frames per window and keeps narrow peaks at least 10 dB over the
   noise. Progress shows on the scope (cyan); the console prints each birdie.
