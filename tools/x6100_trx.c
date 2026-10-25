@@ -226,6 +226,25 @@ typedef struct
 	uint64_t kedit_since;
 
 	//
+	// TX audio (registers 20-22, 25, 29): F4 long = TX panel
+	//
+	int micsel;		/* 0 internal, 1 hand mic, 2 auto */
+	int imicg;		/* internal mic gain */
+	int hmicg;		/* hand mic gain */
+	int cmp;		/* compressor on / off */
+	int cmp_lvl;		/* 1 = 1:2, 2 = 1:4, 3 = 1:8 */
+	int vox;		/* VOX on / off */
+	int voxg;		/* VOX gain */
+	int voxag;		/* anti-VOX */
+	int voxdly;		/* VOX delay, ms */
+	int moni;		/* TX monitor on / off */
+	int moni_lvl;		/* monitor level */
+	int sql;		/* squelch threshold, 0 = open */
+	bool xedit;
+	int xedit_par;
+	uint64_t xedit_since;
+
+	//
 	// TX
 	//
 	int txpwr;		/* 0.1 W units */
@@ -813,6 +832,15 @@ static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 	x6100_ctl_set(ctl, X6100_REG_DNF, X6100_R24(rx->dnf_f, rx->dnf_w, rx->dnf));
 	x6100_ctl_set(ctl, X6100_REG_KEYER, X6100_R33(rx->wpm, rx->keymode ? 3 - rx->keymode : 0, rx->iambic, rx->cwtone, (rx->cwvol * 63 + 50) / 100, 0));
 	x6100_ctl_set(ctl, X6100_REG_QSK_KR, X6100_R34(rx->qsk, rx->ratio));
+
+	// TX audio: mic gains (line in / out levels kept), mic select and squelch (charger,
+	// speaker and aux IQ bits of register 21 kept), VOX, compressor, monitor
+	x6100_ctl_update(ctl, X6100_REG_AUDIO_GAIN, 0xFFFF0000u, X6100_R20(0, 0, rx->imicg, rx->hmicg));
+	x6100_ctl_update(ctl, X6100_REG_MIC_PTT_SQL, 0x0000FF03u, X6100_R21(rx->micsel, 0, 0, 0, 0, rx->sql));
+	x6100_ctl_set(ctl, X6100_REG_VOX, X6100_R22(rx->voxg, rx->voxag, rx->voxdly, rx->vox));
+	x6100_ctl_set(ctl, X6100_REG_CMP, X6100_R25(rx->cmp_lvl, rx->cmp));
+	x6100_ctl_set(ctl, X6100_REG_MONILEVEL, rx->moni ? (uint32_t) rx->moni_lvl : 0);
+
 	x6100_set_filter(ctl, mode, low, high);
 	x6100_ctl_set(ctl, X6100_REG_RXVOL, rx->mute ? 0 : (uint32_t) rx->vol);
 	x6100_ctl_update(ctl, X6100_REG_RFG_TXPWR_FFTDEC, 0xFF, (uint32_t) rx->rfg);
@@ -1182,6 +1210,105 @@ static void kpar_defaults(rx_t *rx)
 		*kpar_value(rx, i) = g_kpar[i].def;
 }
 
+//
+// TX audio settings (F4 long: TX panel), one table for the panel, the console and
+// the state file, as the keyer. Defaults are the values written at start before
+// (x6100_ctl_init, from the R1CBU GUI; VOX gain / delay are new, VOX stays off); the
+// gain ranges are not yet checked on the radio. Squelch sits here too: register 21
+// holds it with the mic select.
+//
+
+enum { XP_MIC, XP_IMICG, XP_HMICG, XP_CMP, XP_CMPLVL, XP_VOX, XP_VOXG, XP_ANTIVOX, XP_VOXDLY,
+	XP_MONI, XP_MONILVL, XP_SQL, XPARS };
+
+static const kpar_t g_xpar[XPARS] = {
+	[XP_MIC] = { "MIC", "mic", 0, 2, 1, 2 },
+	[XP_IMICG] = { "INT MIC GAIN", "imicg", 0, 50, 1, 30 },
+	[XP_HMICG] = { "HAND MIC GAIN", "hmicg", 0, 50, 1, 20 },
+	[XP_CMP] = { "COMPRESSOR", "comp", 0, 1, 1, 0 },
+	[XP_CMPLVL] = { "COMP LEVEL", "complvl", 1, 3, 1, 2 },
+	[XP_VOX] = { "VOX", "vox", 0, 1, 1, 0 },
+	[XP_VOXG] = { "VOX GAIN", "voxg", 0, 100, 1, 50 },
+	[XP_ANTIVOX] = { "ANTI-VOX", "antivox", 0, 100, 1, 0 },
+	[XP_VOXDLY] = { "VOX DELAY", "voxdly", 100, 2000, 50, 500 },
+	[XP_MONI] = { "MONITOR", "moni", 0, 1, 1, 1 },
+	[XP_MONILVL] = { "MONI LEVEL", "monilvl", 0, 100, 1, 30 },
+	[XP_SQL] = { "SQUELCH", "sql", 0, 100, 1, 0 },
+};
+
+static const char *g_mic_tok[3] = { "int", "hand", "auto" };
+static const char *g_cmp_tok[4] = { "", "1:2", "1:4", "1:8" };
+
+static int *xpar_value(rx_t *rx, int i)
+{
+	int *v[XPARS] = { &rx->micsel, &rx->imicg, &rx->hmicg, &rx->cmp, &rx->cmp_lvl, &rx->vox, &rx->voxg,
+		&rx->voxag, &rx->voxdly, &rx->moni, &rx->moni_lvl, &rx->sql };
+
+	return v[i];
+}
+
+static bool xpar_onoff(int i)
+{
+	return i == XP_CMP || i == XP_VOX || i == XP_MONI;
+}
+
+// Value as the console and the state file write it
+static void xpar_token(const rx_t *rx, int i, char *s, size_t n)
+{
+	int v = *xpar_value((rx_t *) rx, i);
+
+	if (i == XP_MIC)
+		snprintf(s, n, "%s", g_mic_tok[v]);
+	else if (i == XP_CMPLVL)
+		snprintf(s, n, "%s", g_cmp_tok[v]);
+	else if (xpar_onoff(i))
+		snprintf(s, n, "%s", v ? "on" : "off");
+	else
+		snprintf(s, n, "%d", v);
+}
+
+// Value as the panel shows it
+static void xpar_text(const rx_t *rx, int i, char *s, size_t n)
+{
+	xpar_token(rx, i, s, n);
+
+	if (i == XP_VOXDLY)
+		snprintf(s + strlen(s), n - strlen(s), " MS");
+
+	for (char *c = s; *c != '\0'; c++)	/* the panel font is upper case */
+		*c = (char) toupper((unsigned char) *c);
+}
+
+// Console / state value for row i; -1 when it does not parse or is out of range
+static int xpar_parse(int i, const char *vs)
+{
+	int v = -1;
+
+	if (vs == NULL)
+		return -1;
+
+	if (i == XP_MIC) {
+		for (int k = 0; k < 3; k++)
+			v = strcasecmp(vs, g_mic_tok[k]) == 0 ? k : v;
+	} else if (i == XP_CMPLVL) {
+		for (int k = 1; k < 4; k++)
+			v = strcasecmp(vs, g_cmp_tok[k]) == 0 ? k : v;
+	} else if (xpar_onoff(i)) {
+		v = strcasecmp(vs, "on") == 0 ? 1 : strcasecmp(vs, "off") == 0 ? 0 : -1;
+	}
+
+	if (v < 0 && isdigit((unsigned char) vs[0]))
+		v = atoi(vs);
+
+	return v >= g_xpar[i].min && v <= g_xpar[i].max ? v : -1;
+}
+
+static void xpar_defaults(rx_t *rx)
+{
+	for (int i = 0; i < XPARS; i++)
+		*xpar_value(rx, i) = g_xpar[i].def;
+}
+
 static void band_step(rx_t *rx, int dir)
 {
 	int band = rx->band;
@@ -1427,6 +1554,21 @@ static bool on_key(rx_t *rx, int key)
 	}
 
 	//
+	// TX panel open: MFK push selects the next value; any other key closes it and
+	// does its normal job (F4 long closes it too)
+	//
+	if (rx->xedit) {
+		rx->xedit_since = now_ms();
+
+		if (key == X6100_KEY_MFK_PUSH) {
+			rx->xedit_par = (rx->xedit_par + 1) % XPARS;
+			return true;
+		}
+
+		rx->xedit = false;
+	}
+
+	//
 	// Memory panel open: MFK push clears the channel (asks first: a second push within
 	// 3 s); V/M closes it (below), any other key closes it and does its normal job
 	//
@@ -1642,7 +1784,7 @@ typedef struct
 static bool has_long(int key)
 {
 	return key == X6100_KEY_PRE || key == X6100_KEY_FST || key == X6100_KEY_ATU || key == X6100_KEY_MFK_PUSH
-		|| key == X6100_KEY_F1 || key == X6100_KEY_F2 || key == X6100_KEY_F3 || key == X6100_KEY_F5 || key == X6100_KEY_DFN || key == X6100_KEY_DFL
+		|| key == X6100_KEY_F1 || key == X6100_KEY_F2 || key == X6100_KEY_F3 || key == X6100_KEY_F4 || key == X6100_KEY_F5 || key == X6100_KEY_DFN || key == X6100_KEY_DFL
 		|| key == X6100_KEY_GEN || key == X6100_KEY_AB
 		|| key == X6100_KEY_VM || key == X6100_KEY_AGC || key == X6100_KEY_KEY;
 }
@@ -1680,6 +1822,12 @@ static bool on_long_key(rx_t *rx, int key)
 		if (rx->kedit) {
 			*kpar_value(rx, rx->kedit_par) = g_kpar[rx->kedit_par].def;
 			rx->kedit_since = now_ms();
+			return true;
+		}
+
+		if (rx->xedit) {
+			*xpar_value(rx, rx->xedit_par) = g_xpar[rx->xedit_par].def;
+			rx->xedit_since = now_ms();
 			return true;
 		}
 
@@ -1748,6 +1896,10 @@ static bool on_long_key(rx_t *rx, int key)
 	case X6100_KEY_KEY:
 		rx->kedit = !rx->kedit;
 		rx->kedit_since = now_ms();
+		return true;
+	case X6100_KEY_F4:	/* long: TX panel (mic, compressor, VOX, monitor, squelch) */
+		rx->xedit = !rx->xedit;
+		rx->xedit_since = now_ms();
 		return true;
 	case X6100_KEY_VM:	/* long: split on / off */
 		rx->split = !rx->split;
@@ -1859,6 +2011,15 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 
 			*p = clampi(*p + value * X6100_DIR_MFK * k->step, k->min, k->max);
 			rx->kedit_since = now_ms();
+			return true;
+		}
+
+		if (rx->xedit) {
+			const kpar_t *k = &g_xpar[rx->xedit_par];
+			int *p = xpar_value(rx, rx->xedit_par);
+
+			*p = clampi(*p + value * X6100_DIR_MFK * k->step, k->min, k->max);
+			rx->xedit_since = now_ms();
 			return true;
 		}
 
@@ -3471,6 +3632,44 @@ static void draw_key_panel(x6100_lcd_t *lcd, const rx_t *rx)
 }
 
 //
+// TX panel (F4 long): five of the TX audio values around the selected one. Red.
+// MFK turn: adjust; push: next value; hold: default; F4 long, another key or 10 s
+// idle closes. On / off rows are green when on.
+//
+
+static void draw_tx_panel(x6100_lcd_t *lcd, const rx_t *rx)
+{
+	const int vis = 5, px = LBL_W + 8, py = SPEC_Y + 14, pw = 500, ph = 30 + vis * 21;
+	const uint32_t bg = 0x1C0A0A, red = 0xFF5050, sel = 0x441A1A, dim = 0xA08080, white = 0xF0F0F0;
+	const uint32_t on = 0x3CC83C, off = 0x5A6464;
+	int top = clampi(rx->xedit_par - 2, 0, XPARS - vis);
+	char pos[24];
+
+	x6100_lcd_fill(lcd, px, py, pw, ph, bg);
+	x6100_lcd_fill(lcd, px, py, 3, ph, red);
+	x6100_lcd_hline(lcd, px, px + pw - 1, py, 0x4A2020);
+	x6100_lcd_hline(lcd, px, px + pw - 1, py + ph - 1, 0x4A2020);
+	x6100_lcd_vline(lcd, px + pw - 1, py, py + ph - 1, 0x4A2020);
+	x6100_lcd_text(lcd, px + 14, py + 7, 2, "TX", red);
+	x6100_lcd_text(lcd, px + 110, py + 11, 1, "MFK: ADJUST  PUSH: NEXT  HOLD: DEFAULT", dim);
+	snprintf(pos, sizeof(pos), "%d/%d", rx->xedit_par + 1, XPARS);
+	x6100_lcd_text(lcd, px + pw - 12 - x6100_lcd_text_width(pos, 1), py + 11, 1, pos, red);
+
+	for (int i = top; i < top + vis; i++) {
+		int y = py + 30 + (i - top) * 21;
+		uint32_t c = !xpar_onoff(i) ? white : *xpar_value((rx_t *) rx, i) ? on : off;
+		char v[24];
+
+		if (i == rx->xedit_par)
+			x6100_lcd_fill(lcd, px + 6, y - 3, pw - 12, 19, sel);
+
+		x6100_lcd_text(lcd, px + 14, y, 2, g_xpar[i].name, i == rx->xedit_par ? white : dim);
+		xpar_text(rx, i, v, sizeof(v));
+		x6100_lcd_text(lcd, px + pw - 12 - x6100_lcd_text_width(v, 2), y, 2, v, c);
+	}
+}
+
+//
 // Memory panel (V/M short): five channels around the selected one. Cyan. MFK turn:
 // channel (a used one is tuned at once); MFK long: write the VFO into it; MFK push
 // twice: clear it; V/M, another key or 10 s idle closes.
@@ -4481,6 +4680,9 @@ overlays:
 	if (rx->kedit)
 		draw_key_panel(lcd, rx);
 
+	if (rx->xedit)
+		draw_tx_panel(lcd, rx);
+
 	if (rx->gedit)
 		draw_gen_panel(lcd, rx);
 
@@ -4913,6 +5115,33 @@ static bool console_line(rx_t *rx, char *line)
 			}
 		}
 
+		// TX audio: mic int|hand|auto, imicg, hmicg, comp on|off, complvl 1:2|1:4|1:8,
+		// vox on|off, voxg, antivox, voxdly, moni on|off, monilvl, sql
+		{
+			int k = -1;
+
+			for (int i = 0; i < XPARS; i++)
+				k = strcasecmp(t, g_xpar[i].token) == 0 ? i : k;
+
+			if (k >= 0) {
+				int v = xpar_parse(k, strtok(NULL, " \t\r\n"));
+
+				if (v < 0 && k == XP_MIC)
+					fprintf(stderr, "\nmic: int, hand or auto\n");
+				else if (v < 0 && k == XP_CMPLVL)
+					fprintf(stderr, "\ncomplvl: 1:2, 1:4 or 1:8\n");
+				else if (v < 0 && xpar_onoff(k))
+					fprintf(stderr, "\n%s: on or off\n", t);
+				else if (v < 0)
+					fprintf(stderr, "\n%s: %d to %d\n", t, g_xpar[k].min, g_xpar[k].max);
+				else
+					*xpar_value(rx, k) = v;
+
+				changed = true;
+				continue;
+			}
+		}
+
 		// mem <n> <Hz> <mode> fil<n> [tx <Hz> <mode>] [name <text>]: memory channel
 		// (memories.conf; typed in the console it is saved at once)
 		if (strcasecmp(t, "mem") == 0) {
@@ -5271,6 +5500,13 @@ static void state_save(const rx_t *rx)
 	fprintf(fp, "vol %d %s rfg %d pwr %.1f\n", rx->vol, rx->mute ? "mute" : "nomute", rx->rfg, rx->txpwr / 10.0);
 	fprintf(fp, "keytype %d wpm %d iambic %d cwpitch %d cwvol %d qsk %d ratio %d.%d\n", rx->keymode, rx->wpm, rx->iambic,
 		rx->cwtone, rx->cwvol, rx->qsk, rx->ratio / 10, rx->ratio % 10);
+
+	for (int i = 0; i < XPARS; i++) {
+		char v[16];
+
+		xpar_token(rx, i, v, sizeof(v));
+		fprintf(fp, "%s %s%s", g_xpar[i].token, v, i == XPARS - 1 ? "\n" : " ");
+	}
 	fprintf(fp, "%s %s %s\n", rx->att ? "att" : "noatt", rx->pre ? "pre" : "nopre", rx->atu_on ? "atu" : "noatu");
 	fprintf(fp, "%s %s %s\n", rx->nr ? "nr" : "nonr", rx->nb ? "nb" : "nonb", rx->dnf ? "notch" : "nonotch");
 	fprintf(fp, "nrl %d nbl %d nbw %d ntf %d ntw %d\n", rx->nr_lvl, rx->nb_lvl, rx->nb_w, rx->dnf_f, rx->dnf_w);
@@ -5620,6 +5856,33 @@ static bool cat_get(void *ctx, x6100_civ_item_t item, int vfo, int32_t *v)
 	case X6100_CIV_LVL_DNF:
 		*v = (rx->dnf_f - 100) * 255 / 2900;	/* 0000-0255 over 100-3000 Hz */
 		return true;
+	case X6100_CIV_LVL_SQL:		/* TX audio: the panel ranges over 0000-0255 */
+		*v = rx->sql * 255 / 100;
+		return true;
+	case X6100_CIV_LVL_MIC:		/* the mic in use: internal, else the hand mic */
+		*v = (rx->micsel == 0 ? rx->imicg : rx->hmicg) * 255 / 50;
+		return true;
+	case X6100_CIV_LVL_COMP:	/* 1:2 / 1:4 / 1:8 as 0000 / 0127 / 0255 */
+		*v = (rx->cmp_lvl - 1) * 255 / 2;
+		return true;
+	case X6100_CIV_LVL_MONI:
+		*v = rx->moni_lvl * 255 / 100;
+		return true;
+	case X6100_CIV_LVL_VOX:
+		*v = rx->voxg * 255 / 100;
+		return true;
+	case X6100_CIV_LVL_ANTIVOX:
+		*v = rx->voxag * 255 / 100;
+		return true;
+	case X6100_CIV_COMP:
+		*v = rx->cmp;
+		return true;
+	case X6100_CIV_VOX:
+		*v = rx->vox;
+		return true;
+	case X6100_CIV_MONI:
+		*v = rx->moni;
+		return true;
 	case X6100_CIV_LVL_KEY_SPEED:	/* 0000-0255 = 6-48 WPM (IC-705) */
 		*v = clampi((rx->wpm - 6) * 255 / 42, 0, 255);
 		return true;
@@ -5633,7 +5896,7 @@ static bool cat_get(void *ctx, x6100_civ_item_t item, int vfo, int32_t *v)
 		*v = rx->tuning ? 2 : rx->atu_on;
 		return true;
 	default:
-		return false;	/* NB, NR, DNF, COMP, VOX, MONI, RIT, other levels */
+		return false;	/* NB, NR, DNF, RIT, other levels */
 	}
 }
 
@@ -5855,6 +6118,33 @@ static bool cat_set(void *ctx, x6100_civ_item_t item, int vfo, int32_t v)
 		break;
 	case X6100_CIV_LVL_DNF:
 		rx->dnf_f = 100 + (v * 2900 + 127) / 255 / 10 * 10;
+		break;
+	case X6100_CIV_LVL_SQL:		/* TX audio: 0000-0255 over the panel ranges */
+		rx->sql = (v * 100 + 127) / 255;
+		break;
+	case X6100_CIV_LVL_MIC:		/* the mic in use: internal, else the hand mic */
+		*(rx->micsel == 0 ? &rx->imicg : &rx->hmicg) = (v * 50 + 127) / 255;
+		break;
+	case X6100_CIV_LVL_COMP:
+		rx->cmp_lvl = 1 + (v * 2 + 127) / 255;
+		break;
+	case X6100_CIV_LVL_MONI:
+		rx->moni_lvl = (v * 100 + 127) / 255;
+		break;
+	case X6100_CIV_LVL_VOX:
+		rx->voxg = (v * 100 + 127) / 255;
+		break;
+	case X6100_CIV_LVL_ANTIVOX:
+		rx->voxag = (v * 100 + 127) / 255;
+		break;
+	case X6100_CIV_COMP:
+		rx->cmp = v != 0;
+		break;
+	case X6100_CIV_VOX:
+		rx->vox = v != 0;
+		break;
+	case X6100_CIV_MONI:
+		rx->moni = v != 0;
 		break;
 	case X6100_CIV_LVL_KEY_SPEED:
 		rx->wpm = clampi(6 + (v * 42 + 127) / 255, 5, 50);
@@ -6302,6 +6592,7 @@ int main(int argc, char **argv)
 		rx.band_freq[i] = g_bands[i].def;
 
 	kpar_defaults(&rx);
+	xpar_defaults(&rx);
 	rx.dup = DUP_AUTO;
 	rx.dup_khz = DUP_KHZ_DEF;
 
@@ -6665,6 +6956,12 @@ int main(int argc, char **argv)
 		// Keyer panel after 10 s
 		if (rx.kedit && t - rx.kedit_since >= 10000) {
 			rx.kedit = false;
+			dirty = true;
+		}
+
+		// TX panel after 10 s
+		if (rx.xedit && t - rx.xedit_since >= 10000) {
+			rx.xedit = false;
 			dirty = true;
 		}
 

@@ -43,7 +43,7 @@ Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
 | F1 | scroll on / off: CENTER <-> SCROLL-C, FIX <-> SCROLL-F | CENTER family <-> FIX family |
 | F2 | span ±48 / 24 / 12 / 6 / 3 / 1.5 kHz; audio scope: 0-3 / 0-6 kHz | reference level: MFK turn = ±1 dB (±30), MFK push = RF <-> AF scope; F2 long, other key or 10 s idle closes |
 | F3 | audio scope on / off (RF <-> AF) | RF scope left (5/8) + audio scope right (3/8), on / off |
-| F4 | TX meter: PO / SWR / ALC | |
+| F4 | TX meter: PO / SWR / ALC | TX panel: mic, compressor, VOX, monitor, squelch |
 | F5 | filter FIL1 / FIL2 / FIL3 | filter panel |
 | PTT | hold = TX; tap (< 400 ms) = latch, next press drops | |
 | ATU | tuner in / out | tune (keys TX at tune power); the result becomes a tuner memory |
@@ -144,7 +144,7 @@ Two files in `/etc/x6100`, both in console tokens (`#` = comment):
 
 | File | Written by | Holds |
 |---|---|---|
-| `x6100_trx.state` | x6100_trx, at exit and after every tune | last state: frequency, mode, filter, VFO B, split, RIT / XIT, duplex, keyer, volume / mute, gains, AGC per mode group, DSP, scope, REF, band memories, tuner memories |
+| `x6100_trx.state` | x6100_trx, at exit and after every tune | last state: frequency, mode, filter, VFO B, split, RIT / XIT, duplex, keyer, TX audio, volume / mute, gains, AGC per mode group, DSP, scope, REF, band memories, tuner memories |
 | `x6100_trx.conf` | you, never x6100_trx | what must be the same at every start (example: `docs/x6100_trx.conf.example`) |
 | `filters.conf` | filter panel | filter widths and shifts per mode group |
 | `memories.conf` | memory panel / console | memory channels 1-99 |
@@ -261,6 +261,37 @@ Kept in the state file. Console: `keytype straight|paddle|rev`, `wpm 22`, `iambi
 `cwpitch 650`, `cwvol 25`, `qsk 150`, `ratio 3.2`. In CW the console status line shows
 `22 wpm paddle`. CI-V: 14 0C (speed, 6-48 WPM), 14 09 (pitch, 300-900 Hz), 14 0F
 (break-in delay, 0-1000 ms here).
+
+## TX panel (F4 long)
+
+F4 long opens the TX panel (red): MFK turn = adjust, push = next value, long = default;
+F4 long, another key or 10 s idle closes. On / off rows show green when on. The
+defaults are the values x6100_trx wrote at start before (from the R1CBU GUI; VOX gain
+and delay are new, VOX stays off), so
+nothing changes until a value is set. The gain ranges are not yet checked on the radio.
+
+| Value | Range (default) | Register |
+|---|---|---|
+| MIC | INT, HAND, AUTO (AUTO) | 21 [1:0] |
+| INT MIC GAIN | 0-50 (30) | 20 [23:16] |
+| HAND MIC GAIN | 0-50 (20) | 20 [31:24] |
+| COMPRESSOR | ON / OFF (OFF) | 25 [4] |
+| COMP LEVEL | 1:2, 1:4, 1:8 (1:4) | 25 [3:0] |
+| VOX | ON / OFF (OFF) | 22 [26] |
+| VOX GAIN | 0-100 (50) | 22 [6:0] |
+| ANTI-VOX | 0-100 (0) | 22 [13:7] |
+| VOX DELAY | 100-2000 ms in 50 ms steps (500) | 22 [25:14] |
+| MONITOR | ON / OFF (ON) | 29 (0 when off) |
+| MONI LEVEL | 0-100 (30) | 29 |
+| SQUELCH | 0-100 (0 = open) | 21 [15:8] |
+
+VOX keys the baseband itself, as the hand mic PTT: x6100_trx follows the TX flag, so
+with split or duplex the first few ms go out on the RX frequency. Kept in the state
+file. Console: `mic int|hand|auto`, `imicg 30`, `hmicg 20`, `comp on|off`,
+`complvl 1:2|1:4|1:8`, `vox on|off`, `voxg 50`, `antivox 0`, `voxdly 500`,
+`moni on|off`, `monilvl 30`, `sql 0`. CI-V: 14 03 / 0B / 0E / 15 / 16 / 17 (squelch,
+mic gain, compressor level, monitor, VOX gain, anti-VOX), 16 44 / 45 / 46
+(compressor, monitor, VOX).
 
 ## Memory channels (V/M)
 

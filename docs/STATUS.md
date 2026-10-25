@@ -44,6 +44,11 @@ Verified on the radio:
 - state saved right after every tune: the new atumem is on disk while x6100_trx runs
   (stored at the TX frequency, e.g. 29530000 for a tune on 29.630 with AUTO duplex)
 
+Built, not yet tried on the radio (2026-10-25):
+
+- TX panel (F4 long): mic select and gains, compressor, VOX, monitor, squelch; state,
+  console, CI-V 14 03 / 0B / 0E / 15-17 and 16 44-46
+
 ## Open items to check on the radio
 
 1. Tuner memories: SWR when keying on a recalled memory (saved and back after a restart:
@@ -56,17 +61,20 @@ Verified on the radio:
 5. Repeater duplex, the rest: CAT PTT, mem 22 (AUTO) and a memory with dup- 100, state
    after a restart, split over duplex, MFK hold resets, panel layout. Scope TX line:
    only when in view (by design).
+6. TX panel: each row audible / visible on TX (mic gain on ALC, compressor, VOX keys
+   and drops with the delay, anti-VOX against the speaker, monitor heard while keyed,
+   squelch closes in FM); the gain ranges (0-50, 0-100) against the stock UI.
 
 ## Next steps (suggested order)
 
 1. Radio checks above.
-2. TX panel under GEN: mic select and gain, compressor, VOX, monitor, squelch.
-3. CI-V memory commands (08-0B, 1A 00) and 1A 05 0131 transceive switch.
-4. Band edge markers on the scope from the region table.
-5. liquid-dsp in use: network audio / RADE (Icom LAN server design in
+2. CI-V memory commands (08-0B, 1A 00) and 1A 05 0131 transceive switch.
+3. Band edge markers on the scope from the region table.
+4. liquid-dsp in use: network audio / RADE (Icom LAN server design in
    `x6100_netaudio_design.md`), recordings, RX / TX equaliser.
-6. Measurements: S-meter calibration, codec level against ALC.
-7. CTCSS for the repeaters (see TODO: no tone encoder known, mic bypasses Linux).
+5. Measurements: S-meter calibration, codec level against ALC.
+6. CTCSS for the repeaters (see TODO: no tone encoder known, mic bypasses Linux).
+7. Birdie calibration as in IU1WXY's design: investigate (TODO).
 
 ## Working notes
 

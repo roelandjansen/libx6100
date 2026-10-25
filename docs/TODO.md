@@ -19,6 +19,8 @@ Status: 2026-10-25 (after v0.10.0). Summary and next steps: `STATUS.md`.
 - Hand mic PTT with split: x6100_trx follows the baseband TX flag (verified), the first
   ms go out on the RX side; the baseband split flag (register 12 b1, VFO A RX / VFO B TX)
   could make that clean: to test.
+- Birdie calibration as in IU1WXY's design: investigate (look up their implementation;
+  internal spurs measured and stored per frequency, then masked on the scope / notched?).
 - S-meter calibration (signal generator): SMETER_CAL_DB is provisional (-21: -15 from
   an IC-7851 comparison, then 6 dB lower); also the overload point with PRE / ATT.
 - Codec level vs ALC test (x6100_tx codec at -40 / -30 / -20 dBFS).
@@ -32,8 +34,10 @@ Status: 2026-10-25 (after v0.10.0). Summary and next steps: `STATUS.md`.
 
 - GEN: more rows (see key plan); keyer settings (KEY), messages (MSG), apps (APP).
 - CI-V rate: the example conf has `cat 19200`; raise it once ttyS2 runs faster.
-- Compressor; VOX / anti-VOX; squelch; monitor;
-  mic select and gain; line in / out levels (registers known, defaults set at start).
+- TX panel (F4 long): mic select and gains, compressor, VOX, monitor, squelch built;
+  test the ranges on the radio (gains 0-50 and VOX 0-100 are guesses, VOX delay scale
+  of register 22 [25:14] unchecked: the start value 0x01F40000 reads 2000 ms there).
+  Line in / out levels (register 20 [7:0] / [15:8]) still fixed at 10.
 - Memory channels over CI-V (08 select, 09 write, 0A M>VFO, 0B clear, 1A 00 contents).
 - SWR scan over a band (register 12 `swrscan`).
 - RX / TX equaliser (baseband or liquid-dsp; GEN TX panel).
@@ -43,7 +47,7 @@ Status: 2026-10-25 (after v0.10.0). Summary and next steps: `STATUS.md`.
 
 | Key | Short | Long | Status |
 |---|---|---|---|
-| GEN | settings panel: brightness, CAT, NTP, WiFi, Bluetooth (done); next: region, LAN server (wfview), TX panel | status page: IP, uptime, battery, CAT, NTP, build (done); next: temperature, baseband version | partly done |
+| GEN | settings panel: brightness, CAT, NTP, WiFi, Bluetooth (done); next: region, LAN server (wfview) (TX panel: F4 long, done) | status page: IP, uptime, battery, CAT, NTP, build (done); next: temperature, baseband version | partly done |
 | KEY | key type straight / paddle / reversed | keyer panel: speed, iambic A / B, pitch, sidetone, break-in delay, ratio | done |
 | MSG | message list: play CW / voice memory | record / edit a message | planned |
 | APP | app list: FT8, CW / RTTY decoder, SWR scan, recorder | last app | planned |
