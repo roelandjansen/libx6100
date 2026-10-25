@@ -348,6 +348,7 @@ static const char *g_input_names[IN_COUNT] = {
 
 static volatile sig_atomic_t g_stop;
 static bool g_poweroff;	/* PWR held 4 s: power the radio off after the clean exit */
+static const char *g_cmd_view;	/* console line being typed, shown at the end of the status line */
 static int g_cat_baud;		/* CI-V baud, 0 = no CAT: conf token cat, or --cat */
 static char g_ntp_server[64];	/* conf token ntp <server> | off; empty = ntp.conf or pool.ntp.org */
 static int g_bright;		/* backlight level, % (10-100); 0 = leave as the OS set it */
@@ -766,10 +767,32 @@ static void show(const rx_t *rx)
 		snprintf(sp, sizeof(sp), "  RX %.3f TX %.3f %s%s", rx_hz(rx) / 1000.0, tx_hz(rx) / 1000.0,
 			mode_name(tx_mode(rx)), rx->split ? " SPLIT" : "");
 
-	printf("\r%c %9.3f kHz %-5s %-4s step %s  vol %3d%s  rfg %3d  pre %s  agc %-4s%s%s      ",
+	char line[256];
+	struct winsize ws;
+	int cols = ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0 ? ws.ws_col : 80;
+
+	snprintf(line, sizeof(line), "%c %9.3f kHz %-5s %-4s step %s  vol %3d%s  rfg %3d  pre %s  agc %-4s%s%s",
 		rx->on_b ? 'B' : 'A', rx->freq / 1000.0, rx->band >= 0 ? g_bands[rx->band].name : "-",
 		mode_name(rx->mode), st, rx->vol, rx->mute ? " (mute)" : "", rx->rfg, rx->pre ? "on " : "off",
 		agc_name(rx->agc), sp, rx->lock ? "  LOCK" : "");
+
+	//
+	// One terminal row only: a line wider than the terminal wraps, and every redraw
+	// (\r goes back to the start of the last row) then scrolls the console up, taking
+	// output such as the memr list with it. Cut to the width, clear the rest of the row.
+	//
+	// A line being typed goes at the end and always stays visible; the status gives way
+	{
+		const char *in = g_cmd_view != NULL && g_cmd_view[0] != '\0' ? g_cmd_view : NULL;
+		int room = cols - 1 - (in != NULL ? (int) strlen(in) + 4 : 0);
+
+		room = room < 0 ? 0 : room;
+
+		if (room < (int) sizeof(line))
+			line[room] = '\0';
+
+		printf("\r%s%s%s\033[K", line, in != NULL ? "  > " : "", in != NULL ? in : "");
+	}
 	fflush(stdout);
 }
 
@@ -4850,34 +4873,79 @@ static void state_save(const rx_t *rx)
 static bool console_read(rx_t *rx, char *buf, size_t size, size_t *len)
 {
 	bool changed = false;
-	ssize_t n = read(STDIN_FILENO, buf + *len, size - 1 - *len);
+	char in[64];
+	ssize_t n = read(STDIN_FILENO, in, sizeof(in));
 
 	if (n <= 0)
 		return false;
 
-	*len += (size_t) n;
-	buf[*len] = '\0';
+	//
+	// With the terminal in character mode (console_raw) we echo the line ourselves,
+	// at the end of the status line, so its redraws never wipe what is being typed;
+	// piped input arrives in lines and works the same
+	//
+	for (ssize_t i = 0; i < n; i++) {
+		char c = in[i];
 
-	char *nl;
+		if (c == '\r' || c == '\n') {
+			buf[*len] = '\0';
+			printf("\r> %s\033[K\n", buf);	/* the typed line stays visible above the output */
 
-	while ((nl = strchr(buf, '\n')) != NULL) {
-		*nl = '\0';
+			if (rx->lock)
+				fprintf(stderr, "locked\n");
+			else if (*len > 0)
+				changed |= console_line(rx, buf);
 
-		if (rx->lock)
-			fprintf(stderr, "\nlocked\n");
-		else
-			changed |= console_line(rx, buf);
-
-		size_t rest = *len - (size_t) (nl + 1 - buf);
-
-		memmove(buf, nl + 1, rest + 1);
-		*len = rest;
+			*len = 0;
+			buf[0] = '\0';
+		} else if (c == 0x7F || c == 0x08) {
+			if (*len > 0)
+				buf[--*len] = '\0';
+		} else if (c == 0x15) {	/* ^U: clear the line */
+			*len = 0;
+			buf[0] = '\0';
+		} else if (c >= 0x20 && c < 0x7F && *len < size - 1) {
+			buf[(*len)++] = c;
+			buf[*len] = '\0';
+		}
 	}
 
-	if (*len >= size - 1)
-		*len = 0;
-
+	g_cmd_view = buf;
+	show(rx);
 	return changed;
+}
+
+//
+// Console in character mode without echo (ISIG kept: ^C still quits); restored at exit
+//
+
+static struct termios g_tty_saved;
+static bool g_tty_raw;
+
+static void console_restore(void)
+{
+	if (g_tty_raw)
+		tcsetattr(STDIN_FILENO, TCSANOW, &g_tty_saved);
+
+	g_tty_raw = false;
+}
+
+static void console_raw(void)
+{
+	struct termios t;
+
+	if (!isatty(STDIN_FILENO) || tcgetattr(STDIN_FILENO, &g_tty_saved) < 0)
+		return;
+
+	t = g_tty_saved;
+	t.c_lflag &= ~(tcflag_t) (ICANON | ECHO);
+	t.c_cc[VMIN] = 1;
+	t.c_cc[VTIME] = 0;
+
+	if (tcsetattr(STDIN_FILENO, TCSANOW, &t) == 0) {
+		g_tty_raw = true;
+		atexit(console_restore);
+	}
 }
 
 //
@@ -5848,6 +5916,7 @@ int main(int argc, char **argv)
 	else
 		rx.agc_group[rx.agc_last_group] = rx.agc;
 
+	console_raw();	/* character mode: our own echo after the status line */
 	signal(SIGINT, on_signal);
 	signal(SIGTERM, on_signal);
 

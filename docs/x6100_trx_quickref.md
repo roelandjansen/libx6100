@@ -161,6 +161,10 @@ sh ./build.sh deploy     # also puts back settings the radio lacks (conf, memori
 
 Type a line + Enter while running; tokens can be combined (`14074000 usb`).
 
+What you type is shown at the end of the status line (`> memw 5`), so redraws do not
+wipe it; Backspace and ^U (clear) work, Enter runs it and keeps it on its own line.
+The status line is cut to the terminal width.
+
 The status line starts with the VFO in use (A / B); with split, RIT or XIT it adds
 `RX 7123.000 TX 7115.000 LSB SPLIT`.
 
