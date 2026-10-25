@@ -23,7 +23,7 @@ key with `0x4000`. No hardware obstacle.
 
 | Option | For | Against |
 |---|---|---|
-| A. Port wfserver (Qt) to the R16 | proven, X6200 ships it | Qt + audio stack on a weak SoC; wfserver expects a CI-V serial rig behind it, which the X6100 does not have; QtAudio dropouts (X6200 forum) |
+| A. Port wfserver (Qt) to the R16 | proven, X6200 ships it; the CI-V rig it expects now exists: `x6100_trx --cat=pty` (2026-10-25) | Qt + audio stack on a weak SoC (needs a buildroot package); QtAudio dropouts (X6200 forum) |
 | **B. Own C daemon speaking the Icom LAN protocol (server side)** | wfview connects unchanged; CI-V engine sits directly on libx6100; small, static, no Qt | protocol must be reimplemented from wfview's client code |
 | C. Own protocol + new wfview backend | simplest daemon | needs wfview changes, no other client works |
 
@@ -148,7 +148,9 @@ The rig file lists only these. CAT PTT from the client keys with the selected so
 
 ## 10. Open questions
 
-1. Confirm option B (Icom LAN protocol, own daemon) vs porting wfserver.
+1. Option B (own daemon) vs wfserver (A): reopened 2026-10-25, now that x6100_trx offers
+   CI-V on a pty and the DEV port is capped at 19200. Next: can wfserver (Qt5, opus,
+   audio) be built for the R16 against the image (buildroot package), and how it runs.
 2. CI-V address and model ID for the X6100 identity, and which wfview rig-file
    fields cover DATA MOD source selection.
 3. Does wfview's Opus negotiation work against a non-wfserver server as-is?

@@ -56,7 +56,8 @@ Status: 2026-10-25 (after v0.10.0). Summary and next steps: `STATUS.md`.
 - GEN: more rows (see key plan); keyer settings (KEY), messages (MSG), apps (APP).
 - CI-V rate: 19200 is the limit of the DEV port (9600 / 19200 work, 38400 and up do
   not, with the divisor written and the PC side checked); faster CAT goes over the
-  network (LAN server, `x6100_netaudio_design.md`).
+  network: `cat pty` (CI-V on /tmp/x6100-civ, any speed) for wfserver on the radio, or
+  the own LAN server (`x6100_netaudio_design.md`, option A vs B reopened).
 - TX panel (F4 long): mic select and gains, compressor, VOX, monitor, squelch built;
   test the ranges on the radio (gains 0-50 and VOX 0-100 are guesses, VOX delay scale
   of register 22 [25:14] unchecked: the start value 0x01F40000 reads 2000 ms there).

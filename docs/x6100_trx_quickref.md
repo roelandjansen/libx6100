@@ -8,7 +8,7 @@ panel. `x6100_rx` is the same program, receive only (PTT and tune refused).
 Stop the stock GUI first (`scripts/x6100_ui.sh stop`).
 
 ```
-x6100_trx [--oob] [--no-limit] [--cat[=baud]] [--cat-log] [--probe] [freq] [mode] [agc] [att|noatt] [pre|nopre] [vol 0-100]
+x6100_trx [--oob] [--no-limit] [--cat[=baud|pty]] [--cat-log] [--probe] [freq] [mode] [agc] [att|noatt] [pre|nopre] [vol 0-100]
 x6100_trx 7074000 lsb vol 30
 x6100_trx --oob 5450000 usb slow
 ```
@@ -17,7 +17,7 @@ x6100_trx --oob 5450000 usb slow
 |---|---|
 | `--oob` | no band check before TX, baseband TX enabled everywhere (transverter, tests; legal limits are yours) |
 | `--no-limit` | tune 10 kHz - 100 MHz instead of 0.5 - 56 MHz (baseband probe); put it before the frequency |
-| `--cat[=baud]` | CI-V on /dev/ttyS2 (DEV USB-C, PC side the second CH342 port, e.g. ttyACM1), default 19200 (also the maximum of the DEV port), as an IC-705: see `docs/x6100_civ.md` |
+| `--cat[=baud\|pty]` | CI-V as an IC-705 on /dev/ttyS2 (DEV USB-C, PC side the second CH342 port, e.g. ttyACM1), 4800-19200, default 19200 (the most the DEV port carries); `pty`: on a pseudo-terminal, /tmp/x6100-civ, any speed, for a client on the radio (wfserver, rigctld, socat). See `docs/x6100_civ.md` |
 | `--cat-log` | as `--cat`, and print CI-V commands (`>`) with our OK / NG reply (`<`); polls answered with data are not shown |
 | `--probe` | print the flow flag word on change, and every second the IQ peak and all flag bits seen (overflow hunt) |
 
@@ -120,7 +120,7 @@ Values are kept in the last state (see Settings); defaults NR 20, NB 10 / 10, no
 | Row | Values | When |
 |---|---|---|
 | BRIGHTNESS | 5-100 % in steps of 5 (default 100) | at once |
-| CAT (CI-V) | OFF, 4800, 9600, 19200 (default 19200: the most the DEV port carries) | next start |
+| CAT (CI-V) | OFF, 4800, 9600, 19200 (default 19200: the most the DEV port carries), PTY (/tmp/x6100-civ) | next start |
 | NTP SYNC | AT START / OFF | next start |
 | WIFI | ON / OFF (NetworkManager); shows network, IP and signal | at once |
 | WIFI NETWORK | turn: choose a saved network, hold MFK: connect. New networks: `nmtui` over ssh | at once |
@@ -201,7 +201,7 @@ The status line starts with the VFO in use (A / B); with split, RIT or XIT it ad
 | `agc ssb|ssbd|cw|am|fm off|slow|fast|auto` | AGC of a mode group |
 | `atumem 7120000 L C S` | a tuner memory (state file; `atunet 40m L C S` from older ones still loads) |
 | `mute nomute` | audio mute |
-| `cat 19200`, `cat off` | CI-V at start (settings file; `--cat` overrides) |
+| `cat 19200`, `cat pty`, `cat off` | CI-V at start (settings file; `--cat` overrides) |
 | `ntp <server>`, `ntp on`, `ntp off` | NTP sync at start (settings file) |
 | `bright 5-100` | display brightness in % |
 | `ab`, `a=b` | VFO A <-> B, A=B |

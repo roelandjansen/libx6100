@@ -28,7 +28,8 @@
 #   agc ssb|ssbd|cw|am|fm <agc>     AGC of a mode group
 #   atumem 7120000 L C S            a tuner memory (normally in the state file)
 #   mute nomute                     audio mute
-#   cat 19200 | cat off             CI-V on ttyS2 (DEV USB-C), as an IC-705; start only
+#   cat 19200 | cat pty | cat off   CI-V as an IC-705: on ttyS2 (DEV USB-C, 4800-19200)
+#                                   or on a pseudo-terminal /tmp/x6100-civ; start only
 #   ntp pool.ntp.org | on | off     server for the one NTP sync at start
 #   bright 5-100                    display brightness, %
 #   region r1|r2|r3|nl              TX allocations for the band check and the OOB
@@ -45,6 +46,7 @@
 # ref -10
 # nrl 20 nbl 10 nbw 10
 
-# CI-V: the stock image runs ttyS2 at 19200 only (2026-10-23). Raise this
-# when the CI-V rate is fixed (own kernel / device tree). --cat=baud overrides.
+# CI-V: 19200 is the most the DEV port carries (2026-10-25). For a client on the radio
+# (wfserver, rigctld, socat to TCP) use cat pty instead: no speed limit.
+# --cat=baud or --cat=pty overrides.
 cat 19200

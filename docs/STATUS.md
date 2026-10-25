@@ -52,6 +52,8 @@ Built, not yet tried on the radio (2026-10-25):
 - birdies: scan (GEN BIRDIE SCAN / `birdiescan`), birdies.conf, yellow ticks on the
   scope, automatic notch in USB / LSB / AM (BIRDIE NOTCH, off for now); host simulation
   of 80 m finds the IU1WXY reference list within 3 Hz
+- CAT on a pseudo-terminal (`cat pty`, GEN CAT row PTY): /tmp/x6100-civ, any speed, for
+  a client on the radio (wfserver, rigctld, socat to TCP); host test answers 03
 
 ## Open items to check on the radio
 
@@ -70,16 +72,21 @@ Built, not yet tried on the radio (2026-10-25):
    squelch closes in FM); the gain ranges (0-50, 0-100) against the stock UI.
 7. Birdies: 80 m scan against the IU1WXY list (TODO), tick on the scope line, the
    notch on 3837.014 (LSB, dial 3838.000: 986 Hz), PRE / ATT.
+8. CAT pty on the radio: `x6100_trx --cat=pty`, then `socat TCP-LISTEN:4532,reuseaddr,fork
+   /tmp/x6100-civ,raw,echo=0` and a logger at the PC on that TCP port (a virtual serial
+   port over TCP, e.g. socat on the PC side).
 
 ## Next steps (suggested order)
 
 1. Radio checks above.
 2. CI-V memory commands (08-0B, 1A 00) and 1A 05 0131 transceive switch.
 3. Band edge markers on the scope from the region table.
-4. liquid-dsp in use: network audio / RADE (Icom LAN server design in
+4. Network CAT and audio: wfserver on the radio over `cat pty` (Qt5 build for the R16?)
+   or the own Icom LAN server (option A vs B in `x6100_netaudio_design.md`).
+5. liquid-dsp in use: network audio / RADE (Icom LAN server design in
    `x6100_netaudio_design.md`), recordings, RX / TX equaliser.
-5. Measurements: S-meter calibration, codec level against ALC.
-6. CTCSS for the repeaters (see TODO: no tone encoder known, mic bypasses Linux).
+6. Measurements: S-meter calibration, codec level against ALC.
+7. CTCSS for the repeaters (see TODO: no tone encoder known, mic bypasses Linux).
 
 ## Working notes
 
