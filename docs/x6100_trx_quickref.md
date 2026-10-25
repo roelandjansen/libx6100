@@ -104,6 +104,8 @@ Values are kept in the last state (see Settings); defaults NR 20, NB 10 / 10, no
 - AGC default AUTO; AM / FM SLOW (AUTO squashes AM)
 - F1-F5 tags along the bottom edge: SCOPE, SPAN, AUDIO, METER, FIL
 - Audio scope (F3; F3 long: next to the RF scope, RF left / AF right): spectrum and waterfall of the demodulated RX audio (codec capture, 48 kHz), 0-3 or 0-6 kHz (F2), normalised dBFS scale (80 dB window, its bottom 10 dB under the noise floor measured inside the receive passband, so the picture stays put with volume and band noise; shifted by the AF reference level), receive passband shaded, MN line at the notch when on. The capture is opened only while the audio scope is shown
+- Battery voltage (info line, right): green on external power (charging below 100 %),
+  amber under 20 %, red under 10 %; a note on the scope at 20 % and 10 %
 - OVF (red, top left of the dial): flow IQ at its clip level
 - OOB (red, under OVF): band check off (`--oob` or `oob` in the conf) and tuned outside the region's allocations; where you transmit is your responsibility
 - NB / NR / MN (blue, top right of the dial) in fixed places, e.g. `NB    MN`, `   NR   `, `NB NR MN`; MN = manual notch, as on Icom radios
@@ -130,7 +132,8 @@ Bluetooth are the image's own (NetworkManager, bluez) and keep their state thems
 brightness, CAT and NTP go to `x6100_trx.state` at exit. A row set in `x6100_trx.conf` shows CONF and
 cannot be changed here: the conf wins at start, so change it there.
 
-GEN long: status page (IP address, uptime, battery, CAT, last NTP result, build).
+GEN long: status page (IP address, battery with charge and external supply, CAT, last
+NTP result, region, uptime, build).
 
 ![GEN status](images/x6100_trx_status.png)
 
@@ -164,7 +167,8 @@ Type a line + Enter while running; tokens can be combined (`14074000 usb`).
 What you type is shown at the end of the status line (`> memw 5`), so redraws do not
 wipe it; Backspace and ^U (clear) work, Enter runs it and keeps it on its own line.
 The status line is cut to the terminal width. It ends with the receive level and
-battery (`iq -90.6 dB  vbat 8.2V`), while transmitting with `TX 5.0 W  swr 1.2  alc 3`.
+battery (`iq -90.6 dB  bat 8.2V 87%`, `ext` on external power), while transmitting with
+`TX 5.0 W  swr 1.2  alc 3`.
 
 The status line starts with the VFO in use (A / B); with split, RIT or XIT it adds
 `RX 7123.000 TX 7115.000 LSB SPLIT`.

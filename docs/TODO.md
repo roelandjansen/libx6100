@@ -10,6 +10,7 @@ Status: 2026-10-24 (v0.8.0).
 
 - TX ranges config file and transverter profile (frequency offset, TX enable).
 - 10 m repeater split (FM, -100 kHz shift, CTCSS) on top of split.
+- RIT / XIT: test on the radio (panel, offset on RX and TX, scope lines, CI-V 21).
 - Hand mic PTT with split: x6100_trx follows the baseband TX flag (verified), the first
   ms go out on the RX side; the baseband split flag (register 12 b1, VFO A RX / VFO B TX)
   could make that clean: to test.
@@ -30,7 +31,6 @@ Status: 2026-10-24 (v0.8.0).
 - CW keyer: speed, iambic A / B, sidetone, break-in delay.
 - Memory channels over CI-V (08 select, 09 write, 0A M>VFO, 0B clear, 1A 00 contents).
 - SWR scan over a band (register 12 `swrscan`).
-- Battery / charge status.
 - Digital modes on the radio (FT8, CW / RTTY decoder); CW / voice message memories;
   RX / TX equaliser.
 

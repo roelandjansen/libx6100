@@ -353,6 +353,8 @@ static double g_iq_db, g_vbat;	/* receive level and battery for the status line 
 static bool g_tx_show;		/* status line shows TX readings instead of the RX level */
 static double g_tx_pwr, g_tx_swr;
 static int g_tx_alc;
+static int g_batcap;		/* battery %, and external supply present, for the status line */
+static bool g_ext;
 static int g_cat_baud;		/* CI-V baud, 0 = no CAT: conf token cat, or --cat */
 static char g_ntp_server[64];	/* conf token ntp <server> | off; empty = ntp.conf or pool.ntp.org */
 static int g_bright;		/* backlight level, % (10-100); 0 = leave as the OS set it */
@@ -843,10 +845,11 @@ static void show(const rx_t *rx)
 		agc_name(rx->agc), sp, rx->lock ? "  LOCK" : "");
 
 	if (g_vbat > 0.0 && g_tx_show)
-		snprintf(line + strlen(line), sizeof(line) - strlen(line), "  TX %4.1f W  swr %3.1f  alc %3d  vbat %.1fV",
-			g_tx_pwr, g_tx_swr, g_tx_alc, g_vbat);
+		snprintf(line + strlen(line), sizeof(line) - strlen(line), "  TX %4.1f W  swr %3.1f  alc %3d  bat %.1fV %d%%%s",
+			g_tx_pwr, g_tx_swr, g_tx_alc, g_vbat, g_batcap, g_ext ? " ext" : "");
 	else if (g_vbat > 0.0)
-		snprintf(line + strlen(line), sizeof(line) - strlen(line), "  iq %6.1f dB  vbat %.1fV", g_iq_db, g_vbat);
+		snprintf(line + strlen(line), sizeof(line) - strlen(line), "  iq %6.1f dB  bat %.1fV %d%%%s", g_iq_db, g_vbat,
+			g_batcap, g_ext ? " ext" : "");
 
 	//
 	// One terminal row only: a line wider than the terminal wraps, and every redraw
@@ -1848,6 +1851,9 @@ typedef struct
 	double vu_peak;
 	uint64_t vu_peak_ms;
 	double vbat;
+	double vext;		/* external supply, V */
+	int batcap;		/* battery charge, % */
+	bool ext;		/* external supply present (flow flag b3): charging when below 100 % */
 
 	//
 	// TX telemetry from the flow frames
@@ -3203,7 +3209,11 @@ static void draw_gen_info(x6100_lcd_t *lcd, const screen_t *scr)
 		fclose(fp);
 	}
 
-	snprintf(lines[n++], sizeof(lines[0]), "UPTIME  %dh%02dm   BATTERY %.1f V", (int) up / 3600, (int) up / 60 % 60, scr->vbat);
+	if (scr->ext)
+		snprintf(lines[n++], sizeof(lines[0]), "BATTERY %.1f V %d %%  %s, EXT %.1f V", scr->vbat, scr->batcap,
+			scr->batcap < 100 ? "CHARGING" : "FULL", scr->vext);
+	else
+		snprintf(lines[n++], sizeof(lines[0]), "BATTERY %.1f V %d %%", scr->vbat, scr->batcap);
 
 	if (g_cat_baud > 0)
 		snprintf(lines[n++], sizeof(lines[0]), "CAT     %d BAUD, IC-705, ADDRESS A4", g_cat_baud);
@@ -3211,7 +3221,8 @@ static void draw_gen_info(x6100_lcd_t *lcd, const screen_t *scr)
 		snprintf(lines[n++], sizeof(lines[0]), "CAT     OFF");
 
 	snprintf(lines[n++], sizeof(lines[0]), "NTP     %s", g_ntp_msg);
-	snprintf(lines[n++], sizeof(lines[0]), "REGION  %s   BUILD %s", g_regions[g_region].name, X6100_REV);
+	snprintf(lines[n++], sizeof(lines[0]), "REGION  %s   UPTIME %dh%02dm   BUILD %s", g_regions[g_region].name,
+		(int) up / 3600, (int) up / 60 % 60, X6100_REV);
 
 	for (int i = 0; i < n; i++) {
 		for (char *c = lines[i]; *c != '\0'; c++)
@@ -3773,8 +3784,17 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 		x6100_lcd_text(lcd, INFO_COL_RFG, INFO_Y, 2, s, SCR_DIM);
 	}
 
-	snprintf(s, sizeof(s), "%4.1fV", scr->vbat);
-	x6100_lcd_text(lcd, INFO_COL_VBAT, INFO_Y, 2, s, SCR_DIM);
+	//
+	// Battery: voltage, coloured by charge: green on external power (charging below
+	// 100 %), amber under 20 %, red under 10 %; status page (GEN long) has the details
+	//
+	{
+		uint32_t c = scr->ext ? 0x3CC83C : scr->batcap > 0 && scr->batcap < 10 ? SCR_WARN
+			: scr->batcap > 0 && scr->batcap < 20 ? 0xFFB020 : SCR_DIM;
+
+		snprintf(s, sizeof(s), "%4.1fV", scr->vbat);
+		x6100_lcd_text(lcd, INFO_COL_VBAT, INFO_Y, 2, s, c);
+	}
 	snprintf(s, sizeof(s), "FIL%d", rx->fil + 1);
 	x6100_lcd_text(lcd, INFO_COL_FIL, INFO_Y, 2, s, SCR_DIM);
 
@@ -6358,6 +6378,9 @@ int main(int argc, char **argv)
 			scr.swr = swr < 1.0 ? 1.0 : swr;
 			scr.alc = frame.alc_level;
 			scr.vbat = frame.vbat * 0.1;
+			scr.vext = frame.vext * 0.1;
+			scr.batcap = frame.batcap;
+			scr.ext = (frame.flags & X6100_FLOW_VEXT) != 0;
 
 			//
 			// Overload: the flow IQ clips hard at about -6.3 dB (|IQ| ~0.48); no
@@ -6471,6 +6494,23 @@ int main(int argc, char **argv)
 			g_tx_alc = scr.alc;
 			g_iq_db = scr.meter_db;
 			g_vbat = frame.vbat * 0.1;
+			g_batcap = scr.batcap;
+			g_ext = scr.ext;
+
+			// Low battery: a note at 20 % and at 10 %, once each on the way down
+			{
+				static int warned = 100;
+
+				if (!scr.ext && scr.batcap > 0 && scr.batcap <= 10 && warned > 10) {
+					toast("BATTERY 10 %");
+					warned = 10;
+				} else if (!scr.ext && scr.batcap > 10 && scr.batcap <= 20 && warned > 20) {
+					toast("BATTERY 20 %");
+					warned = 20;
+				} else if (scr.ext || scr.batcap > 25) {
+					warned = 100;
+				}
+			}
 			show(&rx);
 			fflush(stdout);
 			level = 0.0;
