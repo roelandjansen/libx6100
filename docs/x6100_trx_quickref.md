@@ -39,7 +39,7 @@ Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
 | DFN | NR (noise reduction) on / off | NB (noise blanker) on / off |
 | DFL | notch on / off | DSP panel (NR, NB, notch levels) |
 | AGC | off / slow / fast / auto, per mode group | RIT / XIT panel |
-| V/M | (memory channels, later) | split on / off: RX on the VFO in use, TX on the other |
+| V/M | memory panel (channels 1-99) | split on / off: RX on the VFO in use, TX on the other |
 | F1 | scroll on / off: CENTER <-> SCROLL-C, FIX <-> SCROLL-F | CENTER family <-> FIX family |
 | F2 | span ±48 / 24 / 12 / 6 / 3 / 1.5 kHz; audio scope: 0-3 / 0-6 kHz | reference level: MFK turn = ±1 dB (±30), MFK push = RF <-> AF scope; F2 long, other key or 10 s idle closes |
 | F3 | audio scope on / off (RF <-> AF) | RF scope left (5/8) + audio scope right (3/8), on / off |
@@ -143,6 +143,7 @@ Two files in `/etc/x6100`, both in console tokens (`#` = comment):
 | `x6100_trx.state` | x6100_trx, at exit | last state: frequency, mode, filter, VFO B, split, RIT / XIT, volume / mute, gains, AGC per mode group, DSP, scope, REF, band memories, tuned ATU networks |
 | `x6100_trx.conf` | you, never x6100_trx | what must be the same at every start (example: `docs/x6100_trx.conf.example`) |
 | `filters.conf` | filter panel | filter widths and shifts per mode group |
+| `memories.conf` | memory panel / console | memory channels 1-99 |
 
 At start: defaults, then `x6100_trx.state`, then `x6100_trx.conf`, then the command line;
 later wins. Command-line values apply to that run only (but end up in the state at exit).
@@ -193,6 +194,8 @@ The status line starts with the VFO in use (A / B); with split, RIT or XIT it ad
 | `txsplit`, `notxsplit` | split on / off |
 | `rit`, `norit`, `xit`, `noxit`, `ritofs -9990-9990` | RIT / XIT on / off, offset in Hz |
 | `step ch` | 60 m channel steps |
+| `memr 5`, `memw 5`, `memc 5` | recall / write the VFO into / clear memory channel 5 |
+| `mem 5 7074000 lsb fil1 [tx 7076000 lsb] [name text]` | set a memory channel (as in memories.conf) |
 | `vfob 7074000 lsb fil1`, `vfo a\|b` | the VFO not in use; which one is in use (state file) |
 | `region r1\|r2\|r3\|nl` | transmit allocations for the TX check and the OOB marker (default r1) |
 | `oob`, `nolimit` | as `--oob` / `--no-limit` (settings file): warned at every start, red OOB on the dial |
@@ -207,6 +210,28 @@ The status line starts with the VFO in use (A / B); with split, RIT or XIT it ad
   Abort a tune with the PTT key, any other key or CAT PTT
 - transient I2C errors are retried; quits after 2 s of failures
   (the baseband keeps its last state, so audio continues)
+
+## Memory channels (V/M)
+
+![memory](images/x6100_trx_memory.png)
+
+| Control | Action |
+|---|---|
+| V/M | open / close the memory panel |
+| MFK turn | channel 1-99; a used channel is tuned at once (listen while scrolling) |
+| MFK long | write the VFO in use into the channel (frequency, mode, filter; with split also the TX side); a rewrite keeps the name |
+| MFK push, twice within 3 s | clear the channel |
+| other key, 10 s idle | close; the VFO stays on the last channel tuned |
+
+Kept in `/etc/x6100/memories.conf`, one channel per line, written on every change and
+included in `build.sh backup`:
+
+```
+mem 3 7074000 lsb fil1 name FT8 40m
+mem 5 29620000 nfm fil2 tx 29520000 nfm name RPT 10m
+```
+
+Names are set in that file or from the console (`mem ...`); the radio has no keyboard.
 
 ## Split, RIT / XIT
 

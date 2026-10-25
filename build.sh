@@ -226,7 +226,7 @@ usage() {
 readonly C_STAMP="${C_OUT}/.fingerprint"
 readonly C_DEPLOY=("${C_OUT}/x6100_trx" scripts/x6100_ui.sh docs/x6100_trx_quickref.md)
 readonly C_RADIO_SETTINGS="/etc/x6100"
-readonly C_SETTINGS=(x6100_trx.conf x6100_trx.state filters.conf)
+readonly C_SETTINGS=(x6100_trx.conf x6100_trx.state filters.conf memories.conf)
 readonly C_NM_DIR="/etc/NetworkManager/system-connections"
 
 G_HOST="${X6100_HOST:-root@x6100}"

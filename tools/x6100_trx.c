@@ -204,6 +204,10 @@ typedef struct
 	bool tedit;		/* RIT / XIT panel (AGC long) */
 	int tedit_par;		/* 0 offset, 1 RIT, 2 XIT */
 	uint64_t tedit_since;
+	bool medit;		/* memory panel (V/M short) */
+	int medit_ch;		/* selected channel 1-99 */
+	uint64_t medit_since;
+	uint64_t mclear_at;	/* MFK push asked to clear: a second push within 3 s clears */
 
 	//
 	// TX
@@ -349,6 +353,7 @@ static char g_ntp_server[64];	/* conf token ntp <server> | off; empty = ntp.conf
 static int g_bright;		/* backlight level, % (10-100); 0 = leave as the OS set it */
 static unsigned g_conf_set;	/* GEN rows that x6100_trx.conf fixes (bit = row): shown CONF, locked */
 static bool g_conf_reading;	/* conf_load of CONF_PATH in progress */
+static bool g_conf_loading;	/* any conf_load in progress (mem lines do not save then) */
 static char g_ntp_msg[64] = "not run";	/* last NTP result, for the status page */
 static char g_toast[24];		/* short confirmation over the scope (VFO A / B, A=B) */
 static uint64_t g_toast_until;	/* ms; shown while now_ms() is before this */
@@ -818,6 +823,113 @@ static void vfo_equal(rx_t *rx)
 	toast(rx->on_b ? "B COPIED TO A" : "A COPIED TO B");	/* the font has no = */
 }
 
+//
+// Memory channels 1-99 (V/M short: memory panel). A channel holds frequency, mode,
+// filter, split with its TX frequency and mode, and a name. Kept in MEM_PATH as
+// console tokens, one channel per line, written on every change:
+//   mem 5 7074000 usb fil1 tx 7076000 usb name FT8 40m
+// (tx ... only for split channels; name runs to the end of the line)
+//
+
+#define MEM_PATH	"/etc/x6100/memories.conf"
+#define MEM_COUNT	99
+
+typedef struct
+{
+	bool used;
+	uint32_t hz;
+	x6100_mode_t mode;
+	int fil;
+	bool split;
+	uint32_t tx_hz;
+	x6100_mode_t tx_mode;
+	char name[16];
+} mem_t;
+
+static mem_t g_mem[MEM_COUNT + 1];	/* index = channel number; 0 unused */
+
+static void mem_save(void)
+{
+	static const char *mn[] = { [X6100_MODE_LSB] = "lsb", [X6100_MODE_USB] = "usb", [X6100_MODE_CW] = "cw",
+		[X6100_MODE_CWR] = "cwr", [X6100_MODE_AM] = "am", [X6100_MODE_NFM] = "nfm" };
+	char tmp[] = MEM_PATH ".tmp";
+	FILE *fp;
+
+	if ((fp = fopen(tmp, "w")) == NULL) {
+		fprintf(stderr, "\nmemories: cannot write %s: %s\n", tmp, strerror(errno));
+		return;
+	}
+
+	fprintf(fp, "# x6100_trx memory channels: mem <n> <Hz> <mode> fil<n> [tx <Hz> <mode>] [name <text>]\n");
+
+	for (int i = 1; i <= MEM_COUNT; i++) {
+		const mem_t *m = &g_mem[i];
+
+		if (!m->used)
+			continue;
+
+		fprintf(fp, "mem %d %u %s fil%d", i, (unsigned) m->hz, mn[m->mode], m->fil + 1);
+
+		if (m->split)
+			fprintf(fp, " tx %u %s", (unsigned) m->tx_hz, mn[m->tx_mode]);
+
+		if (m->name[0] != '\0')
+			fprintf(fp, " name %s", m->name);
+
+		fprintf(fp, "\n");
+	}
+
+	if (fclose(fp) != 0 || rename(tmp, MEM_PATH) != 0)
+		fprintf(stderr, "\nmemories: cannot save %s: %s\n", MEM_PATH, strerror(errno));
+}
+
+// Current VFO (and split TX side) into channel n
+static void mem_write(const rx_t *rx, int n)
+{
+	mem_t *m = &g_mem[n];
+	char name[sizeof(m->name)];
+
+	snprintf(name, sizeof(name), "%s", m->name);	/* a rewrite keeps the name */
+	memset(m, 0, sizeof(*m));
+	m->used = true;
+	m->hz = rx->freq;
+	m->mode = rx->mode;
+	m->fil = rx->fil;
+	m->split = rx->split;
+	m->tx_hz = rx->b_freq;
+	m->tx_mode = rx->b_mode;
+	snprintf(m->name, sizeof(m->name), "%s", name);
+	mem_save();
+}
+
+// Channel n into the VFO in use (with split: its TX side into the other VFO)
+static bool mem_recall(rx_t *rx, int n)
+{
+	const mem_t *m = &g_mem[n];
+
+	if (n < 1 || n > MEM_COUNT || !m->used)
+		return false;
+
+	set_freq(rx, m->hz);
+	rx->mode = m->mode;
+	rx->fil = m->fil;
+	rx->split = m->split;
+
+	if (m->split) {
+		rx->b_freq = m->tx_hz;
+		rx->b_mode = m->tx_mode;
+		rx->b_fil = m->fil;
+	}
+
+	return true;
+}
+
+static void mem_clear(int n)
+{
+	memset(&g_mem[n], 0, sizeof(g_mem[n]));
+	mem_save();
+}
+
 static void band_step(rx_t *rx, int dir)
 {
 	int band = rx->band;
@@ -1048,6 +1160,32 @@ static bool on_key(rx_t *rx, int key)
 	}
 
 	//
+	// Memory panel open: MFK push clears the channel (asks first: a second push within
+	// 3 s); V/M closes it (below), any other key closes it and does its normal job
+	//
+	if (rx->medit) {
+		rx->medit_since = now_ms();
+
+		if (key == X6100_KEY_MFK_PUSH) {
+			if (!g_mem[rx->medit_ch].used) {
+				return true;
+			} else if (rx->mclear_at != 0 && now_ms() - rx->mclear_at < 3000) {
+				mem_clear(rx->medit_ch);
+				rx->mclear_at = 0;
+				toast("CHANNEL CLEARED");
+			} else {
+				rx->mclear_at = now_ms();
+				toast("PUSH AGAIN: CLEAR");
+			}
+
+			return true;
+		}
+
+		if (key != X6100_KEY_VM)
+			rx->medit = false;
+	}
+
+	//
 	// RIT / XIT panel open: MFK push selects offset / RIT / XIT; any other key
 	// closes it and does its normal job (AGC long closes it too)
 	//
@@ -1114,6 +1252,12 @@ static bool on_key(rx_t *rx, int key)
 	switch (key) {
 	case X6100_KEY_LOCK:
 		rx->lock = !rx->lock;
+		break;
+	case X6100_KEY_VM:	/* short: memory panel; long: split */
+		rx->medit = !rx->medit;
+		rx->medit_ch = rx->medit_ch < 1 ? 1 : rx->medit_ch;
+		rx->medit_since = now_ms();
+		rx->mclear_at = 0;
 		break;
 	case X6100_KEY_AB:	/* short: VFO A <-> B; long: A=B (the other VFO takes this one) */
 		vfo_swap(rx);
@@ -1262,6 +1406,13 @@ static bool on_long_key(rx_t *rx, int key)
 
 		return true;
 	case X6100_KEY_MFK_PUSH:
+		if (rx->medit) {
+			mem_write(rx, rx->medit_ch);
+			toast("WRITTEN TO MEMORY");
+			rx->medit_since = now_ms();
+			return true;
+		}
+
 		if (rx->tedit) {
 			rx->rit_hz = 0;	/* clear the offset, as Icom's CLEAR */
 			rx->tedit_since = now_ms();
@@ -1415,6 +1566,14 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 		rx->vol = clampi(rx->vol + value * X6100_DIR_VOL, 0, 100);
 		return true;
 	case IN_MFK:
+		if (rx->medit) {
+			rx->medit_ch = (rx->medit_ch - 1 + (value * X6100_DIR_MFK > 0 ? 1 : MEM_COUNT - 1)) % MEM_COUNT + 1;
+			mem_recall(rx, rx->medit_ch);	/* listen while scrolling; empty channels leave the VFO */
+			rx->medit_since = now_ms();
+			rx->mclear_at = 0;
+			return true;
+		}
+
 		if (rx->tedit) {
 			int dir = value * X6100_DIR_MFK > 0 ? 1 : -1;
 
@@ -2968,6 +3127,53 @@ static void draw_gen_info(x6100_lcd_t *lcd, const screen_t *scr)
 }
 
 //
+// Memory panel (V/M short): five channels around the selected one. Cyan. MFK turn:
+// channel (a used one is tuned at once); MFK long: write the VFO into it; MFK push
+// twice: clear it; V/M, another key or 10 s idle closes.
+//
+
+static void draw_mem_panel(x6100_lcd_t *lcd, const rx_t *rx)
+{
+	const int vis = 5, px = LBL_W + 8, py = SPEC_Y + 14, pw = 560, ph = 30 + vis * 21;
+	const uint32_t bg = 0x08141C, cyan = 0x40C0FF, sel = 0x163044, dim = 0x7A8C98, white = 0xF0F0F0;
+	int top = clampi(rx->medit_ch - 2, 1, MEM_COUNT - vis + 1);
+
+	x6100_lcd_fill(lcd, px, py, pw, ph, bg);
+	x6100_lcd_fill(lcd, px, py, 3, ph, cyan);
+	x6100_lcd_hline(lcd, px, px + pw - 1, py, 0x1E3A4A);
+	x6100_lcd_hline(lcd, px, px + pw - 1, py + ph - 1, 0x1E3A4A);
+	x6100_lcd_vline(lcd, px + pw - 1, py, py + ph - 1, 0x1E3A4A);
+	x6100_lcd_text(lcd, px + 14, py + 7, 2, "MEMORY", cyan);
+	x6100_lcd_text(lcd, px + 120, py + 11, 1, "MFK: CHANNEL  HOLD: WRITE  PUSH TWICE: CLEAR  V/M: CLOSE", dim);
+
+	for (int i = 0; i < vis; i++) {
+		int ch = top + i, y = py + 30 + i * 21;
+		const mem_t *m = &g_mem[ch];
+		char s[64];
+
+		if (ch == rx->medit_ch)
+			x6100_lcd_fill(lcd, px + 6, y - 3, pw - 12, 19, sel);
+
+		if (m->used) {
+			int n = snprintf(s, sizeof(s), "%02d  %2u.%03u.%02u %-4s", ch, m->hz / 1000000, m->hz / 1000 % 1000,
+				m->hz % 1000 / 10, mode_name(m->mode));
+
+			if (m->split)
+				n += snprintf(s + n, sizeof(s) - (size_t) n, " TX %u.%03u", m->tx_hz / 1000000, m->tx_hz / 1000 % 1000);
+
+			snprintf(s + n, sizeof(s) - (size_t) n, "  %s", m->name);
+		} else {
+			snprintf(s, sizeof(s), "%02d  ---", ch);
+		}
+
+		for (char *c = s; *c != '\0'; c++)
+			*c = (char) toupper((unsigned char) *c);
+
+		x6100_lcd_text(lcd, px + 14, y, 2, s, ch == rx->medit_ch ? white : m->used ? 0xC0D0DC : dim);
+	}
+}
+
+//
 // RIT / XIT panel (AGC long): one offset for both, as on Icom radios, and RIT /
 // XIT on or off. Green. MFK turn: offset in 10 Hz steps, or on / off on the
 // RIT and XIT rows; push: next row; hold: offset 0 (CLEAR).
@@ -3893,6 +4099,9 @@ overlays:
 	if (rx->tedit)
 		draw_rit_panel(lcd, rx);
 
+	if (rx->medit)
+		draw_mem_panel(lcd, rx);
+
 	if (rx->gedit)
 		draw_gen_panel(lcd, rx);
 
@@ -4284,6 +4493,75 @@ static bool console_line(rx_t *rx, char *line)
 			continue;
 		}
 
+		// mem <n> <Hz> <mode> fil<n> [tx <Hz> <mode>] [name <text>]: memory channel
+		// (memories.conf; typed in the console it is saved at once)
+		if (strcasecmp(t, "mem") == 0) {
+			const char *ns = strtok(NULL, " \t\r\n"), *fs = strtok(NULL, " \t\r\n");
+			const char *ms = strtok(NULL, " \t\r\n"), *ls = strtok(NULL, " \t\r\n");
+			int n = ns == NULL ? 0 : atoi(ns);
+			uint32_t hz = fs == NULL ? 0 : (uint32_t) strtoul(fs, NULL, 10);
+			static rx_t tmp;
+			mem_t m = { .used = true };
+			char *w;
+
+			tmp = *rx;
+
+			if (n < 1 || n > MEM_COUNT || hz < FREQ_MIN || hz > FREQ_MAX || ms == NULL || !console_token(&tmp, ms)
+				|| ls == NULL || strncasecmp(ls, "fil", 3) != 0 || ls[3] < '1' || ls[3] > '3') {
+				fprintf(stderr, "\nmem: <1-99> <Hz> <mode> fil1|2|3 [tx <Hz> <mode>] [name <text>]\n");
+				break;	/* the rest of the line belongs to this token */
+			}
+
+			m.hz = hz;
+			m.mode = tmp.mode;
+			m.fil = ls[3] - '1';
+
+			while ((w = strtok(NULL, " \t\r\n")) != NULL) {
+				if (strcasecmp(w, "tx") == 0) {
+					const char *th = strtok(NULL, " \t\r\n"), *tm = strtok(NULL, " \t\r\n");
+
+					if (th != NULL && tm != NULL && console_token(&tmp, tm)) {
+						m.split = true;
+						m.tx_hz = (uint32_t) strtoul(th, NULL, 10);
+						m.tx_mode = tmp.mode;
+					}
+				} else if (strcasecmp(w, "name") == 0) {
+					const char *rest = strtok(NULL, "\r\n");
+
+					snprintf(m.name, sizeof(m.name), "%s", rest != NULL ? rest : "");
+					break;
+				}
+			}
+
+			g_mem[n] = m;
+
+			if (!g_conf_loading)
+				mem_save();
+
+			break;
+		}
+
+		// memr / memw / memc <n>: recall, write the VFO into, clear a channel
+		if (strcasecmp(t, "memr") == 0 || strcasecmp(t, "memw") == 0 || strcasecmp(t, "memc") == 0) {
+			const char *ns = strtok(NULL, " \t\r\n");
+			int n = ns == NULL ? 0 : atoi(ns);
+
+			if (n < 1 || n > MEM_COUNT) {
+				fprintf(stderr, "\n%s: 1 to %d\n", t, MEM_COUNT);
+				continue;
+			}
+
+			if (strcasecmp(t, "memw") == 0)
+				mem_write(rx, n);
+			else if (strcasecmp(t, "memc") == 0)
+				mem_clear(n);
+			else if (!mem_recall(rx, n))
+				fprintf(stderr, "\nmemr: channel %d is empty\n", n);
+
+			changed = true;
+			continue;
+		}
+
 		// vfob <Hz> <mode> fil<n>: the VFO not in use; vfo a|b: which one is in use (label)
 		if (strcasecmp(t, "vfob") == 0) {
 			const char *fs = strtok(NULL, " \t\r\n"), *ms = strtok(NULL, " \t\r\n"), *ls = strtok(NULL, " \t\r\n");
@@ -4466,6 +4744,7 @@ static void conf_load(rx_t *rx, const char *path, bool quiet)
 		return;
 
 	g_conf_reading = strcmp(path, CONF_PATH) == 0;
+	g_conf_loading = true;
 
 
 	while (fgets(line, sizeof(line), fp) != NULL) {
@@ -4479,6 +4758,7 @@ static void conf_load(rx_t *rx, const char *path, bool quiet)
 
 	fclose(fp);
 	g_conf_reading = false;
+	g_conf_loading = false;
 
 	if (!quiet)
 		fprintf(stderr, "settings: %s\n", path);
@@ -5474,6 +5754,7 @@ int main(int argc, char **argv)
 
 	// Last state, then the user's settings; the command line below goes last
 	conf_load(&rx, CONF_PATH, true);	/* first for oob / nolimit, so the state frequency fits */
+	conf_load(&rx, MEM_PATH, false);
 	conf_load(&rx, STATE_PATH, false);
 	conf_load(&rx, CONF_PATH, false);
 
@@ -5819,6 +6100,12 @@ int main(int argc, char **argv)
 		// GEN panel after 10 s, status page after 30 s
 		if ((rx.gedit && t - rx.gedit_since >= 10000) || (rx.ginfo && t - rx.ginfo_since >= 30000)) {
 			rx.gedit = rx.ginfo = false;
+			dirty = true;
+		}
+
+		// Memory panel after 10 s
+		if (rx.medit && t - rx.medit_since >= 10000) {
+			rx.medit = false;
 			dirty = true;
 		}
 
