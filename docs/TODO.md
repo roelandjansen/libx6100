@@ -33,6 +33,15 @@ Status: 2026-10-25 (after v0.10.0). Summary and next steps: `STATUS.md`.
   - the notch: 3837.014 in LSB at dial 3838.000 = 986 Hz; does a 40 Hz notch take it
     out, how far off may it be; then BIRDIE NOTCH on as the default
   - birdies with PRE / ATT, and drift with temperature (scan again later)
+  - first scan on the radio, 20 m (2026-10-25, x6100_trx): 14035612 (15 dB),
+    14042891 (24), 14050168 (13), 14057446 (21), 14064726 (43), 14079275 (22),
+    14086552 (26), 14093832 (19), 14101110 (24), 14126967 (10), 14161026 (16),
+    14174899 (14), 14182106 (13), 14186699 (26), 14207901 (12), 14245300 (19).
+    14035-14101 kHz is a comb about 7.278 kHz apart (one oscillator's harmonics;
+    14072.0 is missing, below 10 dB); spacing steady to a few Hz
+  - next: pick a strong birdie that is also clearly seen / heard on the radio, then
+    tick on the scope line, its audio pitch on the audio scope, the notch and its
+    tolerance (as for 14064726: USB dial 14.064.000 = 726 Hz)
 - S-meter calibration (signal generator): SMETER_CAL_DB is provisional (-21: -15 from
   an IC-7851 comparison, then 6 dB lower); also the overload point with PRE / ATT.
 - Codec level vs ALC test (x6100_tx codec at -40 / -30 / -20 dBFS).
