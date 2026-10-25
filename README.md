@@ -101,6 +101,8 @@ Not yet: GPIO (hand mic PTT is invisible to Linux), Icom LAN server, keyer.
 | `docs/x6100_netaudio_design.md` | network audio / wfview design (draft) |
 | `docs/x6100_baseband_handover.md` | handover for a separate baseband-firmware (clean-room) discussion |
 
+Current state, open checks and next steps: [docs/STATUS.md](docs/STATUS.md).
+
 ## Build
 
 Cross-compile on openSUSE Tumbleweed:
