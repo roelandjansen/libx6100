@@ -26,6 +26,8 @@ Verified on the radio:
 - liquid-dsp v1.8.3 static build, `x6100_liquid` runs on the radio
 - CW keyer (KEY short key type, KEY long panel; registers 33 / 34; CI-V 14 09 / 0C / 0F):
   pitch 300-900 Hz (600 out of the box), sidetone 0-100 % over the full register
+- repeater duplex (AGC long panel): AUTO -100 kHz in NFM on 29.620-29.680 MHz, manual
+  DUP- / DUP+ (also in SSB), console status line; no CTCSS
 
 Built, not yet tried on the radio (2026-10-25):
 
@@ -33,8 +35,7 @@ Built, not yet tried on the radio (2026-10-25):
 - battery charge / external supply (info line colour, status page, console, 20 / 10 % notes)
 - TX readings folded into the console status line
 - 60 m channel mode on the MFK (FST: CH)
-- repeater duplex (AGC long panel: AUTO = -100 kHz in NFM on 29.620-29.680 MHz, OFF,
-  DUP- / DUP+ with a shift; state, memories, console, CI-V 0F 10-12); no CTCSS
+- TX frequency on the display while transmitting with split or a duplex shift
 
 ## Open items to check on the radio
 
@@ -45,8 +46,9 @@ Built, not yet tried on the radio (2026-10-25):
    bluez agent; see S39btpairings), panel stutter from polling.
 4. wfview over CAT: VFO A / B, split, duplex, RIT / XIT, band buttons, keyer levels;
    ATT / PRE (socat trace against IU1WXY).
-5. Repeater duplex: AUTO on 29.620-29.680 NFM keys on RX - 100 kHz (PTT key, hand mic,
-   CAT PTT), DUP- / DUP+ with another shift, scope TX line, a memory with dup- 100.
+5. Repeater duplex, the rest: display shows 29.520 while keyed (PTT key, hand mic, CAT
+   PTT), mem 22 (AUTO) and a memory with dup- 100, state after a restart, split over
+   duplex, MFK hold resets, panel layout. Scope TX line: only when in view (by design).
 
 ## Next steps (suggested order)
 

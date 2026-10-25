@@ -319,7 +319,10 @@ there is no local backup.
 - Top left of the spectrum (amber): `SPLIT TX 7.120.00 LSB  RIT +120` or
   `DUP- TX 29.520.00` while in use; on
   the RF scope a green line at the RX frequency and a red one, marked TX, at the TX
-  frequency (the receive passband shading follows RIT).
+  frequency when it is in view (a 100 kHz duplex shift is usually outside the span;
+  the receive passband shading follows RIT). While transmitting with split or a
+  duplex shift the frequency display shows the TX frequency (without XIT); the scope
+  stays on RX.
 - The baseband gets the TX frequency and mode just before PTT goes out and keeps it
   until the PTT drop has gone out. Front panel PTT, CAT PTT and tune follow split;
   the hand mic PTT keys the baseband directly: x6100_trx moves to the TX side as soon
