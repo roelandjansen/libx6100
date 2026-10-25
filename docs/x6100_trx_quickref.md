@@ -194,6 +194,7 @@ The status line starts with the VFO in use (A / B); with split, RIT or XIT it ad
 | `txsplit`, `notxsplit` | split on / off |
 | `rit`, `norit`, `xit`, `noxit`, `ritofs -9990-9990` | RIT / XIT on / off, offset in Hz |
 | `step ch` | 60 m channel steps |
+| `memr` | list the used memory channels |
 | `memr 5`, `memw 5`, `memc 5` | recall / write the VFO into / clear memory channel 5 |
 | `mem 5 7074000 lsb fil1 [tx 7076000 lsb] [name text]` | set a memory channel (as in memories.conf) |
 | `vfob 7074000 lsb fil1`, `vfo a\|b` | the VFO not in use; which one is in use (state file) |

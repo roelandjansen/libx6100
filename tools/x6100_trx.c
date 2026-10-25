@@ -4546,6 +4546,31 @@ static bool console_line(rx_t *rx, char *line)
 			const char *ns = strtok(NULL, " \t\r\n");
 			int n = ns == NULL ? 0 : atoi(ns);
 
+			// memr alone: list the used channels
+			if (ns == NULL && strcasecmp(t, "memr") == 0) {
+				int used = 0;
+
+				printf("\n");
+
+				for (int i = 1; i <= MEM_COUNT; i++) {
+					const mem_t *m = &g_mem[i];
+
+					if (!m->used)
+						continue;
+
+					printf("%2d  %10.3f kHz %-4s fil%d", i, m->hz / 1000.0, mode_name(m->mode), m->fil + 1);
+
+					if (m->split)
+						printf("  TX %.3f %s", m->tx_hz / 1000.0, mode_name(m->tx_mode));
+
+					printf("%s%s\n", m->name[0] ? "  " : "", m->name);
+					used++;
+				}
+
+				printf("%d of %d channels used\n", used, MEM_COUNT);
+				continue;
+			}
+
 			if (n < 1 || n > MEM_COUNT) {
 				fprintf(stderr, "\n%s: 1 to %d\n", t, MEM_COUNT);
 				continue;
