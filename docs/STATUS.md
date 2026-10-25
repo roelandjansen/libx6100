@@ -1,7 +1,8 @@
 # libx6100 / x6100_trx — status
 
-Snapshot: 2026-10-25, master at the commit that adds this file. Last tag: v0.8.0
-(2026-10-24, tagged by hand: tags cannot be pushed from the cloud sessions).
+Snapshot: 2026-10-25. Last tag: v0.9.0 (2026-10-25, on 33b74aa; split, RIT / XIT,
+memories, tuner memories, CW keyer, liquid-dsp). Tags are made by hand: they cannot be
+pushed from the cloud sessions.
 Open work in detail: `TODO.md`. Use: `x6100_trx_quickref.md`. CAT: `x6100_civ.md`.
 
 ## Where we are
