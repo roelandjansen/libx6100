@@ -210,6 +210,20 @@ typedef struct
 	uint64_t mclear_at;	/* MFK push asked to clear: a second push within 3 s clears */
 
 	//
+	// CW keyer (registers 33 / 34): KEY short = key type, KEY long = keyer panel
+	//
+	int wpm;		/* 5-50 */
+	int keymode;		/* 0 straight key, 1 paddle, 2 paddle reversed */
+	int iambic;		/* 0 A, 1 B */
+	int cwtone;		/* sidetone / CW pitch, Hz */
+	int cwvol;		/* sidetone volume 0-50 */
+	int qsk;		/* break-in delay, ms */
+	int ratio;		/* dash / dot ratio x10 */
+	bool kedit;
+	int kedit_par;
+	uint64_t kedit_since;
+
+	//
 	// TX
 	//
 	int txpwr;		/* 0.1 W units */
@@ -753,6 +767,8 @@ static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 	x6100_ctl_set(ctl, X6100_REG_VFOB_PRE, rx->pre);
 	x6100_ctl_set(ctl, X6100_REG_NR_NB, X6100_R23(rx->nr_lvl, rx->nb_w, rx->nb_lvl, rx->nr, rx->nb));
 	x6100_ctl_set(ctl, X6100_REG_DNF, X6100_R24(rx->dnf_f, rx->dnf_w, rx->dnf));
+	x6100_ctl_set(ctl, X6100_REG_KEYER, X6100_R33(rx->wpm, rx->keymode, rx->iambic, rx->cwtone, rx->cwvol, 0));
+	x6100_ctl_set(ctl, X6100_REG_QSK_KR, X6100_R34(rx->qsk, rx->ratio));
 	x6100_set_filter(ctl, mode, low, high);
 	x6100_ctl_set(ctl, X6100_REG_RXVOL, rx->mute ? 0 : (uint32_t) rx->vol);
 	x6100_ctl_update(ctl, X6100_REG_RFG_TXPWR_FFTDEC, 0xFF, (uint32_t) rx->rfg);
@@ -843,6 +859,11 @@ static void show(const rx_t *rx)
 		rx->on_b ? 'B' : 'A', rx->freq / 1000.0, rx->band >= 0 ? g_bands[rx->band].name : "-",
 		mode_name(rx->mode), st, rx->vol, rx->mute ? " (mute)" : "", rx->rfg, rx->pre ? "on " : "off",
 		agc_name(rx->agc), sp, rx->lock ? "  LOCK" : "");
+
+	// CW: keyer speed and key type
+	if (rx->mode == X6100_MODE_CW || rx->mode == X6100_MODE_CWR)
+		snprintf(line + strlen(line), sizeof(line) - strlen(line), "  %d wpm %s", rx->wpm,
+			rx->keymode == 0 ? "straight" : rx->keymode == 1 ? "paddle" : "paddle rev");
 
 	if (g_vbat > 0.0 && g_tx_show)
 		snprintf(line + strlen(line), sizeof(line) - strlen(line), "  TX %4.1f W  swr %3.1f  alc %3d  bat %.1fV %d%%%s",
@@ -1026,6 +1047,75 @@ static void mem_clear(int n)
 {
 	memset(&g_mem[n], 0, sizeof(g_mem[n]));
 	mem_save();
+}
+
+//
+// CW keyer settings (registers 33 / 34), one table for the panel, the console and
+// the state file. Key type: 0 straight key, 1 paddle, 2 paddle with dot and dash
+// swapped (x6100_gui: manual / auto left / auto right).
+//
+
+typedef struct
+{
+	const char *name;	/* panel row */
+	const char *token;	/* console / state token */
+	int min, max, step, def;
+} kpar_t;
+
+static const kpar_t g_kpar[] = {
+	{ "KEY TYPE", "keytype", 0, 2, 1, 0 },
+	{ "SPEED", "wpm", 5, 50, 1, 20 },
+	{ "IAMBIC", "iambic", 0, 1, 1, 0 },
+	{ "PITCH", "cwpitch", 300, 1000, 10, 700 },
+	{ "SIDETONE", "cwvol", 0, 50, 1, 10 },
+	{ "BREAK-IN", "qsk", 0, 1000, 10, 100 },
+	{ "RATIO", "ratio", 25, 45, 1, 30 },
+};
+
+#define KPARS	((int) (sizeof(g_kpar) / sizeof(g_kpar[0])))
+
+static int *kpar_value(rx_t *rx, int i)
+{
+	int *v[] = { &rx->keymode, &rx->wpm, &rx->iambic, &rx->cwtone, &rx->cwvol, &rx->qsk, &rx->ratio };
+
+	return v[i];
+}
+
+// Value as the panel and the console show it
+static void kpar_text(const rx_t *rx, int i, char *s, size_t n)
+{
+	static const char *types[] = { "STRAIGHT", "PADDLE", "PADDLE REV" };
+	int v = *kpar_value((rx_t *) rx, i);
+
+	switch (i) {
+	case 0:
+		snprintf(s, n, "%s", types[v]);
+		break;
+	case 1:
+		snprintf(s, n, "%d WPM", v);
+		break;
+	case 2:
+		snprintf(s, n, "%s", v ? "B" : "A");
+		break;
+	case 3:
+		snprintf(s, n, "%d HZ", v);
+		break;
+	case 5:
+		snprintf(s, n, "%d MS", v);
+		break;
+	case 6:
+		snprintf(s, n, "%d.%d", v / 10, v % 10);
+		break;
+	default:
+		snprintf(s, n, "%d", v);
+		break;
+	}
+}
+
+static void kpar_defaults(rx_t *rx)
+{
+	for (int i = 0; i < KPARS; i++)
+		*kpar_value(rx, i) = g_kpar[i].def;
 }
 
 static void band_step(rx_t *rx, int dir)
@@ -1258,6 +1348,21 @@ static bool on_key(rx_t *rx, int key)
 	}
 
 	//
+	// Keyer panel open: MFK push selects the next value; any other key closes it
+	// and does its normal job (KEY long closes it too)
+	//
+	if (rx->kedit) {
+		rx->kedit_since = now_ms();
+
+		if (key == X6100_KEY_MFK_PUSH) {
+			rx->kedit_par = (rx->kedit_par + 1) % KPARS;
+			return true;
+		}
+
+		rx->kedit = false;
+	}
+
+	//
 	// Memory panel open: MFK push clears the channel (asks first: a second push within
 	// 3 s); V/M closes it (below), any other key closes it and does its normal job
 	//
@@ -1350,6 +1455,10 @@ static bool on_key(rx_t *rx, int key)
 	switch (key) {
 	case X6100_KEY_LOCK:
 		rx->lock = !rx->lock;
+		break;
+	case X6100_KEY_KEY:	/* short: key type straight / paddle / paddle reversed; long: keyer panel */
+		rx->keymode = (rx->keymode + 1) % 3;
+		toast(rx->keymode == 0 ? "STRAIGHT KEY" : rx->keymode == 1 ? "PADDLE" : "PADDLE REVERSED");
 		break;
 	case X6100_KEY_VM:	/* short: memory panel; long: split */
 		rx->medit = !rx->medit;
@@ -1471,7 +1580,7 @@ static bool has_long(int key)
 	return key == X6100_KEY_PRE || key == X6100_KEY_FST || key == X6100_KEY_ATU || key == X6100_KEY_MFK_PUSH
 		|| key == X6100_KEY_F1 || key == X6100_KEY_F2 || key == X6100_KEY_F3 || key == X6100_KEY_F5 || key == X6100_KEY_DFN || key == X6100_KEY_DFL
 		|| key == X6100_KEY_GEN || key == X6100_KEY_AB
-		|| key == X6100_KEY_VM || key == X6100_KEY_AGC;
+		|| key == X6100_KEY_VM || key == X6100_KEY_AGC || key == X6100_KEY_KEY;
 }
 
 static bool on_long_key(rx_t *rx, int key)
@@ -1504,6 +1613,12 @@ static bool on_long_key(rx_t *rx, int key)
 
 		return true;
 	case X6100_KEY_MFK_PUSH:
+		if (rx->kedit) {
+			*kpar_value(rx, rx->kedit_par) = g_kpar[rx->kedit_par].def;
+			rx->kedit_since = now_ms();
+			return true;
+		}
+
 		if (rx->medit) {
 			mem_write(rx, rx->medit_ch);
 			toast("WRITTEN TO MEMORY");
@@ -1559,6 +1674,10 @@ static bool on_long_key(rx_t *rx, int key)
 	case X6100_KEY_DFL:
 		rx->dedit = !rx->dedit;
 		rx->dedit_since = now_ms();
+		return true;
+	case X6100_KEY_KEY:
+		rx->kedit = !rx->kedit;
+		rx->kedit_since = now_ms();
 		return true;
 	case X6100_KEY_VM:	/* long: split on / off */
 		rx->split = !rx->split;
@@ -1664,6 +1783,15 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 		rx->vol = clampi(rx->vol + value * X6100_DIR_VOL, 0, 100);
 		return true;
 	case IN_MFK:
+		if (rx->kedit) {
+			const kpar_t *k = &g_kpar[rx->kedit_par];
+			int *p = kpar_value(rx, rx->kedit_par);
+
+			*p = clampi(*p + value * X6100_DIR_MFK * k->step, k->min, k->max);
+			rx->kedit_since = now_ms();
+			return true;
+		}
+
 		if (rx->medit) {
 			rx->medit_ch = (rx->medit_ch - 1 + (value * X6100_DIR_MFK > 0 ? 1 : MEM_COUNT - 1)) % MEM_COUNT + 1;
 			mem_recall(rx, rx->medit_ch);	/* listen while scrolling; empty channels leave the VFO */
@@ -3233,6 +3361,42 @@ static void draw_gen_info(x6100_lcd_t *lcd, const screen_t *scr)
 }
 
 //
+// Keyer panel (KEY long): five of the keyer values around the selected one.
+// Orange. MFK turn: adjust; push: next value; hold: default; KEY long, another key
+// or 10 s idle closes.
+//
+
+static void draw_key_panel(x6100_lcd_t *lcd, const rx_t *rx)
+{
+	const int vis = 5, px = LBL_W + 8, py = SPEC_Y + 14, pw = 500, ph = 30 + vis * 21;
+	const uint32_t bg = 0x1A1008, orange = 0xFF9040, sel = 0x40281A, dim = 0xA08C78, white = 0xF0F0F0;
+	int top = clampi(rx->kedit_par - 2, 0, KPARS - vis);
+	char pos[12];
+
+	x6100_lcd_fill(lcd, px, py, pw, ph, bg);
+	x6100_lcd_fill(lcd, px, py, 3, ph, orange);
+	x6100_lcd_hline(lcd, px, px + pw - 1, py, 0x4A3220);
+	x6100_lcd_hline(lcd, px, px + pw - 1, py + ph - 1, 0x4A3220);
+	x6100_lcd_vline(lcd, px + pw - 1, py, py + ph - 1, 0x4A3220);
+	x6100_lcd_text(lcd, px + 14, py + 7, 2, "KEYER", orange);
+	x6100_lcd_text(lcd, px + 110, py + 11, 1, "MFK: ADJUST  PUSH: NEXT  HOLD: DEFAULT", dim);
+	snprintf(pos, sizeof(pos), "%d/%d", rx->kedit_par + 1, KPARS);
+	x6100_lcd_text(lcd, px + pw - 12 - x6100_lcd_text_width(pos, 1), py + 11, 1, pos, orange);
+
+	for (int i = top; i < top + vis; i++) {
+		int y = py + 30 + (i - top) * 21;
+		char v[24];
+
+		if (i == rx->kedit_par)
+			x6100_lcd_fill(lcd, px + 6, y - 3, pw - 12, 19, sel);
+
+		x6100_lcd_text(lcd, px + 14, y, 2, g_kpar[i].name, i == rx->kedit_par ? white : dim);
+		kpar_text(rx, i, v, sizeof(v));
+		x6100_lcd_text(lcd, px + pw - 12 - x6100_lcd_text_width(v, 2), y, 2, v, white);
+	}
+}
+
+//
 // Memory panel (V/M short): five channels around the selected one. Cyan. MFK turn:
 // channel (a used one is tuned at once); MFK long: write the VFO into it; MFK push
 // twice: clear it; V/M, another key or 10 s idle closes.
@@ -4217,6 +4381,9 @@ overlays:
 	if (rx->medit)
 		draw_mem_panel(lcd, rx);
 
+	if (rx->kedit)
+		draw_key_panel(lcd, rx);
+
 	if (rx->gedit)
 		draw_gen_panel(lcd, rx);
 
@@ -4608,6 +4775,39 @@ static bool console_line(rx_t *rx, char *line)
 			continue;
 		}
 
+		// Keyer: keytype straight|paddle|rev, wpm, iambic a|b, cwpitch, cwvol, qsk, ratio 3.0
+		{
+			int k = -1;
+
+			for (int i = 0; i < KPARS; i++)
+				k = strcasecmp(t, g_kpar[i].token) == 0 ? i : k;
+
+			if (k >= 0) {
+				const char *vs = strtok(NULL, " \t\r\n");
+				int v = -1;
+
+				if (vs == NULL)
+					v = -1;
+				else if (k == 0)
+					v = strcasecmp(vs, "straight") == 0 ? 0 : strcasecmp(vs, "paddle") == 0 ? 1
+						: strcasecmp(vs, "rev") == 0 ? 2 : atoi(vs);
+				else if (k == 2)
+					v = strcasecmp(vs, "a") == 0 ? 0 : strcasecmp(vs, "b") == 0 ? 1 : atoi(vs);
+				else if (k == 6 && strchr(vs, '.') != NULL)
+					v = (int) lround(atof(vs) * 10.0);
+				else
+					v = atoi(vs);
+
+				if (vs == NULL || v < g_kpar[k].min || v > g_kpar[k].max)
+					fprintf(stderr, "\n%s: %d to %d\n", t, g_kpar[k].min, g_kpar[k].max);
+				else
+					*kpar_value(rx, k) = v;
+
+				changed = true;
+				continue;
+			}
+		}
+
 		// mem <n> <Hz> <mode> fil<n> [tx <Hz> <mode>] [name <text>]: memory channel
 		// (memories.conf; typed in the console it is saved at once)
 		if (strcasecmp(t, "mem") == 0) {
@@ -4942,6 +5142,8 @@ static void state_save(const rx_t *rx)
 	fprintf(fp, "vfob %u %s fil%d vfo %s\n", (unsigned) rx->b_freq, modes[rx->b_mode], rx->b_fil + 1, rx->on_b ? "b" : "a");
 	fprintf(fp, "%s %s %s ritofs %d\n", rx->split ? "txsplit" : "notxsplit", rx->rit ? "rit" : "norit", rx->xit ? "xit" : "noxit", rx->rit_hz);
 	fprintf(fp, "vol %d %s rfg %d pwr %.1f\n", rx->vol, rx->mute ? "mute" : "nomute", rx->rfg, rx->txpwr / 10.0);
+	fprintf(fp, "keytype %d wpm %d iambic %d cwpitch %d cwvol %d qsk %d ratio %d.%d\n", rx->keymode, rx->wpm, rx->iambic,
+		rx->cwtone, rx->cwvol, rx->qsk, rx->ratio / 10, rx->ratio % 10);
 	fprintf(fp, "%s %s %s\n", rx->att ? "att" : "noatt", rx->pre ? "pre" : "nopre", rx->atu_on ? "atu" : "noatu");
 	fprintf(fp, "%s %s %s\n", rx->nr ? "nr" : "nonr", rx->nb ? "nb" : "nonb", rx->dnf ? "notch" : "nonotch");
 	fprintf(fp, "nrl %d nbl %d nbw %d ntf %d ntw %d\n", rx->nr_lvl, rx->nb_lvl, rx->nb_w, rx->dnf_f, rx->dnf_w);
@@ -5285,6 +5487,15 @@ static bool cat_get(void *ctx, x6100_civ_item_t item, int vfo, int32_t *v)
 	case X6100_CIV_LVL_DNF:
 		*v = (rx->dnf_f - 100) * 255 / 2900;	/* 0000-0255 over 100-3000 Hz */
 		return true;
+	case X6100_CIV_LVL_KEY_SPEED:	/* 0000-0255 = 6-48 WPM (IC-705) */
+		*v = clampi((rx->wpm - 6) * 255 / 42, 0, 255);
+		return true;
+	case X6100_CIV_LVL_CW_PITCH:	/* 0000-0255 = 300-900 Hz */
+		*v = clampi((rx->cwtone - 300) * 255 / 600, 0, 255);
+		return true;
+	case X6100_CIV_LVL_QSK:		/* break-in delay; here 0000-0255 = 0-1000 ms */
+		*v = rx->qsk * 255 / 1000;
+		return true;
 	case X6100_CIV_ATU:
 		*v = rx->tuning ? 2 : rx->atu_on;
 		return true;
@@ -5497,6 +5708,15 @@ static bool cat_set(void *ctx, x6100_civ_item_t item, int vfo, int32_t v)
 		break;
 	case X6100_CIV_LVL_DNF:
 		rx->dnf_f = 100 + (v * 2900 + 127) / 255 / 10 * 10;
+		break;
+	case X6100_CIV_LVL_KEY_SPEED:
+		rx->wpm = clampi(6 + (v * 42 + 127) / 255, 5, 50);
+		break;
+	case X6100_CIV_LVL_CW_PITCH:
+		rx->cwtone = clampi(300 + (v * 600 + 127) / 255 / 10 * 10, 300, 1000);
+		break;
+	case X6100_CIV_LVL_QSK:
+		rx->qsk = (v * 1000 + 127) / 255 / 10 * 10;
 		break;
 	case X6100_CIV_ATU:
 		if (v == 2) {
@@ -5934,6 +6154,8 @@ int main(int argc, char **argv)
 	for (int i = 0; i < BAND_COUNT; i++)
 		rx.band_freq[i] = g_bands[i].def;
 
+	kpar_defaults(&rx);
+
 	for (int g = 0; g < FG_COUNT; g++)
 		rx.agc_group[g] = g == FG_AM || g == FG_FM ? X6100_AGC_SLOW : X6100_AGC_AUTO;
 
@@ -6288,6 +6510,12 @@ int main(int argc, char **argv)
 		// GEN panel after 10 s, status page after 30 s
 		if ((rx.gedit && t - rx.gedit_since >= 10000) || (rx.ginfo && t - rx.ginfo_since >= 30000)) {
 			rx.gedit = rx.ginfo = false;
+			dirty = true;
+		}
+
+		// Keyer panel after 10 s
+		if (rx.kedit && t - rx.kedit_since >= 10000) {
+			rx.kedit = false;
 			dirty = true;
 		}
 

@@ -33,6 +33,8 @@
 #   bright 5-100                    display brightness, %
 #   region r1|r2|r3|nl              TX allocations for the band check and the OOB
 #                                   marker (default r1; nl = F registration)
+#   keytype straight|paddle|rev     CW keyer: wpm 5-50, iambic a|b, cwpitch 300-1000,
+#                                   cwvol 0-50, qsk 0-1000 (ms), ratio 2.5-4.5
 #   oob  nolimit                    band check off / tune 10 kHz-100 MHz, as --oob /
 #                                   --no-limit: warned at every start, OOB on the dial;
 #                                   where you transmit stays your responsibility

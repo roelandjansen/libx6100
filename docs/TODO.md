@@ -29,7 +29,8 @@ Status: 2026-10-24 (v0.8.0).
 - CI-V rate: the example conf has `cat 19200`; raise it once ttyS2 runs faster.
 - Compressor; VOX / anti-VOX; squelch; monitor;
   mic select and gain; line in / out levels (registers known, defaults set at start).
-- CW keyer: speed, iambic A / B, sidetone, break-in delay.
+- CW keyer: verify the key type values (0 straight, 1 paddle, 2 paddle reversed, from
+  x6100_gui) and the sidetone volume range on the radio; trainer bit unused.
 - Memory channels over CI-V (08 select, 09 write, 0A M>VFO, 0B clear, 1A 00 contents).
 - SWR scan over a band (register 12 `swrscan`).
 - RX / TX equaliser (baseband or liquid-dsp; GEN TX panel).
@@ -40,7 +41,7 @@ Status: 2026-10-24 (v0.8.0).
 | Key | Short | Long | Status |
 |---|---|---|---|
 | GEN | settings panel: brightness, CAT, NTP, WiFi, Bluetooth (done); next: region, LAN server (wfview), TX panel | status page: IP, uptime, battery, CAT, NTP, build (done); next: temperature, baseband version | partly done |
-| KEY | keyer on / off (straight / iambic) | keyer panel: speed, iambic A / B, sidetone, break-in delay, CW pitch | planned |
+| KEY | key type straight / paddle / reversed | keyer panel: speed, iambic A / B, pitch, sidetone, break-in delay, ratio | done |
 | MSG | message list: play CW / voice memory | record / edit a message | planned |
 | APP | app list: FT8, CW / RTTY decoder, SWR scan, recorder | last app | planned |
 | DFN | NR on / off | NB on / off | done |

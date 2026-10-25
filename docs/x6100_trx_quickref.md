@@ -50,7 +50,8 @@ Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
 | LOCK | lock knobs and keys (PTT still works) | |
 | PWR | display on / off | release after 1.5-4 s: quit; hold 4 s: power off (as the stock UI). TX is dropped and filters saved first |
 | GEN | settings panel: brightness, CAT, NTP (MFK turn = change, push = next row, long = default; GEN, other key or 10 s idle closes) | status page: IP, uptime, battery, CAT, NTP result, build (any key or 30 s closes) |
-| KEY / MSG / APP | not used yet (see the key plan in `TODO.md`) | |
+| KEY | key type: straight / paddle / paddle reversed | keyer panel |
+| MSG / APP | not used yet (see the key plan in `TODO.md`) | |
 
 ## Scope modes
 
@@ -143,7 +144,7 @@ Two files in `/etc/x6100`, both in console tokens (`#` = comment):
 
 | File | Written by | Holds |
 |---|---|---|
-| `x6100_trx.state` | x6100_trx, at exit | last state: frequency, mode, filter, VFO B, split, RIT / XIT, volume / mute, gains, AGC per mode group, DSP, scope, REF, band memories, tuner memories |
+| `x6100_trx.state` | x6100_trx, at exit | last state: frequency, mode, filter, VFO B, split, RIT / XIT, keyer, volume / mute, gains, AGC per mode group, DSP, scope, REF, band memories, tuner memories |
 | `x6100_trx.conf` | you, never x6100_trx | what must be the same at every start (example: `docs/x6100_trx.conf.example`) |
 | `filters.conf` | filter panel | filter widths and shifts per mode group |
 | `memories.conf` | memory panel / console | memory channels 1-99 |
@@ -235,6 +236,29 @@ ATU tuned at 7123.000 kHz: L=12 C=34 S=1 (7 tuner memories)
 ```
 
 Kept in `x6100_trx.state` as `atumem <Hz> <L> <C> <S>` (and so in `build.sh backup`).
+
+## CW keyer (KEY)
+
+![keyer](images/x6100_trx_keyer.png)
+
+KEY short cycles the key type (note on the scope); KEY long opens the keyer panel
+(orange): MFK turn = adjust, push = next value, long = default; KEY long, another key
+or 10 s idle closes. The baseband keys and times the CW itself (registers 33 / 34).
+
+| Value | Range (default) |
+|---|---|
+| KEY TYPE | STRAIGHT, PADDLE, PADDLE REV (straight) |
+| SPEED | 5-50 WPM (20) |
+| IAMBIC | A / B (A) |
+| PITCH | 300-1000 Hz in 10 Hz steps (700): sidetone and CW pitch |
+| SIDETONE | volume 0-50 (10) |
+| BREAK-IN | delay 0-1000 ms in 10 ms steps (100) |
+| RATIO | dash / dot 2.5-4.5 (3.0) |
+
+Kept in the state file. Console: `keytype straight|paddle|rev`, `wpm 22`, `iambic a|b`,
+`cwpitch 650`, `cwvol 12`, `qsk 150`, `ratio 3.2`. In CW the console status line shows
+`22 wpm paddle`. CI-V: 14 0C (speed, 6-48 WPM), 14 09 (pitch, 300-900 Hz), 14 0F
+(break-in delay, 0-1000 ms here).
 
 ## Memory channels (V/M)
 
