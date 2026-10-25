@@ -27,7 +27,7 @@ Verified on the radio:
 - CW keyer (KEY short key type, KEY long panel; registers 33 / 34; CI-V 14 09 / 0C / 0F):
   pitch 300-900 Hz (600 out of the box), sidetone 0-100 % over the full register; key
   types straight / paddle (dot left) / reversed work (polarity fixed 2026-10-25);
-  iambic B (out of the box) verified
+  iambic A and B both verified (B out of the box)
 - repeater duplex (AGC long panel): AUTO -100 kHz in NFM on 29.620-29.680 MHz, manual
   DUP- / DUP+ (also in SSB), console status line; PTT key and front (hand) mic; no CTCSS
 - battery charge / external supply: percentage and CHARGING plausible (info line, status
@@ -45,13 +45,12 @@ Built, not yet tried on the radio (2026-10-25):
 
 1. Tuner memories: a tune stores, a retune nearby replaces, recall within the window.
 2. Battery low notes at 20 / 10 % (on battery only).
-3. Keyer: iambic A behaves as A (no extra element after a squeeze), not as B.
    (squeeze and release: B adds one opposite element).
-4. GEN WiFi / Bluetooth rows: WiFi / Bluetooth on / off, pair a headset (may need a
+3. GEN WiFi / Bluetooth rows: WiFi / Bluetooth on / off, pair a headset (may need a
    bluez agent; see S39btpairings), panel stutter from polling.
-5. wfview over CAT: VFO A / B, split, duplex, RIT / XIT, band buttons, keyer levels;
+4. wfview over CAT: VFO A / B, split, duplex, RIT / XIT, band buttons, keyer levels;
    ATT / PRE (socat trace against IU1WXY).
-6. Repeater duplex, the rest: display shows 29.520 while keyed (PTT key, hand mic, CAT
+5. Repeater duplex, the rest: display shows 29.520 while keyed (PTT key, hand mic, CAT
    PTT), mem 22 (AUTO) and a memory with dup- 100, state after a restart, split over
    duplex, MFK hold resets, panel layout. Scope TX line: only when in view (by design).
 
