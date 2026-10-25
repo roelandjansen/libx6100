@@ -120,7 +120,7 @@ Values are kept in the last state (see Settings); defaults NR 20, NB 10 / 10, no
 | Row | Values | When |
 |---|---|---|
 | BRIGHTNESS | 5-100 % in steps of 5 (default 100) | at once |
-| CAT (CI-V) | OFF, 4800 ... 115200 (default 19200; the stock image only runs 19200) | next start |
+| CAT (CI-V) | OFF, 4800 ... 115200 (default 19200; above 19200 x6100_trx sets the UART divisor itself, still to test with wfview) | next start |
 | NTP SYNC | AT START / OFF | next start |
 | WIFI | ON / OFF (NetworkManager); shows network, IP and signal | at once |
 | WIFI NETWORK | turn: choose a saved network, hold MFK: connect. New networks: `nmtui` over ssh | at once |

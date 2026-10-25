@@ -76,6 +76,7 @@
 #include <string.h>
 #include <strings.h>
 #include <sys/ioctl.h>
+#include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <termios.h>
@@ -6681,6 +6682,54 @@ static speed_t cat_speed(int baud)
 	}
 }
 
+//
+// ttyS2 is R_UART (0x01F02800, 24 MHz, DesignWare). On the image's kernel (6.1.82)
+// a speed set through termios never reaches its divisor: it stays at 78 (19200)
+// whatever stty reads back (2026-10-25, read from the registers). The hardware takes
+// a divisor written directly, so x6100_trx sets it itself: DLAB in LCR, DLL / DLH,
+// LCR back, then reads it back. Registers are 32 bits apart.
+//
+
+#define RUART_BASE	0x01F02800u
+#define RUART_CLK	24000000u
+#define RUART_DLL	0		/* with LCR.DLAB */
+#define RUART_DLH	1
+#define RUART_LCR	3
+#define RUART_USR	31		/* 0x7C: bit 0 busy */
+
+static int cat_divisor(int baud)
+{
+	const off_t page = RUART_BASE & ~0xFFFu;
+	uint32_t div = (RUART_CLK / 16 + (uint32_t) baud / 2) / (uint32_t) baud;
+	int fd = open("/dev/mem", O_RDWR | O_SYNC), ok;
+	void *map;
+
+	if (fd < 0)
+		return -errno;
+
+	map = mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, fd, page);
+	close(fd);
+
+	if (map == MAP_FAILED)
+		return -errno;
+
+	volatile uint32_t *r = (volatile uint32_t *) ((uint8_t *) map + (RUART_BASE - page));
+	uint32_t lcr = r[RUART_LCR];
+
+	// The divisor latch only opens while the UART is idle (busy: LCR writes are dropped)
+	for (int i = 0; i < 100000 && (r[RUART_USR] & 1u); i++)
+		;
+
+	r[RUART_LCR] = lcr | 0x80u;
+	r[RUART_DLL] = div & 0xFFu;
+	r[RUART_DLH] = (div >> 8) & 0xFFu;
+	ok = (r[RUART_LCR] & 0x80u) && r[RUART_DLL] == (div & 0xFFu) && r[RUART_DLH] == ((div >> 8) & 0xFFu);
+	r[RUART_LCR] = lcr & ~0x80u;
+	munmap(map, 4096);
+
+	return ok ? (int) div : -EIO;
+}
+
 static int cat_open(cat_t *cat, rx_t *rx, const screen_t *scr, int baud)
 {
 	struct termios tio;
@@ -6726,6 +6775,18 @@ static int cat_open(cat_t *cat, rx_t *rx, const screen_t *scr, int baud)
 		return -e;
 	}
 
+	// The kernel leaves the R_UART divisor alone: set it here (see cat_divisor)
+	tcdrain(cat->fd);
+	int div = cat_divisor(baud);
+
+	if (div < 0) {
+		fprintf(stderr, "CAT: %s divisor for %d baud not set: %s\n", CAT_DEV, baud, strerror(-div));
+		close(cat->fd);
+		cat->fd = -1;
+		return div;
+	}
+
+	fprintf(stderr, "CAT: %s divisor %d (%d baud, R_UART set directly)\n", CAT_DEV, div, baud);
 	tcflush(cat->fd, TCIOFLUSH);
 
 	return 0;
