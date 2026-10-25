@@ -45,7 +45,6 @@ Built, not yet tried on the radio (2026-10-25):
 
 1. Tuner memories: a tune stores, a retune nearby replaces, recall within the window.
 2. Battery low notes at 20 / 10 % (on battery only).
-   (squeeze and release: B adds one opposite element).
 3. GEN WiFi / Bluetooth rows: WiFi / Bluetooth on / off, pair a headset (may need a
    bluez agent; see S39btpairings), panel stutter from polling.
 4. wfview over CAT: VFO A / B, split, duplex, RIT / XIT, band buttons, keyer levels;
