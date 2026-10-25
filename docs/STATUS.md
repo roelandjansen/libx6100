@@ -44,8 +44,8 @@ Built, not yet tried on the radio (2026-10-25):
 
 ## Open items to check on the radio
 
-1. Tuner memories: SWR when keying on a recalled memory; still there after a restart
-   (`atumem` in the state file).
+1. Tuner memories: SWR when keying on a recalled memory (saved and back after a restart:
+   verified).
 2. Battery low notes at 20 / 10 % (on battery only).
 3. GEN WiFi / Bluetooth rows: WiFi / Bluetooth on / off, pair a headset (may need a
    bluez agent; see S39btpairings), panel stutter from polling.
