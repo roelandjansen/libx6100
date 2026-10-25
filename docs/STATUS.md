@@ -35,15 +35,17 @@ Verified on the radio:
 - TX readings folded into the console status line
 - WiFi: connecting to a saved network from the GEN panel
 - 60 m channel mode on the MFK (FST: CH)
+- tuner memories per frequency (nearest within 0.5 % of the TX frequency): relays click
+  when the VFO crosses into another memory with the tuner in, none with it out
 
 Built, not yet tried on the radio (2026-10-25):
 
-- tuner memories per frequency (nearest within 0.5 % of the TX frequency)
 - TX frequency on the display while transmitting with split or a duplex shift
 
 ## Open items to check on the radio
 
-1. Tuner memories: a tune stores, a retune nearby replaces, recall within the window.
+1. Tuner memories: SWR when keying on a recalled memory; still there after a restart
+   (`atumem` in the state file).
 2. Battery low notes at 20 / 10 % (on battery only).
 3. GEN WiFi / Bluetooth rows: WiFi / Bluetooth on / off, pair a headset (may need a
    bluez agent; see S39btpairings), panel stutter from polling.

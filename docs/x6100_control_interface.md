@@ -52,7 +52,7 @@ whole file (`x6100_control_idle()`); read-modify-write on bitfields uses the sha
 | 13  | vi_vm                                 | [7:0] active VFO (0 A, 1 B); [15:8] band index |
 | 14  | rxvol                                 | speaker volume |
 | 15  | rfg_txpwr                             | [7:0] RF gain 0–100; [15:8] TX power ×10 W (0–100) |
-| 17  | atu_network                           | ATU L/C state (opaque) |
+| 17  | atu_network                           | ATU network: [7:0] L, [15:8] C, [16] S; with ATUE (reg 12) set the relays switch at once on a write, in RX too (relay clicks, 2026-10-25) |
 | 20  | ling_loutg_imicg_hmicg                | [7:0] line-in; [15:8] line-out; [23:16] int. mic; [31:24] hand mic |
 | 21  | micsel_pttmode_chge_spmode_auxiqgen_sqlthr | [1:0] mic sel (0 int, 1 hand, 2 auto); [4] charger en; [5] speaker/phone; [15:8] squelch 0–100; PTT mode / aux IQ gen bits unmapped |
 | 22  | voxg_voxag_voxdly_voxe                | [6:0] gain; [13:7] anti-gain; [25:14] delay ms; [26] enable |
