@@ -39,10 +39,8 @@ Verified on the radio:
   key, mic PTT, tune), DUPLEX OFF stays on RX; the scope stays on RX
 - tuner memories per frequency (nearest within 0.5 % of the TX frequency): relays click
   when the VFO crosses into another memory with the tuner in, none with it out
-
-Built, not yet tried on the radio (2026-10-25):
-
-- state saved right after every tune (fsync; tuner memories safe over a power loss)
+- state saved right after every tune: the new atumem is on disk while x6100_trx runs
+  (stored at the TX frequency, e.g. 29530000 for a tune on 29.630 with AUTO duplex)
 
 ## Open items to check on the radio
 
