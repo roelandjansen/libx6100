@@ -36,7 +36,8 @@ Verified on the radio:
 - WiFi: connecting to a saved network from the GEN panel
 - 60 m channel mode on the MFK (FST: CH)
 - TX frequency on the display while keyed with a duplex shift (AUTO, DUP- / DUP+; PTT
-  key, mic PTT, tune), DUPLEX OFF stays on RX; the scope stays on RX
+  key, mic PTT, tune), with split (TX VFO), without XIT (as Icom; console shows the
+  real TX frequency), DUPLEX OFF stays on RX; the scope stays on RX
 - tuner memories per frequency (nearest within 0.5 % of the TX frequency): relays click
   when the VFO crosses into another memory with the tuner in, none with it out
 - state saved right after every tune: the new atumem is on disk while x6100_trx runs
@@ -54,8 +55,6 @@ Verified on the radio:
 5. Repeater duplex, the rest: CAT PTT, mem 22 (AUTO) and a memory with dup- 100, state
    after a restart, split over duplex, MFK hold resets, panel layout. Scope TX line:
    only when in view (by design).
-6. TX frequency on the display with split (VFO B while keyed) and with XIT alone (stays
-   on the VFO frequency).
 
 ## Next steps (suggested order)
 
