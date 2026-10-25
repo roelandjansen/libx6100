@@ -1,0 +1,4 @@
+[submodule "third_party/liquid-dsp"]
+	path = third_party/liquid-dsp
+	url = https://github.com/jgaeddert/liquid-dsp.git
+	shallow = true

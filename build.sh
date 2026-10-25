@@ -84,6 +84,68 @@ build_tools() {
 }
 
 #
+# Build liquid-dsp (third_party/liquid-dsp, git submodule, MIT) as a static library
+# for the radio with its own CMake, zig as the compiler: portable C, no SIMD probes
+# (they would try to run ARM code here), no FFTW; out/liquid/lib/libliquid.a and
+# out/liquid/include/liquid/liquid.h. Needs cmake (zypper install cmake); without
+# it this step is skipped with a warning, the rest of the build does not use it yet.
+#
+
+build_liquid() {
+	local L_SRC="third_party/liquid-dsp"
+	local L_WRAP="${PWD}/${C_OUT}/zig-wrap"
+	local L_BUILD="${C_OUT}/liquid-build"
+	local L_TOOL
+
+	if ! command -v cmake >/dev/null 2>&1; then
+		printf '%s\n' 'warning: cmake not found, liquid-dsp skipped (zypper install cmake)' >&2
+		return 0
+	fi
+
+	if [[ ! -f "${L_SRC}/include/liquid.h" ]]; then
+		git submodule update --init --depth 1 -- "${L_SRC}"
+	fi
+
+	#
+	# cmake wants one program per tool: small wrappers around zig
+	#
+
+	mkdir -p -- "${L_WRAP}"
+
+	for L_TOOL in cc ar ranlib; do
+		if [[ "${L_TOOL}" == cc ]]; then
+			printf '#!/usr/bin/env bash\nexec "%s" cc -target %s -mcpu=%s "$@"\n' "${G_ZIG}" "${C_TARGET}" "${C_CPU}" \
+				> "${L_WRAP}/zig-${L_TOOL}"
+		else
+			printf '#!/usr/bin/env bash\nexec "%s" %s "$@"\n' "${G_ZIG}" "${L_TOOL}" > "${L_WRAP}/zig-${L_TOOL}"
+		fi
+
+		chmod +x -- "${L_WRAP}/zig-${L_TOOL}"
+	done
+
+	cmake -S "${L_SRC}" -B "${L_BUILD}" -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=arm \
+		-DCMAKE_C_COMPILER="${L_WRAP}/zig-cc" -DCMAKE_CXX_COMPILER="${L_WRAP}/zig-cc" \
+		-DCMAKE_AR="${L_WRAP}/zig-ar" -DCMAKE_RANLIB="${L_WRAP}/zig-ranlib" -DCMAKE_BUILD_TYPE=Release \
+		-DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIBS=ON -DBUILD_EXAMPLES=OFF -DBUILD_AUTOTESTS=OFF \
+		-DBUILD_BENCHMARKS=OFF -DENABLE_SIMD=OFF -DFIND_SIMD=OFF -DFIND_FFTW=OFF -DENABLE_COLOR=OFF \
+		-DENABLE_TIMESTAMPS=OFF > "${C_OUT}/liquid-cmake.log"
+	cmake --build "${L_BUILD}" -j "$(nproc)" >> "${C_OUT}/liquid-cmake.log"
+
+	mkdir -p -- "${C_OUT}/liquid/lib" "${C_OUT}/liquid/include/liquid"
+	cp -- "${L_BUILD}/libliquid.a" "${C_OUT}/liquid/lib/"
+	cp -- "${L_SRC}/include/liquid.h" "${C_OUT}/liquid/include/liquid/"
+	printf 'built %s (liquid-dsp %s)\n' "${C_OUT}/liquid/lib/libliquid.a" "$(git -C "${L_SRC}" describe --tags 2>/dev/null || printf '%s' '?')"
+
+	#
+	# Link check: a tiny tool against it (also runs on the radio)
+	#
+
+	zcc -static -s -I"${C_OUT}/liquid/include" -o "${C_OUT}/x6100_liquid" tools/x6100_liquid.c \
+		"${C_OUT}/liquid/lib/libliquid.a" -lm
+	printf 'built %s\n' "${C_OUT}/x6100_liquid"
+}
+
+#
 # Print a fingerprint of everything that goes into the build: the tracked (and
 # edited) sources, this script and the zig version
 #
@@ -91,6 +153,7 @@ build_tools() {
 src_fingerprint() {
 	{
 		git ls-files -z -- src include tools build.sh | xargs -0 sha256sum
+		git submodule status 2>/dev/null || true	# none yet: nothing to add
 		"${G_ZIG}" version
 	} | sha256sum | cut -d ' ' -f 1
 }
@@ -109,6 +172,9 @@ update_tree() {
 		printf '%s\n' 'error: git pull --ff-only failed (local commits or conflicts?)' >&2
 		exit 1
 	fi
+
+	# Submodules (third_party/liquid-dsp) follow the commit recorded here
+	git submodule update --init --depth 1
 }
 
 #
@@ -300,6 +366,7 @@ else
 	build_lib
 	build_tools
 	build_sniff
+	build_liquid
 	printf '%s\n' "${G_PRINT}" > "${C_STAMP}"
 fi
 

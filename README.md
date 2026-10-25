@@ -106,14 +106,22 @@ Not yet: GPIO (hand mic PTT is invisible to Linux), Icom LAN server, keyer.
 Cross-compile on openSUSE Tumbleweed:
 
 ```
-zypper install zig
+zypper install zig cmake
+git clone --recurse-submodules https://github.com/roelandjansen/libx6100.git
 bash build.sh
 ```
 
-Output in `out/`: `libx6100.a` and static ARM tools.
+Output in `out/`: `libx6100.a` and static ARM tools, and liquid-dsp as a static
+library (`out/liquid/lib/libliquid.a`, header in `out/liquid/include/liquid/`) with
+`x6100_liquid`, a link and run check for it (prints the version and a filter test).
+liquid-dsp (MIT, [github.com/jgaeddert/liquid-dsp](https://github.com/jgaeddert/liquid-dsp))
+is a git submodule in `third_party/liquid-dsp`, pinned to a release (v1.8.3), built
+with its own CMake and zig; without cmake that step is skipped with a warning. Nothing
+links against it yet. In an existing clone: `git submodule update --init --depth 1`
+(`build.sh` does that after its pull).
 
 `build.sh` first does `git pull --ff-only`, then builds only when a source file, the
-script or the zig version changed (fingerprint in `out/.fingerprint`).
+script, the submodule commit or the zig version changed (fingerprint in `out/.fingerprint`).
 
 ```
 bash build.sh                 # pull, build if needed

@@ -18,7 +18,8 @@ Status: 2026-10-24 (v0.8.0).
   an IC-7851 comparison, then 6 dB lower); also the overload point with PRE / ATT.
 - Codec level vs ALC test (x6100_tx codec at -40 / -30 / -20 dBFS).
 - Register 35 LO offset for FIX mode; span edges in FIX mode.
-- liquid-dsp (static), only per function where audio passes through Linux anyway:
+- liquid-dsp: built static (v1.8.3, `third_party/liquid-dsp`, `x6100_liquid` check), not
+  linked into x6100_trx yet. Use per function where audio passes through Linux anyway:
   RADE / network audio (resampling, TX audio shaping), recordings (image lowpass),
   decoders later. Local listening stays on the baseband DSP (NR / NB / notch).
 
@@ -31,8 +32,8 @@ Status: 2026-10-24 (v0.8.0).
 - CW keyer: speed, iambic A / B, sidetone, break-in delay.
 - Memory channels over CI-V (08 select, 09 write, 0A M>VFO, 0B clear, 1A 00 contents).
 - SWR scan over a band (register 12 `swrscan`).
-- Digital modes on the radio (FT8, CW / RTTY decoder); CW / voice message memories;
-  RX / TX equaliser.
+- RX / TX equaliser (baseband or liquid-dsp; GEN TX panel).
+- Digital modes on the radio (FT8, CW / RTTY decoder); CW / voice message memories.
 
 ## Key plan (GEN / KEY / MSG / APP / DFN / DFL)
 
