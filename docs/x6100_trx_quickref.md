@@ -17,7 +17,7 @@ x6100_trx --oob 5450000 usb slow
 |---|---|
 | `--oob` | no band check before TX, baseband TX enabled everywhere (transverter, tests; legal limits are yours) |
 | `--no-limit` | tune 10 kHz - 100 MHz instead of 0.5 - 56 MHz (baseband probe); put it before the frequency |
-| `--cat[=baud]` | CI-V on /dev/ttyS2 (DEV USB-C, PC side the second CH342 port, e.g. ttyACM1), default 19200, as an IC-705: see `docs/x6100_civ.md` |
+| `--cat[=baud]` | CI-V on /dev/ttyS2 (DEV USB-C, PC side the second CH342 port, e.g. ttyACM1), default 19200 (also the maximum of the DEV port), as an IC-705: see `docs/x6100_civ.md` |
 | `--cat-log` | as `--cat`, and print CI-V commands (`>`) with our OK / NG reply (`<`); polls answered with data are not shown |
 | `--probe` | print the flow flag word on change, and every second the IQ peak and all flag bits seen (overflow hunt) |
 
@@ -120,7 +120,7 @@ Values are kept in the last state (see Settings); defaults NR 20, NB 10 / 10, no
 | Row | Values | When |
 |---|---|---|
 | BRIGHTNESS | 5-100 % in steps of 5 (default 100) | at once |
-| CAT (CI-V) | OFF, 4800 ... 115200 (default 19200; above 19200 x6100_trx sets the UART divisor itself, still to test with wfview) | next start |
+| CAT (CI-V) | OFF, 4800, 9600, 19200 (default 19200: the most the DEV port carries) | next start |
 | NTP SYNC | AT START / OFF | next start |
 | WIFI | ON / OFF (NetworkManager); shows network, IP and signal | at once |
 | WIFI NETWORK | turn: choose a saved network, hold MFK: connect. New networks: `nmtui` over ssh | at once |

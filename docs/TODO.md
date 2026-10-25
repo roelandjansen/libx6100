@@ -54,10 +54,9 @@ Status: 2026-10-25 (after v0.10.0). Summary and next steps: `STATUS.md`.
 ## From the stock UI, not yet in x6100_trx
 
 - GEN: more rows (see key plan); keyer settings (KEY), messages (MSG), apps (APP).
-- CI-V rate: ttyS2 (R_UART) ignores termios speeds on this kernel (divisor stuck at
-  78); x6100_trx now writes the divisor itself. Test 38400 / 57600 / 115200 with
-  wfview; a first U test at 115200 (divisor 13) gave nothing on the PC: check the PC
-  driver (`readlink /sys/class/tty/ttyACM1/device/driver`) and CH342 port 2.
+- CI-V rate: 19200 is the limit of the DEV port (9600 / 19200 work, 38400 and up do
+  not, with the divisor written and the PC side checked); faster CAT goes over the
+  network (LAN server, `x6100_netaudio_design.md`).
 - TX panel (F4 long): mic select and gains, compressor, VOX, monitor, squelch built;
   test the ranges on the radio (gains 0-50 and VOX 0-100 are guesses, VOX delay scale
   of register 22 [25:14] unchecked: the start value 0x01F40000 reads 2000 ms there).
@@ -91,8 +90,6 @@ under GEN until a better key turns up.
 - PTT in USB-D with the C-Media sound card (CAT PTT, rear USB audio).
 - Icom LAN server (ports 50001-50003): faster scope, network audio; then RADE via
   network audio. Design: `x6100_netaudio_design.md`.
-- Faster serial CAT: kernel 6.1.82 never writes the R_UART divisor (see x6100_civ.md);
-  worked around in x6100_trx, PC / CH342 side still to check.
 
 ## Parked
 

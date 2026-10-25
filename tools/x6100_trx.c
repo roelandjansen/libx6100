@@ -3414,7 +3414,7 @@ static const char *g_gen_name[GEN_ROWS] = {
 	"BRIGHTNESS", "CAT CI-V", "NTP SYNC", "WIFI", "WIFI NETWORK", "BLUETOOTH", "BT PAIRING", "BT DEVICE",
 	"BIRDIE SCAN", "BIRDIE MARKS", "BIRDIE NOTCH",
 };
-static const int g_cat_rates[] = { 0, 4800, 9600, 19200, 38400, 57600, 115200 };
+static const int g_cat_rates[] = { 0, 4800, 9600, 19200 };	/* the DEV port carries no more than 19200 (x6100_civ.md) */
 
 #define CAT_RATES	((int) (sizeof(g_cat_rates) / sizeof(g_cat_rates[0])))
 
@@ -6787,6 +6787,10 @@ static int cat_open(cat_t *cat, rx_t *rx, const screen_t *scr, int baud)
 	}
 
 	fprintf(stderr, "CAT: %s divisor %d (%d baud, R_UART set directly)\n", CAT_DEV, div, baud);
+
+	if (baud > 19200)
+		fprintf(stderr, "CAT: warning: the DEV port path carries no more than 19200 baud (9600 and 19200 work, 38400 and up do not)\n");
+
 	tcflush(cat->fd, TCIOFLUSH);
 
 	return 0;

@@ -21,7 +21,8 @@ Verified on the radio:
 - GEN panel: brightness (inverted backlight, 5-100 %), WiFi / Bluetooth rows built;
   status page; NTP left to the image (S48sntp / S49ntp)
 - PWR: display off, quit, power off
-- CI-V as IC-705 on the DEV USB-C (ttyS2, 19200 only on the stock kernel), wfview:
+- CI-V as IC-705 on the DEV USB-C (ttyS2; 19200 is the port's limit: 9600 / 19200 work,
+  38400 and up do not, checked 2026-10-25 with the divisor written), wfview:
   frequency, mode, filters, gains, power, ATU, tune, meters, scope
 - memory channels (V/M), `memr` list; console with own line editing
 - liquid-dsp v1.8.3 static build, `x6100_liquid` runs on the radio
@@ -51,7 +52,6 @@ Built, not yet tried on the radio (2026-10-25):
 - birdies: scan (GEN BIRDIE SCAN / `birdiescan`), birdies.conf, yellow ticks on the
   scope, automatic notch in USB / LSB / AM (BIRDIE NOTCH, off for now); host simulation
   of 80 m finds the IU1WXY reference list within 3 Hz
-- CAT above 19200: x6100_trx writes the R_UART divisor itself (the kernel never does)
 
 ## Open items to check on the radio
 
@@ -70,8 +70,6 @@ Built, not yet tried on the radio (2026-10-25):
    squelch closes in FM); the gain ranges (0-50, 0-100) against the stock UI.
 7. Birdies: 80 m scan against the IU1WXY list (TODO), tick on the scope line, the
    notch on 3837.014 (LSB, dial 3838.000: 986 Hz), PRE / ATT.
-8. CAT at 38400 / 115200 with wfview (`cat 115200`): the divisor message at start, then
-   wfview at the same speed; if nothing comes back, the PC driver and CH342 port 2.
 
 ## Next steps (suggested order)
 
