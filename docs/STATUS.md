@@ -74,7 +74,8 @@ Built, not yet tried on the radio (2026-10-25):
    `x6100_netaudio_design.md`), recordings, RX / TX equaliser.
 5. Measurements: S-meter calibration, codec level against ALC.
 6. CTCSS for the repeaters (see TODO: no tone encoder known, mic bypasses Linux).
-7. Birdie calibration as in IU1WXY's design: investigate (TODO).
+7. Birdie calibration: scan, marks on the scope, auto notch in SSB / AM (own design;
+   functional idea from the IU1WXY release notes, see TODO).
 
 ## Working notes
 

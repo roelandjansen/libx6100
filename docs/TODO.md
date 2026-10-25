@@ -19,8 +19,20 @@ Status: 2026-10-25 (after v0.10.0). Summary and next steps: `STATUS.md`.
 - Hand mic PTT with split: x6100_trx follows the baseband TX flag (verified), the first
   ms go out on the RX side; the baseband split flag (register 12 b1, VFO A RX / VFO B TX)
   could make that clean: to test.
-- Birdie calibration as in IU1WXY's design: investigate (look up their implementation;
-  internal spurs measured and stored per frequency, then masked on the scope / notched?).
+- Birdie calibration (idea from IU1WXY v0.128 release notes; their software is closed
+  and its terms forbid reproducing or imitating its screens: own design and UI only).
+  What it does there: birdies = carriers from the radio's own oscillators (fixed lines
+  on the scope, a whistle in SSB). A receive-only scan, antenna off or dummy load, one
+  band or all; a narrow peak at least 10 dB over the noise counts. Then a mark on the
+  spectrum per birdie and, in USB / LSB / AM, a narrow notch when one falls in the
+  passband; not in CW, digital modes or with the own DNF on.
+  Sketch for x6100_trx: scan per band in scope windows (fixed PRE / ATT / RF gain),
+  average N spectrum frames, noise floor = median, peaks >= 10 dB and <= 2 bins wide,
+  refine with a narrow span; store `birdie <Hz> <dB>` in /etc/x6100/birdies.conf (also
+  in build.sh backup); ticks on the scope; auto notch through register 24 (one DNF in
+  the baseband: the strongest birdie in the passband) unless DNF is on by hand.
+  To find out: spectrum bin width per span, whether birdies move with PRE / ATT or
+  temperature, and how many there are per band on this radio.
 - S-meter calibration (signal generator): SMETER_CAL_DB is provisional (-21: -15 from
   an IC-7851 comparison, then 6 dB lower); also the overload point with PRE / ATT.
 - Codec level vs ALC test (x6100_tx codec at -40 / -30 / -20 dBFS).
