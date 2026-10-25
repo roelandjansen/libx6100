@@ -215,7 +215,7 @@ typedef struct
 	// CW keyer (registers 33 / 34): KEY short = key type, KEY long = keyer panel
 	//
 	int wpm;		/* 5-50 */
-	int keymode;		/* 0 straight key, 1 paddle, 2 paddle reversed */
+	int keymode;		/* 0 straight key, 1 paddle (dot left), 2 paddle reversed; register 1 / 2 swapped */
 	int iambic;		/* 0 A, 1 B */
 	int cwtone;		/* sidetone / CW pitch, 300-900 Hz (IC-705 range) */
 	int cwvol;		/* sidetone volume 0-100 %, register 0-63 */
@@ -811,7 +811,7 @@ static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 	x6100_ctl_set(ctl, X6100_REG_VFOB_PRE, rx->pre);
 	x6100_ctl_set(ctl, X6100_REG_NR_NB, X6100_R23(rx->nr_lvl, rx->nb_w, rx->nb_lvl, rx->nr, rx->nb));
 	x6100_ctl_set(ctl, X6100_REG_DNF, X6100_R24(rx->dnf_f, rx->dnf_w, rx->dnf));
-	x6100_ctl_set(ctl, X6100_REG_KEYER, X6100_R33(rx->wpm, rx->keymode, rx->iambic, rx->cwtone, (rx->cwvol * 63 + 50) / 100, 0));
+	x6100_ctl_set(ctl, X6100_REG_KEYER, X6100_R33(rx->wpm, rx->keymode ? 3 - rx->keymode : 0, rx->iambic, rx->cwtone, (rx->cwvol * 63 + 50) / 100, 0));
 	x6100_ctl_set(ctl, X6100_REG_QSK_KR, X6100_R34(rx->qsk, rx->ratio));
 	x6100_set_filter(ctl, mode, low, high);
 	x6100_ctl_set(ctl, X6100_REG_RXVOL, rx->mute ? 0 : (uint32_t) rx->vol);
@@ -1110,8 +1110,10 @@ static void mem_clear(int n)
 
 //
 // CW keyer settings (registers 33 / 34), one table for the panel, the console and
-// the state file. Key type: 0 straight key, 1 paddle, 2 paddle with dot and dash
-// swapped (x6100_gui: manual / auto left / auto right).
+// the state file. Key type: 0 straight key, 1 paddle (dot on the left paddle), 2 paddle
+// reversed. The baseband has these the other way round (register 33 [9:8]: 1 gives
+// dash left, 2 dot left, checked on the radio 2026-10-25; x6100_gui: auto left /
+// auto right), so the register gets 3 - n for a paddle.
 //
 
 typedef struct

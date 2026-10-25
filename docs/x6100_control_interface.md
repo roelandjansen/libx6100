@@ -359,7 +359,7 @@ are marked **new** / **changed**.
 | 27 | [7:0] agcknee, [11:8] agcslope, [12] agchang |
 | 28 | **changed:** [9:0] agc_tcslow, [19:10] agc_tcmid, [29:20] agc_tcfast, unit 10 ms (defaults 250/50/5 = 2.5 s/0.5 s/50 ms) — was a single agctime |
 | 29 | monilevel |
-| 33 | [7:0] ks, [9:8] km, [11:10] kimb, [22:12] cwtone, [28:23] cwvol, [29] cwtrain |
+| 33 | [7:0] ks, [9:8] km (0 straight, 1 paddle dash left, 2 paddle dot left: checked 2026-10-25), [11:10] kimb, [22:12] cwtone, [28:23] cwvol, [29] cwtrain |
 | 34 | [15:0] qsktime, [31:16] kr×10 |
 | 35 | **new:** [23:0] LO/cursor offset (from UI state), [24] center_mode |
 | 41 | [15:0] bias_drive, [31:16] bias_final |
