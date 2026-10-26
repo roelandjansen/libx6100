@@ -8,6 +8,10 @@ Note: this is a fork of R1CBU's original code, not an independent reimplementati
 Register layout may lag newer base firmware / `x6100_base_patch` revisions; check
 gdyuldin/x6100_gui for registers added after 2023.
 
+Cross-checked 2026-10-27 against gdyuldin/X6100Control v0.16.1 (Georgy Dyuldin R2RFE,
+LGPL-2.1) as used by OpenX6X00 (Guru-RF, github.com/Guru-RF/OpenX6X00, LGPL-2.1): see the
+note under the register table. All references: README.md, References.
+
 ## Architecture
 
 ```

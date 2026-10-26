@@ -166,6 +166,32 @@ system and GUI image by Giovanni Ricciardi IU1WXY
 baseband, and `start` brings it back. Many thanks to IU1WXY for a well-kept image to
 boot from. libx6100 contains no code from it.
 
+## References
+
+Projects whose published work libx6100 was checked against. libx6100 contains no code
+from them: register facts and ideas only, credited in the docs where they are used.
+
+- **OpenX6X00** by Joeri Van Dooren ON6URE / Guru-RF
+  ([github.com/Guru-RF/OpenX6X00](https://github.com/Guru-RF/OpenX6X00),
+  [openx6x00.org](https://openx6x00.org/), LGPL-2.1, the image GPLv3): open firmware
+  for the X6100 and X6200, the open continuation of the R1CBU / x6100_gui line. Used for:
+  the birdie scan design comparison (`src/birdie.c`), the TX audio ranges, and the note
+  that baseband I2C writes can fail and need resending (`src/base_guard.h`).
+- **X6100Control** by Georgy Dyuldin R2RFE
+  ([github.com/gdyuldin/X6100Control](https://github.com/gdyuldin/X6100Control),
+  LGPL-2.1, v0.16.1): the baseband control library under OpenX6X00. Register cross-check
+  of 2026-10-27; the register 22 (VOX) layout comes from it.
+- **AetherRadio/X6100Control** by Oleg Belousov R1CBU and Rui Oliveira CT7ALW (LGPL-2.1):
+  the first register map (`docs/x6100_control_interface.md`).
+- **x6100_gui** by Oleg Belousov R1CBU and Georgy Dyuldin R2RFE
+  ([github.com/gdyuldin/x6100_gui](https://github.com/gdyuldin/x6100_gui), LGPL-2.1):
+  registers added after 2023, the CI-V cross-check (`docs/x6100_civ.md`).
+- **IU1WXY image** by Giovanni Ricciardi IU1WXY (closed from v0.128): the image this
+  is developed on, and the idea of a birdie scan with an automatic notch, from its
+  public release notes (v0.128). Its screens are not reproduced.
+- **wfview** ([wfview.org](https://wfview.org/)): the CAT client x6100_trx is tested with,
+  as an IC-705.
+
 ## Safety
 
 - No function writes the calibration block; keep your own dump as backup.

@@ -151,6 +151,10 @@ The rig file lists only these. CAT PTT from the client keys with the selected so
 1. Option B (own daemon) vs wfserver (A): reopened 2026-10-25, now that x6100_trx offers
    CI-V on a pty and the DEV port is capped at 19200. Next: can wfserver (Qt5, opus,
    audio) be built for the R16 against the image (buildroot package), and how it runs.
+   A third option: TCI. OpenX6X00 (Guru-RF, LGPL-2.1) dropped the inherited wfview (Icom
+   LAN) server and serves TCI v2.0 over a WebSocket on port 50001 (VFO, mode, filter,
+   AGC, RIT, drive, PTT with the client's audio, meters, RX audio); TCI clients (SDR
+   software, loggers, the VFO-Knob) work with it, wfview does not.
 2. CI-V address and model ID for the X6100 identity, and which wfview rig-file
    fields cover DATA MOD source selection.
 3. Does wfview's Opus negotiation work against a non-wfserver server as-is?
