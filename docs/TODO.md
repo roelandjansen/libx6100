@@ -94,6 +94,21 @@ under GEN until a better key turns up.
 - Icom LAN server (ports 50001-50003): faster scope, network audio; then RADE via
   network audio. Design: `x6100_netaudio_design.md`.
 
+## Image and distribution
+
+- Now: the IU1WXY image (OS, kernel 6.1.82, stock baseband BASE 1.1.9) is the base;
+  x6100_trx and its tools run on it (`build.sh deploy`). A wfserver build for the R16
+  starts from the IU1WXY buildroot tree (in its GPL sources).
+- Later: our own buildroot, self-contained, no longer depending on the IU1WXY or other
+  images. Two deliverables:
+  - full image: a microSD image with OS, x6100_trx, wfserver and the tools;
+  - applications only: x6100_trx, wfserver and the tools as a package to put on an
+    existing image (as `build.sh deploy` does now).
+- To settle on the way: kernel (6.x mainline with the R16 device tree; the R_UART CAT
+  divisor and the DEV port limit stay a hardware matter), init, WiFi / Bluetooth stack,
+  update path, settings partition kept across updates (as `/etc/x6100` with backup /
+  restore now).
+
 ## Parked
 
 - Baseband (STM32) clean-room firmware: `x6100_baseband_handover.md`.
