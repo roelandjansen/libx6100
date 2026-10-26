@@ -99,3 +99,9 @@ Built, not yet tried on the radio (2026-10-25):
   and pushed with `git push origin <tag>` (v0.5.0-v0.7.0 were local only until 2026-10-24).
 - Keyer since v0.9.0: `cwvol` in the state file is now 0-100 %; an old 0-50 value is read
   as a percentage (quieter), and a `cwpitch` above 900 is refused and falls back to 600.
+- Cloud sessions: the container's global git identity is Claude; set the repo identity
+  first (`git config user.name "Roeland Jansen"`, `git config user.email` as above) so
+  no commit or tag is attributed to Claude.
+- Never `git push --mirror` from a local clone: on 2026-10-26 it reset GitHub master to
+  an old local state and removed tags v0.5.0-v0.10.0 (master restored, tags re-pushed
+  by hand). Pull first; push tags by name.
