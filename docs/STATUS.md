@@ -1,9 +1,9 @@
 # libx6100 / x6100_trx — status
 
-Snapshot: 2026-10-25. Last tag: v0.10.0 (2026-10-25, on 40d00ac; repeater duplex, TX
-frequency on the display, CW pitch / sidetone / paddle fixes, iambic B, state saved after
-a tune). Before: v0.9.0 on 33b74aa. Tags are made by hand: they cannot be pushed from the
-cloud sessions.
+Snapshot: 2026-10-26. Last tag: v0.12.0 (2026-10-26, on 0fab380; AM receive offset,
+wfview SCROLL-C fix, CAT over the LAN). Before: v0.11.0 on c3e536f (TX panel, birdies,
+CAT findings, CI-V on a pty), v0.10.0 on 40d00ac. Tags are made by hand: they cannot be
+pushed from the cloud sessions.
 Open work in detail: `TODO.md`. Use: `x6100_trx_quickref.md`. CAT: `x6100_civ.md`.
 
 ## Where we are
