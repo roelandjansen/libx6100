@@ -76,7 +76,8 @@ Built, not yet tried on the radio (2026-10-25):
    squelch closes in FM); the gain ranges (0-50, 0-100) against the stock UI.
 7. Birdies: 80 m scan against the IU1WXY list (TODO), tick on the scope line, the
    notch on 3837.014 (LSB, dial 3838.000: 986 Hz), PRE / ATT.
-8. AM offset: MW station tuned exactly, sound as with RIT +500; signals on the RF scope
+8. AM offset: MW station tuned exactly, sound as with RIT +500; AGC long row AM OFFSET
+   (20 / 200 / 500 Hz, hold = 500, panel scrolls to row 6); signals on the RF scope
    at the right place in AM and with RIT on; wfview SCROLL-C waterfall runs.
 
 ## Next steps (suggested order)
