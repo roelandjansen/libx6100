@@ -57,7 +57,7 @@ typedef enum
 	X6100_REG_KEYER = 33,
 	X6100_REG_QSK_KR = 34,
 	X6100_REG_LO_CENTER = 35,
-	X6100_REG_UNK36 = 36,		/* R1CBU GUI writes 0x00004A02; meaning unknown */
+	X6100_REG_UNK36 = 36,		/* CW peak filter / CESSB (X6100Control cw_peak_cessb); start value 0x00004A02 */
 	X6100_REG_TX_FILTER = 38,	/* presumed: [15:0] TX low cut Hz, [31:16] TX high cut Hz (GUI: 160 / 3000) */
 	X6100_REG_BIAS = 41,
 	X6100_REG_RIT = 42,
@@ -134,10 +134,12 @@ typedef enum
 #define X6100_R21(micsel, pttmode, chge, spmode, auxiqen, sqlthr)	(X6100_FIELD(micsel, 0, 0x3) | X6100_FIELD(pttmode, 2, 0x3) | X6100_FIELD(chge, 4, 0x1) | X6100_FIELD(spmode, 5, 0x1) | X6100_FIELD(auxiqen, 6, 0x1) | X6100_FIELD(sqlthr, 8, 0xFF))
 
 //
-// Register 22: [6:0] VOX gain, [13:7] anti-VOX, [25:14] delay ms, [26] enable
+// Register 22: [6:0] VOX gain, [14:8] anti-VOX, [29:16] delay ms, [30] enable (the bitfield
+// layout of X6100Control v0.16.1, x6100_reg_vox_t; 0x01F40000 = off, 500 ms, as the R1CBU GUI
+// writes at start). Earlier here: [13:7] / [25:14] / [26], which put VOX on in a delay bit
 //
 
-#define X6100_R22(voxg, voxag, voxdly, voxe)	(X6100_FIELD(voxg, 0, 0x7F) | X6100_FIELD(voxag, 7, 0x7F) | X6100_FIELD(voxdly, 14, 0xFFF) | X6100_FIELD(voxe, 26, 0x1))
+#define X6100_R22(voxg, voxag, voxdly, voxe)	(X6100_FIELD(voxg, 0, 0x7F) | X6100_FIELD(voxag, 8, 0x7F) | X6100_FIELD(voxdly, 16, 0x3FFF) | X6100_FIELD(voxe, 30, 0x1))
 
 //
 // Register 23: [7:0] NR depth, [15:8] NB width, [23:16] NB level, [24] NR on, [25] NB on

@@ -33,6 +33,10 @@ Status: 2026-10-26 (after v0.12.0). Summary and next steps: `STATUS.md`.
   - the notch: 3837.014 in LSB at dial 3838.000 = 986 Hz; does a 40 Hz notch take it
     out, how far off may it be; then BIRDIE NOTCH on as the default
   - birdies with PRE / ATT, and drift with temperature (scan again later)
+  - OpenX6X00 (Guru-RF, LGPL-2.1, github.com/Guru-RF/OpenX6X00, src/birdie.c) has an
+    open Birdie Cal: two snapshots per step (a peak must be in both), 14 dB over the 25th
+    percentile, notch only in USB / LSB on the birdie nearest 1 kHz audio (not the
+    strongest). Worth taking: the nearest-the-middle choice; compare scans on the radio.
   - first scan on the radio, 20 m (2026-10-25, x6100_trx): 14035612 (15 dB),
     14042891 (24), 14050168 (13), 14057446 (21), 14064726 (43), 14079275 (22),
     14086552 (26), 14093832 (19), 14101110 (24), 14126967 (10), 14161026 (16),
@@ -59,9 +63,9 @@ Status: 2026-10-26 (after v0.12.0). Summary and next steps: `STATUS.md`.
   network: `cat pty` (CI-V on /tmp/x6100-civ, any speed) for wfserver on the radio, or
   the own LAN server (`x6100_netaudio_design.md`, option A vs B reopened).
 - TX panel (F4 long): mic select and gains, compressor, VOX, monitor, squelch built;
-  test the ranges on the radio (gains 0-50 and VOX 0-100 are guesses, VOX delay scale
-  of register 22 [25:14] unchecked: the start value 0x01F40000 reads 2000 ms there).
-  Line in / out levels (register 20 [7:0] / [15:8]) still fixed at 10.
+  ranges and register 22 layout now from X6100Control v0.16.1 (VOX: [6:0] gain, [14:8]
+  anti-VOX, [29:16] delay, [30] on; the old layout never switched VOX on). Test on the
+  radio. Line in / out levels (register 20 [7:0] / [15:8]) still fixed at 10.
 - SWR scan over a band (register 12 `swrscan`).
 - RX / TX equaliser (baseband or liquid-dsp; GEN TX panel).
 - Digital modes on the radio (FT8, CW / RTTY decoder); CW / voice message memories.
@@ -94,6 +98,9 @@ under GEN until a better key turns up.
 
 - Baseband (STM32) clean-room firmware: `x6100_baseband_handover.md`.
 - RX IQ balance (registers 48 / 49): `tools/x6100_iqcal.c`.
+- Lost I2C writes (OpenX6X00 base_guard.h: a NAK lost a PTT off, radio keyed for 8-10 s):
+  check what libx6100 does after a failed write (x6100_trx counts and reports them); resend
+  at once, and the whole register block after every un-key, as OpenX6X00 does.
 - Hand mic PTT is invisible to Linux (cannot abort a tune); evtest / GPIO not checked.
 - Band edge markers on the scope from the region table (`region`, done: r1 / r2 / r3 / nl;
   TX check uses it). Next: markers, signal edges in the check, N registration, more countries.

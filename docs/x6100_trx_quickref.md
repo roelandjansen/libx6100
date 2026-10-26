@@ -307,7 +307,8 @@ F4 long opens the TX panel (red): MFK turn = adjust, push = next value, long = d
 F4 long, another key or 10 s idle closes. On / off rows show green when on. The
 defaults are the values x6100_trx wrote at start before (from the R1CBU GUI; VOX gain
 and delay are new, VOX stays off), so
-nothing changes until a value is set. The gain ranges are not yet checked on the radio.
+nothing changes until a value is set. Ranges and register layout as in X6100Control
+/ OpenX6X00 (the R1CBU line).
 
 | Value | Range (default) | Register |
 |---|---|---|
@@ -316,10 +317,10 @@ nothing changes until a value is set. The gain ranges are not yet checked on the
 | HAND MIC GAIN | 0-50 (20) | 20 [31:24] |
 | COMPRESSOR | ON / OFF (OFF) | 25 [4] |
 | COMP LEVEL | 1:2, 1:4, 1:8 (1:4) | 25 [3:0] |
-| VOX | ON / OFF (OFF) | 22 [26] |
+| VOX | ON / OFF (OFF) | 22 [30] |
 | VOX GAIN | 0-100 (50) | 22 [6:0] |
-| ANTI-VOX | 0-100 (0) | 22 [13:7] |
-| VOX DELAY | 100-2000 ms in 50 ms steps (500) | 22 [25:14] |
+| ANTI-VOX | 0-100 (0) | 22 [14:8] |
+| VOX DELAY | 100-2000 ms in 50 ms steps (500) | 22 [29:16] |
 | MONITOR | ON / OFF (ON) | 29 (0 when off) |
 | MONI LEVEL | 0-100 (30) | 29 |
 | SQUELCH | 0-100 (0 = open) | 21 [15:8] |

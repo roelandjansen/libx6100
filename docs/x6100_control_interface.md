@@ -55,7 +55,7 @@ whole file (`x6100_control_idle()`); read-modify-write on bitfields uses the sha
 | 17  | atu_network                           | ATU network: [7:0] L, [15:8] C, [16] S; with ATUE (reg 12) set the relays switch at once on a write, in RX too (relay clicks, 2026-10-25) |
 | 20  | ling_loutg_imicg_hmicg                | [7:0] line-in; [15:8] line-out; [23:16] int. mic; [31:24] hand mic |
 | 21  | micsel_pttmode_chge_spmode_auxiqgen_sqlthr | [1:0] mic sel (0 int, 1 hand, 2 auto); [4] charger en; [5] speaker/phone; [15:8] squelch 0–100; PTT mode / aux IQ gen bits unmapped |
-| 22  | voxg_voxag_voxdly_voxe                | [6:0] gain; [13:7] anti-gain; [25:14] delay ms; [26] enable |
+| 22  | voxg_voxag_voxdly_voxe                | [6:0] gain; [14:8] anti-gain; [29:16] delay ms; [30] enable (X6100Control v0.16.1) |
 | 23  | nrthr_nbw_nbthr_nre_nbe               | [7:0] NR level; [15:8] NB width; [23:16] NB level; [24] NR en; [25] NB en |
 | 24  | dnfcnt_dnfwidth_dnfe                  | [11:0] notch centre Hz; [23:12] width Hz; [24] enable |
 | 25  | cmplevel_cmpe                         | compressor level / enable (unmapped in lib) |
@@ -352,7 +352,7 @@ are marked **new** / **changed**.
 | 15 | [7:0] rfg, [15:8] txpwr×10, **[23:16] fftdec** |
 | 20 | ling, loutg, imicg, hmicg (8 bits each) |
 | 21 | [1:0] micsel, **[3:2] pttmode**, [4] chge, [5] spmode, **[6] auxiqen**, [15:8] sqlthr |
-| 22 | [6:0] voxg, [13:7] voxag, [25:14] voxdly, [26] voxe |
+| 22 | [6:0] voxg, [14:8] voxag, [29:16] voxdly (ms), [30] voxe (X6100Control v0.16.1 bitfields; 0x01F40000 = off, 500 ms. Was [13:7] / [25:14] / [26] here, wrong) |
 | 23 | [7:0] nrthr, [15:8] nbw, [23:16] nbthr, [24] nre, [25] nbe |
 | 24 | [11:0] dnfcnt, [23:12] dnfwidth, [24] dnfe |
 | 25 | **[3:0] cmplevel (0 off, 1:2, 1:4, 1:8), [4] cmpe** |
@@ -361,12 +361,22 @@ are marked **new** / **changed**.
 | 29 | monilevel |
 | 33 | [7:0] ks, [9:8] km (0 straight, 1 paddle dash left, 2 paddle dot left: checked 2026-10-25), [11:10] kimb, [22:12] cwtone, [28:23] cwvol, [29] cwtrain |
 | 34 | [15:0] qsktime, [31:16] kr×10 |
-| 35 | **new:** [23:0] LO/cursor offset (from UI state), [24] center_mode |
+| 35 | **new:** [23:0] LO/cursor offset (from UI state), [24] center_mode. X6100Control: if_shift, [23:0] shift, [24] = IF shift off (centre mode); not tried on BASE 1.1.9 |
+| 36 | X6100Control: cw_peak_cessb: [0] CW peak filter on, [7:1] CW peak Q, [8] CESSB on, [14:9] CESSB power-up x10 (start value 0x00004A02); not tried |
 | 41 | [15:0] bias_drive, [31:16] bias_final |
 | 42 / 43 | rit / xit |
 | 44–47 | filter1/2 low/high (set elsewhere in the UI, not in update_params) |
 | 48–51 | rphscmp, rmagcmp, txiofs, txqofs |
 | 53 | pwrsync |
+
+Cross-checked 2026-10-27 against Georgy Dyuldin's X6100Control v0.16.1 (LGPL-2.1,
+github.com/gdyuldin/X6100Control, as used by OpenX6X00): registers 20, 21, 23, 24, 25,
+29, 33 and 34 match; 22 (VOX) was wrong here and is fixed; 38 is confirmed as the TX
+filter ([15:0] low, [31:16] high). Also named there: 16 (two parameters, unknown), 18
+([0] flow IQ as fp16, [1] FM emphasis), 19 (ADC / DAC gain offsets, bf16), 36 (CW peak
+filter, CESSB). OpenX6X00 notes that baseband I2C writes can fail (NAK): a lost PTT off
+kept the radio keyed for seconds, so it resends a failed write and the whole register block
+after every un-key (its src/base_guard.h).
 
 Notes:
 

@@ -1369,8 +1369,8 @@ static void kpar_defaults(rx_t *rx)
 //
 // TX audio settings (F4 long: TX panel), one table for the panel, the console and
 // the state file, as the keyer. Defaults are the values written at start before
-// (x6100_ctl_init, from the R1CBU GUI; VOX gain / delay are new, VOX stays off); the
-// gain ranges are not yet checked on the radio. Squelch sits here too: register 21
+// (x6100_ctl_init, from the R1CBU GUI; VOX gain / delay are new, VOX stays off); ranges
+// as in X6100Control / OpenX6X00 (the same R1CBU line). Squelch sits here too: register 21
 // holds it with the mic select.
 //
 
