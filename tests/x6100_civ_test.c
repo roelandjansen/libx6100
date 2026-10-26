@@ -22,6 +22,7 @@ typedef struct
 {
 	int32_t v[X6100_CIV_ITEM_COUNT][2];
 	bool supported[X6100_CIV_ITEM_COUNT];
+	x6100_civ_mem_t mem[100];	/* channels 1-99 */
 } mock_t;
 
 static bool mock_get(void *ctx, x6100_civ_item_t item, int vfo, int32_t *value)
@@ -47,6 +48,27 @@ static bool mock_set(void *ctx, x6100_civ_item_t item, int vfo, int32_t value)
 	if (!m->supported[item])
 		return false;
 
+	// Memories: write the VFO, recall into it, clear
+	if (item == X6100_CIV_MEM_WRITE || item == X6100_CIV_MEM_TO_VFO || item == X6100_CIV_MEM_CLEAR) {
+		x6100_civ_mem_t *c = &m->mem[value];
+
+		if (item == X6100_CIV_MEM_TO_VFO) {
+			if (!c->used)
+				return false;
+
+			m->v[X6100_CIV_FREQ][0] = (int32_t) c->hz;
+			m->v[X6100_CIV_MODE][0] = c->mode;
+		} else {
+			memset(c, 0, sizeof(*c));
+			c->used = item == X6100_CIV_MEM_WRITE;
+			c->hz = (uint32_t) m->v[X6100_CIV_FREQ][0];
+			c->mode = m->v[X6100_CIV_MODE][0];
+			c->fil = 1;
+		}
+
+		return true;
+	}
+
 	if (item == X6100_CIV_VFO_SWAP) {
 		static const x6100_civ_item_t per_vfo[] = { X6100_CIV_FREQ, X6100_CIV_MODE, X6100_CIV_FIL };
 
@@ -68,6 +90,18 @@ static bool mock_set(void *ctx, x6100_civ_item_t item, int vfo, int32_t value)
 	return true;
 }
 
+static bool mock_mem_get(void *ctx, int ch, x6100_civ_mem_t *mem)
+{
+	*mem = ((mock_t *) ctx)->mem[ch];
+	return true;
+}
+
+static bool mock_mem_set(void *ctx, int ch, const x6100_civ_mem_t *mem)
+{
+	((mock_t *) ctx)->mem[ch] = *mem;
+	return true;
+}
+
 static int g_fail;
 static int g_run;
 
@@ -77,9 +111,9 @@ static int g_run;
 
 static void check(x6100_civ_t *civ, const char *req, const char *want)
 {
-	uint8_t in[64] = { 0xFE, 0xFE, 0xA4, 0xE0 }, out[64];
+	uint8_t in[128] = { 0xFE, 0xFE, 0xA4, 0xE0 }, out[128];
 	size_t n = 4;
-	char got[200] = "";
+	char got[400] = "";
 	unsigned b;
 	int pos;
 
@@ -108,7 +142,7 @@ static void check(x6100_civ_t *civ, const char *req, const char *want)
 int main(void)
 {
 	static mock_t m;
-	x6100_civ_ops_t ops = { .ctx = &m, .get = mock_get, .set = mock_set };
+	x6100_civ_ops_t ops = { .ctx = &m, .get = mock_get, .set = mock_set, .mem_get = mock_mem_get, .mem_set = mock_mem_set };
 	x6100_civ_t civ;
 
 	for (int i = 0; i < X6100_CIV_ITEM_COUNT; i++)
@@ -286,6 +320,52 @@ int main(void)
 			printf("FAIL scope SCROLL-C: edges expected\n");
 		}
 	}
+	// Memories (08-0B, 1A 00) and the transceive switch (1A 05 0131)
+	{
+		static const char calls_name[] = " 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20";
+		static const char name_blank[] = " 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20";
+		static const char rpt[] = "1A 00 00 00 07 00 00 00 66 29 00 05 01 00 10 00 00 08 85 00 08 85 00 00 23 00 00 10 00";
+		char want[400], req[400];
+
+		m.v[X6100_CIV_FREQ][0] = 14074000;
+		m.v[X6100_CIV_MODE][0] = X6100_MODE_USB;
+
+		check(&civ, "08 00 05", "FA");			/* empty: selected, not tuned */
+		check(&civ, "09", "FB");			/* VFO into channel 5 */
+		snprintf(want, sizeof(want), "1A 00 00 00 05 00 00 40 07 14 00 01 01 00 00 00 00 08 85 00 08 85 00 00 23 00 00 00 00%s%s",
+			calls_name, name_blank);
+		check(&civ, "1A 00 00 00 05", want);
+		check(&civ, "0A", "FB");
+		check(&civ, "0B", "FB");
+		check(&civ, "1A 00 00 00 05", "1A 00 00 00 05 FF");
+		check(&civ, "08 01 00", "FA");			/* channel 100 */
+		check(&civ, "1A 00 01 00 05", "FA");		/* group 01 */
+		check(&civ, "09 01", "FA");
+
+		// 10 m repeater, NFM, DUP- 100 kHz, named: written, read back the same, tuned
+		snprintf(req, sizeof(req), "%s%s 31 30 4D 20 52 50 54 20 20 20 20 20 20 20 20 20", rpt, calls_name);
+		check(&civ, req, "FB");
+		snprintf(want, sizeof(want), "%s", req);
+		check(&civ, "1A 00 00 00 07", want);
+		g_run++;
+
+		if (m.mem[7].dup != 1 || m.mem[7].dup_hz != 100000 || strcmp(m.mem[7].name, "10M RPT") != 0) {
+			g_fail++;
+			printf("FAIL memory 7: dup %d %u name [%s]\n", m.mem[7].dup, (unsigned) m.mem[7].dup_hz, m.mem[7].name);
+		}
+
+		check(&civ, "08 00 07", "FB");
+		check(&civ, "03", "03 00 00 66 29 00");
+		check(&civ, "1A 00 00 00 07 FF", "FB");		/* clear */
+		check(&civ, "1A 00 00 00 07", "1A 00 00 00 07 FF");
+
+		m.v[X6100_CIV_TRANSCEIVE][0] = 1;
+		check(&civ, "1A 05 01 31", "1A 05 01 31 01");
+		check(&civ, "1A 05 01 31 00", "FB");
+		check(&civ, "1A 05 01 31", "1A 05 01 31 00");
+		check(&civ, "1A 05 01 31 02", "FA");
+	}
+
 	// Announcements and framer
 	{
 		uint8_t out[32], frame[64];

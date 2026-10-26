@@ -58,6 +58,8 @@ Built, not yet tried on the radio (2026-10-25):
   with RIT: 20 Hz already better, 500 Hz clean); the RF scope now maps the IQ around
   the real receive frequency (RIT and the AM offset no longer shift the trace)
 - CI-V scope: SCROLL-C sends its edges (the wfview waterfall froze in SCROLL-C)
+- CI-V memories (08 select / tune, 09 write, 0A to VFO, 0B clear, 1A 00 contents in the
+  IC-705 layout) and the transceive switch 1A 05 0131; host tests and a pty test pass
 
 ## Open items to check on the radio
 
@@ -79,18 +81,19 @@ Built, not yet tried on the radio (2026-10-25):
 8. AM offset: MW station tuned exactly, sound as with RIT +500; AGC long row AM OFFSET
    (20 / 200 / 500 Hz, hold = 500, panel scrolls to row 6); signals on the RF scope
    at the right place in AM and with RIT on; wfview SCROLL-C waterfall runs.
+9. wfview with CI-V memories (its memory window: read, write, recall, clear) and with
+   transceive off (mouse-wheel tuning without jumps?).
 
 ## Next steps (suggested order)
 
 1. Radio checks above.
-2. CI-V memory commands (08-0B, 1A 00) and 1A 05 0131 transceive switch.
-3. Band edge markers on the scope from the region table.
-4. Network CAT and audio: wfserver on the radio over `cat pty` (Qt5 build for the R16?)
+2. Band edge markers on the scope from the region table.
+3. Network CAT and audio: wfserver on the radio over `cat pty` (Qt5 build for the R16?)
    or the own Icom LAN server (option A vs B in `x6100_netaudio_design.md`).
-5. liquid-dsp in use: network audio / RADE (Icom LAN server design in
+4. liquid-dsp in use: network audio / RADE (Icom LAN server design in
    `x6100_netaudio_design.md`), recordings, RX / TX equaliser.
-6. Measurements: S-meter calibration, codec level against ALC.
-7. CTCSS for the repeaters (see TODO: no tone encoder known, mic bypasses Linux).
+5. Measurements: S-meter calibration, codec level against ALC.
+6. CTCSS for the repeaters (see TODO: no tone encoder known, mic bypasses Linux).
 
 ## Working notes
 

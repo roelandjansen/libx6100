@@ -352,7 +352,10 @@ mem 3 7074000 lsb fil1 name FT8 40m
 mem 5 29620000 nfm fil2 tx 29520000 nfm name RPT 10m
 ```
 
-Names are set in that file or from the console (`mem ...`); the radio has no keyboard.
+Names are set in that file, from the console (`mem ...`) or over CI-V (1A 00, e.g. a
+memory editor in the CAT program); the radio has no keyboard. CI-V also selects and
+tunes (08), writes the VFO (09), recalls (0A) and clears (0B) channels: see
+`x6100_civ.md`.
 `build.sh deploy` installs `docs/x6100_memories.conf.example` (FT8 on 160-6 m, a 60 m
 spot, a 10 m repeater as a split channel) when the radio has no memories.conf and
 there is no local backup.

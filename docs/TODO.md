@@ -62,7 +62,6 @@ Status: 2026-10-26 (after v0.12.0). Summary and next steps: `STATUS.md`.
   test the ranges on the radio (gains 0-50 and VOX 0-100 are guesses, VOX delay scale
   of register 22 [25:14] unchecked: the start value 0x01F40000 reads 2000 ms there).
   Line in / out levels (register 20 [7:0] / [15:8]) still fixed at 10.
-- Memory channels over CI-V (08 select, 09 write, 0A M>VFO, 0B clear, 1A 00 contents).
 - SWR scan over a band (register 12 `swrscan`).
 - RX / TX equaliser (baseband or liquid-dsp; GEN TX panel).
 - Digital modes on the radio (FT8, CW / RTTY decoder); CW / voice message memories.

@@ -664,10 +664,30 @@ static const menu_t g_menu[] = {
 
 static size_t cmd_menu(req_t *r)
 {
+	int32_t v;
+
 	if (r->n < 3)
 		return reply_ng(r);
 
 	uint16_t item = (uint16_t) (r->d[1] << 8 | r->d[2]);
+
+	// 0131 CI-V transceive: the unasked 00 / 01 frames on a local change
+	if (item == 0x0131) {
+		if (r->n >= 4)
+			return reply_ok(r, r->d[3] <= 0x01 && set(r, X6100_CIV_TRANSCEIVE, 0, r->d[3]));
+
+		if (!get(r, X6100_CIV_TRANSCEIVE, 0, &v))
+			return reply_ng(r);
+
+		reply_head(r);
+		out_byte(r->o, 0x1A);
+		out_byte(r->o, 0x05);
+		out_byte(r->o, 0x01);
+		out_byte(r->o, 0x31);
+		out_byte(r->o, v ? 0x01 : 0x00);
+
+		return out_end(r->o);
+	}
 
 	for (size_t i = 0; i < COUNT(g_menu); i++) {
 		if (g_menu[i].item != item)
@@ -687,6 +707,142 @@ static size_t cmd_menu(req_t *r)
 	}
 
 	return reply_ng(r);
+}
+
+//
+// Memories: one group (00) of channels 0001-0099, 2 bytes BCD. The X6100 has one VFO:
+// selecting a channel (08) tunes it, as the V/M panel does; 0A is the same, 09 writes
+// the VFO into the selected channel, 0B clears it. Groups and P1 / P2: NG.
+//
+
+static int mem_ch_bcd(const uint8_t *d)
+{
+	int hi = bcd_val(d[0]), lo = bcd_val(d[1]);
+
+	return hi < 0 || lo < 0 || hi * 100 + lo < 1 || hi * 100 + lo > 99 ? -1 : hi * 100 + lo;
+}
+
+// 08: memory mode (no data: the selected channel), or select channel 0001-0099
+static size_t cmd_mem_select(req_t *r)
+{
+	int32_t ch;
+
+	if (r->n == 0)
+		return reply_ok(r, get(r, X6100_CIV_MEM_CH, 0, &ch) && set(r, X6100_CIV_MEM_TO_VFO, 0, ch));
+
+	int c = r->n == 2 ? mem_ch_bcd(r->d) : -1;
+
+	return reply_ok(r, c > 0 && set(r, X6100_CIV_MEM_CH, 0, c) && set(r, X6100_CIV_MEM_TO_VFO, 0, c));
+}
+
+// 09 / 0A / 0B: write / to VFO / clear, on the selected channel
+static size_t cmd_mem_action(req_t *r, x6100_civ_item_t item)
+{
+	int32_t ch;
+
+	return reply_ok(r, r->n == 0 && get(r, X6100_CIV_MEM_CH, 0, &ch) && set(r, item, 0, ch));
+}
+
+// 1A 00: memory contents, IC-705 layout. After 1A 00 gg cc cc: split / select, frequency
+// (5), mode, filter, data, duplex / tone, digital squelch, repeater tone (3), TSQL tone
+// (3), DTCS (3), DV CSQL, duplex offset (3, 100 Hz units), UR / R1 / R2 (24), name (16).
+// An empty channel reads FF; writing FF clears it.
+static size_t cmd_mem_content(req_t *r)
+{
+	const x6100_civ_ops_t *ops = &r->civ->ops;
+	x6100_civ_mem_t m;
+	uint8_t civ_mode;
+	bool data;
+
+	if (r->n < 4 || r->d[1] != 0x00 || !ops->mem_get || !ops->mem_set)
+		return reply_ng(r);
+
+	int ch = mem_ch_bcd(r->d + 2);
+
+	if (ch < 0)
+		return reply_ng(r);
+
+	// Write: clear, or the content as far as it goes (offset and name optional)
+	if (r->n > 4) {
+		const uint8_t *c = r->d + 4;
+		size_t cn = r->n - 4;
+
+		memset(&m, 0, sizeof(m));
+
+		if (c[0] == 0xFF)
+			return reply_ok(r, cn == 1 && ops->mem_set(ops->ctx, ch, &m));
+
+		if (cn < 10 || !get_freq_bcd(c + 1, &m.hz) || (m.mode = mode_from_civ(c[6], c[8] != 0)) < 0)
+			return reply_ng(r);
+
+		m.used = true;
+		m.fil = c[7] >= 1 && c[7] <= 3 ? c[7] : 1;
+		m.split = (c[0] >> 4) == 1;
+		m.dup = (c[9] >> 4) <= 2 ? c[9] >> 4 : 0;
+
+		if (cn >= 24) {
+			int a = bcd_val(c[21]), b = bcd_val(c[22]), d = bcd_val(c[23]);
+
+			if (a >= 0 && b >= 0 && d >= 0)
+				m.dup_hz = (uint32_t) (a + b * 100 + d * 10000) * 100u;
+		}
+
+		if (cn >= 64) {
+			memcpy(m.name, c + 48, 16);
+
+			for (int i = 15; i >= 0 && (m.name[i] == ' ' || m.name[i] == '\0'); i--)
+				m.name[i] = '\0';
+		}
+
+		return reply_ok(r, ops->mem_set(ops->ctx, ch, &m));
+	}
+
+	if (!ops->mem_get(ops->ctx, ch, &m))
+		return reply_ng(r);
+
+	reply_head(r);
+	out_byte(r->o, 0x1A);
+	out_byte(r->o, 0x00);
+	out_byte(r->o, r->d[1]);
+	out_byte(r->o, r->d[2]);
+	out_byte(r->o, r->d[3]);
+
+	if (!m.used || !mode_to_civ(m.mode, &civ_mode, &data)) {
+		out_byte(r->o, 0xFF);
+		return out_end(r->o);
+	}
+
+	unsigned ofs = m.dup_hz / 100u;
+	size_t len = 0;
+
+	while (len < 16 && m.name[len] != '\0')
+		len++;
+
+	out_byte(r->o, m.split ? 0x10 : 0x00);			/* split, not selected */
+	out_freq(r->o, m.hz);
+	out_byte(r->o, civ_mode);
+	out_byte(r->o, (uint8_t) (m.fil >= 1 && m.fil <= 3 ? m.fil : 1));
+	out_byte(r->o, data ? 0x01 : 0x00);
+	out_byte(r->o, (uint8_t) ((m.dup >= 1 && m.dup <= 2 ? m.dup : 0) << 4));	/* duplex, no tone */
+	out_byte(r->o, 0x00);					/* digital squelch off */
+
+	// Repeater / TSQL tone 88.5 Hz, DTCS 023, DV CSQL 00 (not used by the X6100)
+	static const uint8_t tones[] = { 0x00, 0x08, 0x85, 0x00, 0x08, 0x85, 0x00, 0x00, 0x23, 0x00 };
+
+	for (size_t i = 0; i < sizeof(tones); i++)
+		out_byte(r->o, tones[i]);
+
+	out_byte(r->o, bcd_byte(ofs % 100));			/* duplex offset, 100 Hz units */
+	out_byte(r->o, bcd_byte(ofs / 100 % 100));
+	out_byte(r->o, bcd_byte(ofs / 10000 % 100));
+
+	for (int i = 0; i < 24; i++)				/* UR / R1 / R2 call signs */
+		out_byte(r->o, ' ');
+
+	for (size_t i = 0; i < 16; i++)
+		out_byte(r->o, (uint8_t) (i < len ? m.name[i] : ' '));
+
+	return out_end(r->o);
 }
 
 // IF filter width index -> Hz (Table 1A 03); -1 = invalid for the mode
@@ -796,6 +952,8 @@ static size_t cmd_misc(req_t *r)
 
 		return out_end(r->o);
 	}
+	case 0x00:
+		return cmd_mem_content(r);
 	case 0x05:
 		return cmd_menu(r);
 	case 0x06:	/* data mode + filter group */
@@ -821,7 +979,7 @@ static size_t cmd_misc(req_t *r)
 
 		return out_end(r->o);
 	default:
-		// 00 memory, 02 keyer, 04 AGC time constant,
+		// 02 keyer, 04 AGC time constant,
 		// 05 menu settings: not supported
 		return reply_ng(r);
 	}
@@ -1160,6 +1318,18 @@ size_t x6100_civ_process(x6100_civ_t *civ, const uint8_t *frame, size_t len, uin
 		break;
 	case 0x07:
 		n = cmd_vfo(&r);
+		break;
+	case 0x08:
+		n = cmd_mem_select(&r);
+		break;
+	case 0x09:
+		n = cmd_mem_action(&r, X6100_CIV_MEM_WRITE);
+		break;
+	case 0x0A:
+		n = cmd_mem_action(&r, X6100_CIV_MEM_TO_VFO);
+		break;
+	case 0x0B:
+		n = cmd_mem_action(&r, X6100_CIV_MEM_CLEAR);
 		break;
 	case 0x0F:
 		n = cmd_split(&r);

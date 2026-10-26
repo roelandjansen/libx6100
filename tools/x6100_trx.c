@@ -6180,6 +6180,7 @@ typedef struct
 	uint32_t ann_freq;
 	int ann_mode;
 	int ann_fil;
+	bool no_transceive;	/* 1A 05 0131 set to 00 by the client: no unasked 00 / 01 */
 
 	//
 	// Scope data (27): client settings and pacing
@@ -6437,6 +6438,12 @@ static bool cat_get(void *ctx, x6100_civ_item_t item, int vfo, int32_t *v)
 	case X6100_CIV_ATU:
 		*v = rx->tuning ? 2 : rx->atu_on;
 		return true;
+	case X6100_CIV_MEM_CH:		/* the channel the memory panel shows */
+		*v = rx->medit_ch >= 1 && rx->medit_ch <= MEM_COUNT ? rx->medit_ch : 1;
+		return true;
+	case X6100_CIV_TRANSCEIVE:
+		*v = !cat->no_transceive;
+		return true;
 	default:
 		return false;	/* NB, NR, DNF, RIT, other levels */
 	}
@@ -6448,6 +6455,25 @@ static bool cat_set(void *ctx, x6100_civ_item_t item, int vfo, int32_t v)
 	rx_t *rx = cat->rx;
 
 	switch (item) {
+	case X6100_CIV_MEM_CH:		/* 08 0001-0099: select (the engine then recalls it) */
+		if (v < 1 || v > MEM_COUNT)
+			return false;
+
+		rx->medit_ch = v;
+		break;
+	case X6100_CIV_MEM_WRITE:	/* 09 */
+		mem_write(rx, v);
+		break;
+	case X6100_CIV_MEM_TO_VFO:	/* 08 / 0A: an empty channel is refused, as on the panel */
+		if (!mem_recall(rx, v))
+			return false;
+		break;
+	case X6100_CIV_MEM_CLEAR:	/* 0B */
+		mem_clear(v);
+		break;
+	case X6100_CIV_TRANSCEIVE:	/* 1A 05 0131 */
+		cat->no_transceive = v == 0;
+		break;
 	case X6100_CIV_FREQ:
 		if (v < (int32_t) FREQ_MIN || v > (int32_t) FREQ_MAX)
 			return false;
@@ -6721,6 +6747,63 @@ static bool cat_set(void *ctx, x6100_civ_item_t item, int vfo, int32_t v)
 	return true;
 }
 
+//
+// Memory channels over CI-V (1A 00): the IC-705 layout carries the split flag but no
+// TX frequency, so a split channel keeps its TX side only when it had one already;
+// duplex 00 is AUTO here (simplex outside the 10 m repeater window). Data modes are
+// refused: memories.conf has no names for them.
+//
+
+static bool cat_mem_get(void *ctx, int ch, x6100_civ_mem_t *m)
+{
+	const mem_t *c = &g_mem[ch];
+
+	(void) ctx;
+	memset(m, 0, sizeof(*m));
+	m->used = c->used;
+	m->hz = c->hz;
+	m->mode = c->mode;
+	m->fil = c->fil + 1;
+	m->split = c->split;
+	m->dup = c->dup == DUP_MINUS ? 1 : c->dup == DUP_PLUS ? 2 : 0;
+	m->dup_hz = m->dup ? (uint32_t) c->dup_khz * 1000u : 0;
+	snprintf(m->name, sizeof(m->name), "%s", c->name);
+
+	return true;
+}
+
+static bool cat_mem_set(void *ctx, int ch, const x6100_civ_mem_t *m)
+{
+	mem_t n = g_mem[ch];
+
+	(void) ctx;
+
+	if (!m->used) {
+		mem_clear(ch);
+		return true;
+	}
+
+	if (m->hz < FREQ_MIN || m->hz > FREQ_MAX || m->mode == X6100_MODE_LSB_DIG || m->mode == X6100_MODE_USB_DIG)
+		return false;
+
+	n.used = true;
+	n.hz = m->hz;
+	n.mode = (x6100_mode_t) m->mode;
+	n.fil = clampi(m->fil - 1, 0, 2);
+	n.split = m->split && g_mem[ch].used && g_mem[ch].split;
+	n.dup = m->dup == 1 ? DUP_MINUS : m->dup == 2 ? DUP_PLUS : DUP_AUTO;
+	n.dup_khz = clampi((int) ((m->dup_hz + 500u) / 1000u), 10, DUP_KHZ_MAX);
+	snprintf(n.name, sizeof(n.name), "%.15s", m->name);	/* CI-V gives 16, a memory name holds 15 */
+
+	for (char *c = n.name; *c != '\0'; c++)
+		*c = *c == '#' || (unsigned char) *c < ' ' || (unsigned char) *c > '~' ? ' ' : *c;	/* one line in memories.conf */
+
+	g_mem[ch] = n;
+	mem_save();
+
+	return true;
+}
+
 static speed_t cat_speed(int baud)
 {
 	switch (baud) {
@@ -6832,7 +6915,7 @@ static int cat_open_pty(cat_t *cat)
 static int cat_open(cat_t *cat, rx_t *rx, const screen_t *scr, int baud)
 {
 	struct termios tio;
-	x6100_civ_ops_t ops = { .ctx = cat, .get = cat_get, .set = cat_set };
+	x6100_civ_ops_t ops = { .ctx = cat, .get = cat_get, .set = cat_set, .mem_get = cat_mem_get, .mem_set = cat_mem_set };
 
 	memset(cat, 0, sizeof(*cat));
 	cat->rx = rx;
@@ -6948,7 +7031,8 @@ static bool cat_poll(cat_t *cat)
 	return cat->changed;
 }
 
-// Transceive: announce frequency and mode changes, whatever made them
+// Transceive: announce frequency and mode changes, whatever made them; with
+// transceive off (1A 05 0131 00) only the state is tracked, nothing goes out
 static void cat_announce(cat_t *cat)
 {
 	uint8_t out[X6100_CIV_FRAME_MAX];
@@ -6956,13 +7040,17 @@ static void cat_announce(cat_t *cat)
 
 	if (rx->freq != cat->ann_freq) {
 		cat->ann_freq = rx->freq;
-		cat_write(cat, out, x6100_civ_announce_freq(&cat->civ, rx->freq, out, sizeof(out)));
+
+		if (!cat->no_transceive)
+			cat_write(cat, out, x6100_civ_announce_freq(&cat->civ, rx->freq, out, sizeof(out)));
 	}
 
 	if ((int) rx->mode != cat->ann_mode || rx->fil != cat->ann_fil) {
 		cat->ann_mode = rx->mode;
 		cat->ann_fil = rx->fil;
-		cat_write(cat, out, x6100_civ_announce_mode(&cat->civ, rx->mode, rx->fil + 1, out, sizeof(out)));
+
+		if (!cat->no_transceive)
+			cat_write(cat, out, x6100_civ_announce_mode(&cat->civ, rx->mode, rx->fil + 1, out, sizeof(out)));
 	}
 }
 

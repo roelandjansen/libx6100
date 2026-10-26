@@ -23,7 +23,7 @@
 #define X6100_CIV_ADDR_IC705	0xA4
 #define X6100_CIV_ADDR_CTRL	0xE0
 #define X6100_CIV_ADDR_ALL	0x00
-#define X6100_CIV_FRAME_MAX	64
+#define X6100_CIV_FRAME_MAX	96	/* 1A 00 memory contents with name: 74 bytes */
 
 //
 // Items the engine reads or writes through the callbacks. Values:
@@ -53,6 +53,9 @@
 //   SCOPE_SPEED        0 fast, 1 mid, 2 slow; SCOPE_VBW 0 narrow, 1 wide
 //   BAND_FREQ / _MODE / _FIL   band stacking register (1A 01); the vfo argument
 //                      carries the IC-705 band code 1-15 (01 = 1.9 .. 10 = 50 MHz)
+//   MEM_CH             selected memory channel 1-99 (08 0001-0099 sets it, then MEM_TO_VFO)
+//   MEM_WRITE, MEM_TO_VFO, MEM_CLEAR   set only, value = the channel: 09 / 0A / 0B
+//   TRANSCEIVE         0 / 1: unasked 00 / 01 frames on a local change (1A 05 0131)
 //
 // The vfo argument: 0 = foreground (selected), 1 = background (unselected).
 //
@@ -122,12 +125,35 @@ typedef enum
 	X6100_CIV_BAND_FREQ,
 	X6100_CIV_BAND_MODE,
 	X6100_CIV_BAND_FIL,
+	X6100_CIV_MEM_CH,
+	X6100_CIV_MEM_WRITE,
+	X6100_CIV_MEM_TO_VFO,
+	X6100_CIV_MEM_CLEAR,
+	X6100_CIV_TRANSCEIVE,
 	X6100_CIV_ITEM_COUNT
 } x6100_civ_item_t;
 
 //
+// One memory channel (1A 00). The IC-705 layout has no TX frequency for a split
+// channel, only the split flag.
+//
+
+typedef struct
+{
+	bool used;
+	uint32_t hz;
+	int mode;		/* x6100_mode_t; data mode is the _DIG mode */
+	int fil;		/* 1-3 */
+	bool split;
+	int dup;		/* 0 none, 1 DUP-, 2 DUP+ */
+	uint32_t dup_hz;	/* duplex offset */
+	char name[17];		/* up to 16 characters */
+} x6100_civ_mem_t;
+
+//
 // Callbacks. get: false = not supported (reply NG), else *value set. set: false =
-// refused or not supported (reply NG).
+// refused or not supported (reply NG). mem_get / mem_set (optional): channel 1-99;
+// mem_set with used false clears the channel.
 //
 
 typedef struct
@@ -135,6 +161,8 @@ typedef struct
 	void *ctx;
 	bool (*get)(void *ctx, x6100_civ_item_t item, int vfo, int32_t *value);
 	bool (*set)(void *ctx, x6100_civ_item_t item, int vfo, int32_t value);
+	bool (*mem_get)(void *ctx, int ch, x6100_civ_mem_t *m);
+	bool (*mem_set)(void *ctx, int ch, const x6100_civ_mem_t *m);
 } x6100_civ_ops_t;
 
 typedef struct
