@@ -269,6 +269,22 @@ int main(void)
 			g_fail++;
 			printf("FAIL scope frames: %zu frames, first %zu, last %zu\n", frames, first_len, last_len);
 		}
+
+		// SCROLL-C (2) sends the edges as FIX / SCROLL-F do; only CENTER (0) sends centre +
+		// half span (wfview reads every other mode as edges)
+		static const uint8_t edges[10] = { 0x00, 0x00, 0x05, 0x14, 0x00, 0x00, 0x80, 0x09, 0x14, 0x00 };
+
+		s.mode = 2;
+		s.lo = 14050000;
+		s.hi = 14098000;
+		s.half_span = 24000;
+		n = x6100_civ_scope_frames(&civ, &s, out, sizeof(out));
+		g_run++;
+
+		if (n < 22 || out[9] != 0x02 || memcmp(out + 10, edges, sizeof(edges)) != 0) {
+			g_fail++;
+			printf("FAIL scope SCROLL-C: edges expected\n");
+		}
 	}
 	// Announcements and framer
 	{

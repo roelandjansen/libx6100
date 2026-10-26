@@ -177,8 +177,9 @@ size_t x6100_civ_framer_feed(x6100_civ_framer_t *f, uint8_t byte, uint8_t *frame
 
 //
 // Scope waveform (27 00), IC-705 serial format: one information frame, then the
-// waveform in 50-point frames (475 points: 11 frames in all). Center modes send
-// centre + half span, fixed modes the lower and upper edge. Points 0-160.
+// waveform in 50-point frames (475 points: 11 frames in all). CENTER sends
+// centre + half span, FIX, SCROLL-C and SCROLL-F the lower and upper edge (wfview reads
+// every mode but CENTER as edges: SCROLL-C froze its waterfall). Points 0-160.
 //
 
 #define X6100_CIV_SCOPE_POINTS	475

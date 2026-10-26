@@ -1296,7 +1296,7 @@ size_t x6100_civ_scope_frames(const x6100_civ_t *civ, const x6100_civ_scope_t *s
 	size_t len = s->out_of_range || !s->wave ? 0 : s->len;
 	unsigned divs = 1 + (unsigned) ((len + chunk - 1) / chunk);
 	out_t o = { .buf = out, .max = max };
-	bool center = s->mode == 0 || s->mode == 2;
+	bool center = s->mode == 0;	/* CENTER only: SCROLL-C sends its edges too (IC-705, wfview) */
 
 	if (divs > 99)
 		return 0;
