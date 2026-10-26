@@ -54,6 +54,10 @@ Built, not yet tried on the radio (2026-10-25):
 - birdies: scan (GEN BIRDIE SCAN / `birdiescan`), birdies.conf, yellow ticks on the
   scope, automatic notch in USB / LSB / AM (BIRDIE NOTCH, off for now); host simulation
   of 80 m finds the IU1WXY reference list within 3 Hz
+- AM receive offset: 500 Hz above the dial (`amofs`), filter opened by as much (MW test
+  with RIT: 20 Hz already better, 500 Hz clean); the RF scope now maps the IQ around
+  the real receive frequency (RIT and the AM offset no longer shift the trace)
+- CI-V scope: SCROLL-C sends its edges (the wfview waterfall froze in SCROLL-C)
 
 ## Open items to check on the radio
 
@@ -72,6 +76,8 @@ Built, not yet tried on the radio (2026-10-25):
    squelch closes in FM); the gain ranges (0-50, 0-100) against the stock UI.
 7. Birdies: 80 m scan against the IU1WXY list (TODO), tick on the scope line, the
    notch on 3837.014 (LSB, dial 3838.000: 986 Hz), PRE / ATT.
+8. AM offset: MW station tuned exactly, sound as with RIT +500; signals on the RF scope
+   at the right place in AM and with RIT on; wfview SCROLL-C waterfall runs.
 
 ## Next steps (suggested order)
 

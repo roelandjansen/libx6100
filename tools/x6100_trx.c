@@ -710,14 +710,34 @@ static int dup_shift(const rx_t *rx)
 }
 
 //
-// RX and TX frequency: RX = the VFO in use + RIT; TX = the other VFO with split,
-// else the VFO in use + the duplex shift, + XIT (one offset for both, as on Icom
-// radios)
+// AM receive offset: the baseband is zero IF and notches DC, which in AM takes part
+// of the carrier when tuned exactly on it (distorted audio). In AM the receiver sits
+// g_am_ofs Hz above the dial, the filter opens by as much (apply), the dial and TX
+// stay on the carrier. 20 Hz already helps, 500 Hz sounds clean (2026-10-26, MW).
+// Not during a birdie scan (it needs the IQ centre on the dial).
+//
+
+#define AM_OFS_DEF	500
+#define AM_OFS_MAX	1000
+
+static int g_am_ofs = AM_OFS_DEF;	/* conf / console token amofs, 0 = off */
+
+static bool bscan_running(void);
+
+static int am_ofs(const rx_t *rx)
+{
+	return rx->mode == X6100_MODE_AM && !bscan_running() ? g_am_ofs : 0;
+}
+
+//
+// RX and TX frequency: RX = the VFO in use + RIT (+ the AM offset); TX = the other
+// VFO with split, else the VFO in use + the duplex shift, + XIT (one offset for both,
+// as on Icom radios)
 //
 
 static uint32_t rx_hz(const rx_t *rx)
 {
-	return (uint32_t) ((int64_t) rx->freq + (rx->rit ? rx->rit_hz : 0));
+	return (uint32_t) ((int64_t) rx->freq + (rx->rit ? rx->rit_hz : 0) + am_ofs(rx));
 }
 
 static uint32_t tx_hz(const rx_t *rx)
@@ -770,7 +790,6 @@ static bool g_bnotch;			/* automatic notch; off until checked on the radio */
 static int g_bscan_req;			/* GEN / console: 1 start a scan, -1 stop it (main loop) */
 
 static void passband(const rx_t *rx, int *lo, int *hi);
-static bool bscan_running(void);
 
 // Add a birdie; one within 150 Hz of it is the same one: the stronger reading stays
 static void birdie_add(uint32_t hz, int snr)
@@ -847,7 +866,7 @@ static int birdie_notch(const rx_t *rx)
 	passband(rx, &lo, &hi);
 
 	for (int i = 0; i < g_nbirdie; i++) {
-		int64_t rel = (int64_t) g_birdie[i].hz - (int64_t) rx_hz(rx);
+		int64_t rel = (int64_t) g_birdie[i].hz - (int64_t) (rx->mode == X6100_MODE_AM ? rx->freq : rx_hz(rx));	/* AM: the beat against the carrier */
 		int audio = (int) (rel < 0 ? -rel : rel);
 
 		if (rel >= lo && rel <= hi && audio >= 100 && audio <= 3000 && g_birdie[i].snr > best_snr) {
@@ -927,6 +946,9 @@ static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 	x6100_mode_t mode = keyed ? tx_mode(rx) : rx->mode;
 
 	mode_filter(mode, keyed && rx->split ? rx->b_fil : rx->fil, &low, &high);
+
+	if (!keyed)
+		high += (uint32_t) am_ofs(rx);	/* AM offset: the filter opens by as much, no sideband is cut */
 
 	x6100_set_freq(ctl, 0, hz);
 	x6100_set_freq(ctl, 1, hz);
@@ -2756,7 +2778,7 @@ typedef struct
 
 static view_t scope_view(const rx_t *rx, int w)
 {
-	view_t v = { .span = rx->span, .vfo = rx->freq, .w = w };
+	view_t v = { .span = rx->span, .vfo = rx_hz(rx), .w = w };	/* vfo: the IQ centre (RIT, AM offset) */
 
 	v.lo = rx->scope == SCOPE_FIX || rx->scope == SCOPE_FIX_S ? rx->fix_lo : (int64_t) rx->freq - rx->span / 2;
 	return v;
@@ -5873,6 +5895,13 @@ static bool console_line(rx_t *rx, char *line)
 			continue;
 		}
 
+		if (strcasecmp(t, "amofs") == 0) {
+			want_lvl = &g_am_ofs;
+			lvl_min = 0;
+			lvl_max = AM_OFS_MAX;
+			continue;
+		}
+
 		if (strcasecmp(t, "rfg") == 0) {
 			want_lvl = &rx->rfg;
 			lvl_min = 0;
@@ -5986,7 +6015,7 @@ static void state_save(const rx_t *rx)
 	fprintf(fp, "\n%u %s %s fil%d step %d\n", (unsigned) rx->freq, modes[rx->mode], agcs[rx->agc], rx->fil + 1, rx->step);
 	fprintf(fp, "vfob %u %s fil%d vfo %s\n", (unsigned) rx->b_freq, modes[rx->b_mode], rx->b_fil + 1, rx->on_b ? "b" : "a");
 	fprintf(fp, "%s %s %s ritofs %d\n", rx->split ? "txsplit" : "notxsplit", rx->rit ? "rit" : "norit", rx->xit ? "xit" : "noxit", rx->rit_hz);
-	fprintf(fp, "%s dupshift %d\n", g_dup_tok[rx->dup], rx->dup_khz);
+	fprintf(fp, "%s dupshift %d amofs %d\n", g_dup_tok[rx->dup], rx->dup_khz, g_am_ofs);
 	fprintf(fp, "vol %d %s rfg %d pwr %.1f\n", rx->vol, rx->mute ? "mute" : "nomute", rx->rfg, rx->txpwr / 10.0);
 	fprintf(fp, "keytype %d wpm %d iambic %d cwpitch %d cwvol %d qsk %d ratio %d.%d\n", rx->keymode, rx->wpm, rx->iambic,
 		rx->cwtone, rx->cwvol, rx->qsk, rx->ratio / 10, rx->ratio % 10);

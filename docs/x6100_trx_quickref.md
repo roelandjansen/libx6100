@@ -103,6 +103,9 @@ Values are kept in the last state (see Settings); defaults NR 20, NB 10 / 10, no
 - STEP and status fields right-aligned, fixed width
 - S-meter: S0-S9, then S9+10 .. S9+60 in rounded 10 dB steps; dBm line exact
 - AGC default AUTO; AM / FM SLOW (AUTO squashes AM)
+- AM receives 500 Hz above the dial (`amofs`, 0-1000, 0 = off): the baseband is zero
+  IF and its DC notch takes part of the carrier when tuned exactly on it, which sounds
+  distorted; the filter opens by the same amount, dial and TX stay on the carrier
 - F1-F5 tags along the bottom edge: SCOPE, SPAN, AUDIO, METER, FIL
 - Audio scope (F3; F3 long: next to the RF scope, RF left / AF right): spectrum and waterfall of the demodulated RX audio (codec capture, 48 kHz), 0-3 or 0-6 kHz (F2), normalised dBFS scale (80 dB window, its bottom 10 dB under the noise floor measured inside the receive passband, so the picture stays put with volume and band noise; shifted by the AF reference level), receive passband shaded, MN line at the notch when on. The capture is opened only while the audio scope is shown
 - Battery voltage (info line, right): green on external power (charging below 100 %),
@@ -208,6 +211,7 @@ The status line starts with the VFO in use (A / B); with split, RIT or XIT it ad
 | `txsplit`, `notxsplit` | split on / off |
 | `rit`, `norit`, `xit`, `noxit`, `ritofs -9990-9990` | RIT / XIT on / off, offset in Hz |
 | `dupauto`, `dupoff`, `dup-`, `dup+`, `dupshift 10-10000` | repeater duplex, shift in kHz |
+| `amofs 500` | AM receive offset above the dial, 0-1000 Hz (0 = off) |
 | `step ch` | 60 m channel steps |
 | `memr` | list the used memory channels |
 | `memr 5`, `memw 5`, `memc 5` | recall / write the VFO into / clear memory channel 5 |
