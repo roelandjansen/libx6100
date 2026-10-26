@@ -54,7 +54,7 @@ Built, not yet tried on the radio (2026-10-25):
 - birdies: scan (GEN BIRDIE SCAN / `birdiescan`), birdies.conf, yellow ticks on the
   scope, automatic notch in USB / LSB / AM (BIRDIE NOTCH, off for now); host simulation
   of 80 m finds the IU1WXY reference list within 3 Hz
-- AM receive offset: 500 Hz above the dial (`amofs`), filter opened by as much (MW test
+- AM receive offset: 500 Hz above the dial (AGC long row AM OFFSET, `am_offset`), filter opened by as much (MW test
   with RIT: 20 Hz already better, 500 Hz clean); the RF scope now maps the IQ around
   the real receive frequency (RIT and the AM offset no longer shift the trace)
 - CI-V scope: SCROLL-C sends its edges (the wfview waterfall froze in SCROLL-C)

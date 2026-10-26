@@ -205,7 +205,7 @@ typedef struct
 	int dup;		/* repeater duplex: DUP_AUTO, DUP_OFF, DUP_MINUS, DUP_PLUS */
 	int dup_khz;		/* duplex shift for DUP_MINUS / DUP_PLUS, kHz */
 	bool tedit;		/* RIT / XIT / duplex panel (AGC long) */
-	int tedit_par;		/* 0 offset, 1 RIT, 2 XIT, 3 duplex, 4 shift */
+	int tedit_par;		/* 0 offset, 1 RIT, 2 XIT, 3 duplex, 4 shift, 5 AM offset */
 	uint64_t tedit_since;
 	bool medit;		/* memory panel (V/M short) */
 	int medit_ch;		/* selected channel 1-99 */
@@ -719,8 +719,9 @@ static int dup_shift(const rx_t *rx)
 
 #define AM_OFS_DEF	500
 #define AM_OFS_MAX	1000
+#define TPARS		6	/* rows of the RIT / XIT / duplex panel (AGC long), AM OFFSET last */
 
-static int g_am_ofs = AM_OFS_DEF;	/* conf / console token amofs, 0 = off */
+static int g_am_ofs = AM_OFS_DEF;	/* conf / console token am_offset, 0 = off; AGC long panel */
 
 static bool bscan_running(void);
 
@@ -1762,7 +1763,7 @@ static bool on_key(rx_t *rx, int key)
 		rx->tedit_since = now_ms();
 
 		if (key == X6100_KEY_MFK_PUSH) {
-			rx->tedit_par = (rx->tedit_par + 1) % 5;
+			rx->tedit_par = (rx->tedit_par + 1) % TPARS;
 			return true;
 		}
 
@@ -2008,6 +2009,8 @@ static bool on_long_key(rx_t *rx, int key)
 				rx->dup = DUP_AUTO;
 			else if (rx->tedit_par == 4)
 				rx->dup_khz = DUP_KHZ_DEF;
+			else if (rx->tedit_par == 5)
+				g_am_ofs = AM_OFS_DEF;
 			else
 				rx->rit_hz = 0;	/* clear the offset, as Icom's CLEAR */
 
@@ -2210,8 +2213,10 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 				rx->xit = dir > 0;
 			else if (rx->tedit_par == 3)
 				rx->dup = (rx->dup + dir + DUP_COUNT) % DUP_COUNT;
-			else
+			else if (rx->tedit_par == 4)
 				rx->dup_khz = clampi(rx->dup_khz + value * X6100_DIR_MFK * 10, 10, DUP_KHZ_MAX);
+			else
+				g_am_ofs = clampi(g_am_ofs + value * X6100_DIR_MFK * 10, 0, AM_OFS_MAX);
 
 			rx->tedit_since = now_ms();
 			return true;
@@ -4142,20 +4147,24 @@ static void draw_mem_panel(x6100_lcd_t *lcd, const rx_t *rx)
 
 //
 // RIT / XIT / duplex panel (AGC long): one offset for both, as on Icom radios,
-// RIT / XIT on or off, repeater duplex and its shift. Green. MFK turn: offset in
-// 10 Hz steps, on / off on the RIT and XIT rows, AUTO / OFF / DUP- / DUP+, shift in
-// 10 kHz steps; push: next row; hold: offset 0 (CLEAR), duplex AUTO, shift 100 kHz.
+// RIT / XIT on or off, repeater duplex and its shift, the AM receive offset. Green.
+// Five rows in view, scrolling with the selection. MFK turn: offset in 10 Hz steps,
+// on / off on the RIT and XIT rows, AUTO / OFF / DUP- / DUP+, shift in 10 kHz steps,
+// AM offset in 10 Hz steps; push: next row; hold: offset 0 (CLEAR), duplex AUTO,
+// shift 100 kHz, AM offset 500 Hz.
 //
 
 static void draw_rit_panel(x6100_lcd_t *lcd, const rx_t *rx)
 {
 	static const char *hint = "MFK: ADJUST  PUSH: NEXT  HOLD: CLEAR";
 	static const char *dups[DUP_COUNT] = { "AUTO", "OFF", "DUP-", "DUP+" };
-	const int px = LBL_W + 8, py = SPEC_Y + 16, pw = 440, ph = 134;
+	static const char *names[TPARS] = { "OFFSET", "RIT  RX", "XIT  TX", "DUPLEX", "SHIFT", "AM OFFSET" };
+	const int vis = 5, px = LBL_W + 8, py = SPEC_Y + 16, pw = 480, ph = 134;
+	const int top = clampi(rx->tedit_par - 2, 0, TPARS - vis);
 	const uint32_t bg = 0x0C180C, green = 0x60D060, sel = 0x1C3A1C, dim = 0x80A080, white = 0xF0F0F0;
 	const uint32_t on = 0x3CC83C, off = 0x5A6464;
 	const int shift = dup_shift(rx);
-	char v[5][24];
+	char v[TPARS][24], pos[24];
 
 	snprintf(v[0], sizeof(v[0]), "%+d HZ", rx->rit_hz);
 	snprintf(v[1], sizeof(v[1]), "%s", rx->rit ? "ON" : "OFF");
@@ -4168,18 +4177,25 @@ static void draw_rit_panel(x6100_lcd_t *lcd, const rx_t *rx)
 
 	snprintf(v[4], sizeof(v[4]), "%d KHZ", rx->dup_khz);
 
+	if (g_am_ofs > 0)
+		snprintf(v[5], sizeof(v[5]), "%d HZ", g_am_ofs);
+	else
+		snprintf(v[5], sizeof(v[5]), "OFF");
+
 	x6100_lcd_fill(lcd, px, py, pw, ph, bg);
 	x6100_lcd_fill(lcd, px, py, 3, ph, green);
 	x6100_lcd_hline(lcd, px, px + pw - 1, py, 0x2A4A2A);
 	x6100_lcd_hline(lcd, px, px + pw - 1, py + ph - 1, 0x2A4A2A);
 	x6100_lcd_vline(lcd, px + pw - 1, py, py + ph - 1, 0x2A4A2A);
 	x6100_lcd_text(lcd, px + 14, py + 7, 2, "RIT / XIT / DUP", green);
-	x6100_lcd_text(lcd, px + pw - 12 - x6100_lcd_text_width(hint, 1), py + 11, 1, hint, dim);
+	x6100_lcd_text(lcd, px + 14 + x6100_lcd_text_width("RIT / XIT / DUP", 2) + 16, py + 11, 1, hint, dim);
+	snprintf(pos, sizeof(pos), "%d/%d", rx->tedit_par + 1, TPARS);
+	x6100_lcd_text(lcd, px + pw - 12 - x6100_lcd_text_width(pos, 1), py + 11, 1, pos, green);
 
-	for (int i = 0; i < 5; i++) {
-		static const char *names[5] = { "OFFSET", "RIT  RX", "XIT  TX", "DUPLEX", "SHIFT" };
-		const bool lit[5] = { true, rx->rit, rx->xit, shift != 0, rx->dup == DUP_MINUS || rx->dup == DUP_PLUS };
-		int y = py + 30 + i * 21;
+	for (int i = top; i < top + vis; i++) {
+		const bool lit[TPARS] = { true, rx->rit, rx->xit, shift != 0, rx->dup == DUP_MINUS || rx->dup == DUP_PLUS,
+			g_am_ofs > 0 && rx->mode == X6100_MODE_AM };
+		int y = py + 30 + (i - top) * 21;
 		uint32_t c = i == 0 ? white : lit[i] ? on : off;
 
 		if (i == rx->tedit_par)
@@ -5895,7 +5911,7 @@ static bool console_line(rx_t *rx, char *line)
 			continue;
 		}
 
-		if (strcasecmp(t, "amofs") == 0) {
+		if (strcasecmp(t, "am_offset") == 0 || strcasecmp(t, "amofs") == 0) {	/* amofs: first spelling, 2026-10-26 */
 			want_lvl = &g_am_ofs;
 			lvl_min = 0;
 			lvl_max = AM_OFS_MAX;
@@ -6015,7 +6031,7 @@ static void state_save(const rx_t *rx)
 	fprintf(fp, "\n%u %s %s fil%d step %d\n", (unsigned) rx->freq, modes[rx->mode], agcs[rx->agc], rx->fil + 1, rx->step);
 	fprintf(fp, "vfob %u %s fil%d vfo %s\n", (unsigned) rx->b_freq, modes[rx->b_mode], rx->b_fil + 1, rx->on_b ? "b" : "a");
 	fprintf(fp, "%s %s %s ritofs %d\n", rx->split ? "txsplit" : "notxsplit", rx->rit ? "rit" : "norit", rx->xit ? "xit" : "noxit", rx->rit_hz);
-	fprintf(fp, "%s dupshift %d amofs %d\n", g_dup_tok[rx->dup], rx->dup_khz, g_am_ofs);
+	fprintf(fp, "%s dupshift %d am_offset %d\n", g_dup_tok[rx->dup], rx->dup_khz, g_am_ofs);
 	fprintf(fp, "vol %d %s rfg %d pwr %.1f\n", rx->vol, rx->mute ? "mute" : "nomute", rx->rfg, rx->txpwr / 10.0);
 	fprintf(fp, "keytype %d wpm %d iambic %d cwpitch %d cwvol %d qsk %d ratio %d.%d\n", rx->keymode, rx->wpm, rx->iambic,
 		rx->cwtone, rx->cwvol, rx->qsk, rx->ratio / 10, rx->ratio % 10);

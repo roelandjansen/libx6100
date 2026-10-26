@@ -103,7 +103,8 @@ Values are kept in the last state (see Settings); defaults NR 20, NB 10 / 10, no
 - STEP and status fields right-aligned, fixed width
 - S-meter: S0-S9, then S9+10 .. S9+60 in rounded 10 dB steps; dBm line exact
 - AGC default AUTO; AM / FM SLOW (AUTO squashes AM)
-- AM receives 500 Hz above the dial (`amofs`, 0-1000, 0 = off): the baseband is zero
+- AM receives 500 Hz above the dial (AM OFFSET in the AGC long panel, console / conf
+  `am_offset`, 0-1000, 0 = off): the baseband is zero
   IF and its DC notch takes part of the carrier when tuned exactly on it, which sounds
   distorted; the filter opens by the same amount, dial and TX stay on the carrier
 - F1-F5 tags along the bottom edge: SCOPE, SPAN, AUDIO, METER, FIL
@@ -211,7 +212,7 @@ The status line starts with the VFO in use (A / B); with split, RIT or XIT it ad
 | `txsplit`, `notxsplit` | split on / off |
 | `rit`, `norit`, `xit`, `noxit`, `ritofs -9990-9990` | RIT / XIT on / off, offset in Hz |
 | `dupauto`, `dupoff`, `dup-`, `dup+`, `dupshift 10-10000` | repeater duplex, shift in kHz |
-| `amofs 500` | AM receive offset above the dial, 0-1000 Hz (0 = off) |
+| `am_offset 500` | AM receive offset above the dial, 0-1000 Hz (0 = off); also AGC long, row AM OFFSET |
 | `step ch` | 60 m channel steps |
 | `memr` | list the used memory channels |
 | `memr 5`, `memw 5`, `memc 5` | recall / write the VFO into / clear memory channel 5 |
@@ -380,6 +381,8 @@ there is no local backup.
   | DUP- / DUP+ | RX - / + SHIFT (10-10000 kHz in 10 kHz steps, 100), any band and mode |
 
   MFK long on DUPLEX = AUTO, on SHIFT = 100 kHz. Split takes precedence over duplex.
+- AM OFFSET, the sixth row of the same panel (it scrolls, five rows in view): the AM
+  receive offset, 0-1000 Hz in 10 Hz steps (500), MFK long = 500; green in AM.
   Tuning, the tuner memories, the TX check and the OOB marker use the TX frequency, as
   with split. No CTCSS: the baseband has no known tone encoder and the microphone
   audio does not pass through Linux, so repeaters that need a tone cannot be opened yet.
