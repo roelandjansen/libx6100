@@ -23,13 +23,23 @@ key with `0x4000`. No hardware obstacle.
 
 | Option | For | Against |
 |---|---|---|
-| A. Port wfserver (Qt) to the R16 | proven, X6200 ships it; the CI-V rig it expects now exists: `x6100_trx --cat=pty` (2026-10-25) | Qt + audio stack on a weak SoC (needs a buildroot package); QtAudio dropouts (X6200 forum) |
+| **A. Port wfserver (Qt) to the R16 (chosen 2026-10-27)** | proven, X6200 ships it; the CI-V rig it expects now exists: `x6100_trx --cat=pty` (2026-10-25); maintained by the wfview authors (Elliott Liggett W6EL, Phil Taylor M0VSE, Roeland Jansen) | Qt + audio stack on a weak SoC (needs a buildroot package); QtAudio dropouts (X6200 forum) |
+| D. TCI server in x6100_trx | TCI clients (SDR programs, loggers, the VFO-Knob); OpenX6X00 does this | wfview has no TCI client: it serves TCI itself (see below) |
 | **B. Own C daemon speaking the Icom LAN protocol (server side)** | wfview connects unchanged; CI-V engine sits directly on libx6100; small, static, no Qt | protocol must be reimplemented from wfview's client code |
 | C. Own protocol + new wfview backend | simplest daemon | needs wfview changes, no other client works |
 
-**Proposal: B.** The daemon presents itself as a networked Icom-protocol rig with an
-X6100 CI-V identity; wfview gets an X6100 rig file describing exactly what the
-X6100 supports.
+**Decision (2026-10-27): A, wfview's wfserver on the radio.** x6100_trx offers its
+IC-705 CI-V engine on a pseudo-terminal (`cat pty`, /tmp/x6100-civ) as the serial rig
+wfserver drives; wfserver adds the Icom LAN protocol, network audio from ALSA card 0 and
+TX audio into the codec path (`0x4000`). The design below (B: own daemon) stays as the
+fallback if wfserver does not run well enough on the R16.
+
+TCI and wfview (checked in wfview's source, gitlab.com/eliggett/wfview, 2026-10-27): v2.23
+(28 May 2026, the latest tag) and the branch v3-initial (2 June 2026) have a TCI *server*
+(tciserver.cpp, port 50001 by default, setting TCIServerPort, TCI audio handlers): wfview
+offers the rig it controls to TCI programs. Its rig backends are Icom, Kenwood and Yaesu
+commanders: no TCI client, so wfview cannot drive a radio that serves TCI (as OpenX6X00
+does). With wfserver on the X6100, wfview can still pass the radio on as TCI.
 
 Icom LAN protocol outline (UDP; details to be verified against wfview's
 `icomudp*` sources before implementing):
@@ -148,13 +158,10 @@ The rig file lists only these. CAT PTT from the client keys with the selected so
 
 ## 10. Open questions
 
-1. Option B (own daemon) vs wfserver (A): reopened 2026-10-25, now that x6100_trx offers
-   CI-V on a pty and the DEV port is capped at 19200. Next: can wfserver (Qt5, opus,
-   audio) be built for the R16 against the image (buildroot package), and how it runs.
-   A third option: TCI. OpenX6X00 (Guru-RF, LGPL-2.1) dropped the inherited wfview (Icom
-   LAN) server and serves TCI v2.0 over a WebSocket on port 50001 (VFO, mode, filter,
-   AGC, RIT, drive, PTT with the client's audio, meters, RX audio); TCI clients (SDR
-   software, loggers, the VFO-Knob) work with it, wfview does not.
+1. Decided 2026-10-27: wfserver (A) over `cat pty`. Next: build wfserver (Qt5, opus,
+   audio) for the R16 against the image (buildroot package), run it on the radio against
+   /tmp/x6100-civ, measure CPU and audio. TCI (D) stays possible later for TCI clients;
+   wfview itself has only a TCI server.
 2. CI-V address and model ID for the X6100 identity, and which wfview rig-file
    fields cover DATA MOD source selection.
 3. Does wfview's Opus negotiation work against a non-wfserver server as-is?

@@ -189,8 +189,10 @@ from them: register facts and ideas only, credited in the docs where they are us
 - **IU1WXY image** by Giovanni Ricciardi IU1WXY (closed from v0.128): the image this
   is developed on, and the idea of a birdie scan with an automatic notch, from its
   public release notes (v0.128). Its screens are not reproduced.
-- **wfview** ([wfview.org](https://wfview.org/)): the CAT client x6100_trx is tested with,
-  as an IC-705.
+- **wfview** by Elliott Liggett W6EL, Phil Taylor M0VSE and Roeland Jansen
+  ([wfview.org](https://wfview.org/), [gitlab.com/eliggett/wfview](https://gitlab.com/eliggett/wfview)):
+  the CAT client x6100_trx is tested with,
+  as an IC-705; its wfserver is the chosen route to network CAT and audio.
 
 ## Safety
 

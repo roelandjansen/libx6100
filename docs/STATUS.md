@@ -88,8 +88,9 @@ Built, not yet tried on the radio (2026-10-25):
 
 1. Radio checks above.
 2. Band edge markers on the scope from the region table.
-3. Network CAT and audio: wfserver on the radio over `cat pty` (Qt5 build for the R16?)
-   or the own Icom LAN server (option A vs B in `x6100_netaudio_design.md`).
+3. Network CAT and audio: wfview's wfserver on the radio over `cat pty` (decided
+   2026-10-27): build it for the R16 (Qt5, opus; buildroot package), run, measure.
+   Own Icom LAN server only as the fallback (`x6100_netaudio_design.md`).
 4. liquid-dsp in use: network audio / RADE (Icom LAN server design in
    `x6100_netaudio_design.md`), recordings, RX / TX equaliser.
 5. Measurements: S-meter calibration, codec level against ALC.
