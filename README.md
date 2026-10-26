@@ -52,6 +52,17 @@ F3 long: RF scope on the left, audio scope on the right.
 Split (V/M long): receive on VFO A (green line), transmit on VFO B (red TX line);
 the TX frequency and mode in amber at the top left. RIT / XIT show the same way.
 
+![x6100_trx AM on 918 kHz](docs/images/x6100_trx_am.png)
+
+AM on 918 kHz (MW, 9 kHz step, ±24 kHz): the receiver sits 500 Hz above the dial, so
+the carrier stays clear of the zero-IF DC notch that distorts AM tuned exactly on it;
+the dial, the VFO line and the carrier stay on 918.000 (render, MW stations every 9 kHz).
+
+![x6100_trx AM offset](docs/images/x6100_trx_am_offset.png)
+
+The AM offset on the AGC long panel (RIT / XIT / DUP, scrolled to row 6): 0-1000 Hz,
+hold MFK for 500.
+
 ## Status
 
 Verified on hardware (BASE 1.1.9), see `docs/x6100_control_interface.md` §9:

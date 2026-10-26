@@ -107,6 +107,9 @@ Values are kept in the last state (see Settings); defaults NR 20, NB 10 / 10, no
   `am_offset`, 0-1000, 0 = off): the baseband is zero
   IF and its DC notch takes part of the carrier when tuned exactly on it, which sounds
   distorted; the filter opens by the same amount, dial and TX stay on the carrier
+
+  ![AM on 918 kHz](images/x6100_trx_am.png)
+
 - F1-F5 tags along the bottom edge: SCOPE, SPAN, AUDIO, METER, FIL
 - Audio scope (F3; F3 long: next to the RF scope, RF left / AF right): spectrum and waterfall of the demodulated RX audio (codec capture, 48 kHz), 0-3 or 0-6 kHz (F2), normalised dBFS scale (80 dB window, its bottom 10 dB under the noise floor measured inside the receive passband, so the picture stays put with volume and band noise; shifted by the AF reference level), receive passband shaded, MN line at the notch when on. The capture is opened only while the audio scope is shown
 - Battery voltage (info line, right): green on external power (charging below 100 %),
@@ -381,11 +384,14 @@ there is no local backup.
   | DUP- / DUP+ | RX - / + SHIFT (10-10000 kHz in 10 kHz steps, 100), any band and mode |
 
   MFK long on DUPLEX = AUTO, on SHIFT = 100 kHz. Split takes precedence over duplex.
-- AM OFFSET, the sixth row of the same panel (it scrolls, five rows in view): the AM
-  receive offset, 0-1000 Hz in 10 Hz steps (500), MFK long = 500; green in AM.
   Tuning, the tuner memories, the TX check and the OOB marker use the TX frequency, as
   with split. No CTCSS: the baseband has no known tone encoder and the microphone
   audio does not pass through Linux, so repeaters that need a tone cannot be opened yet.
+- AM OFFSET, the sixth row of the same panel (it scrolls, five rows in view): the AM
+  receive offset, 0-1000 Hz in 10 Hz steps (500), MFK long = 500; green in AM.
+
+  ![AM offset](images/x6100_trx_am_offset.png)
+
 - Top left of the spectrum (amber): `SPLIT TX 7.120.00 LSB  RIT +120` or
   `DUP- TX 29.520.00` while in use; on
   the RF scope a green line at the RX frequency and a red one, marked TX, at the TX
