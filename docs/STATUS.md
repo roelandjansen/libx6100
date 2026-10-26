@@ -87,16 +87,18 @@ Built, not yet tried on the radio (2026-10-25):
 ## Next steps (suggested order)
 
 1. Radio checks above.
-2. Band edge markers on the scope from the region table.
-3. Network CAT and audio: wfview's wfserver on the radio over `cat pty` (decided
+2. Lost I2C writes (safety): resend a failed write, and the register block after every
+   un-key, as OpenX6X00 does (TODO).
+3. Band edge markers on the scope from the region table.
+4. Network CAT and audio: wfview's wfserver on the radio over `cat pty` (decided
    2026-10-27): build it for the R16 (Qt5, opus; buildroot package), run, measure.
    Own Icom LAN server only as the fallback (`x6100_netaudio_design.md`).
+5. liquid-dsp in use: network audio / RADE (Icom LAN server design in
+   `x6100_netaudio_design.md`), recordings, RX / TX equaliser.
+6. Measurements: S-meter calibration, codec level against ALC.
+7. CTCSS for the repeaters (see TODO: no tone encoder known, mic bypasses Linux).
 8. Later: own buildroot, self-contained (now the IU1WXY image is the base): a full image
    and an applications-only package (TODO, Image and distribution).
-4. liquid-dsp in use: network audio / RADE (Icom LAN server design in
-   `x6100_netaudio_design.md`), recordings, RX / TX equaliser.
-5. Measurements: S-meter calibration, codec level against ALC.
-6. CTCSS for the repeaters (see TODO: no tone encoder known, mic bypasses Linux).
 
 ## Working notes
 
