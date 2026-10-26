@@ -54,7 +54,8 @@ the TX frequency and mode in amber at the top left. RIT / XIT show the same way.
 
 ![x6100_trx AM on 918 kHz](docs/images/x6100_trx_am.png)
 
-AM on 918 kHz (MW, 9 kHz step, ±24 kHz): the receiver sits 500 Hz above the dial, so
+AM on 918 kHz (MW, 9 kHz step, ±24 kHz, FIL1 opened to ±4.5 kHz: a full 9 kHz channel;
+the AM default is ±3 kHz): the receiver sits 500 Hz above the dial, so
 the carrier stays clear of the zero-IF DC notch that distorts AM tuned exactly on it;
 the dial, the VFO line and the carrier stay on 918.000 (render, MW stations every 9 kHz).
 
