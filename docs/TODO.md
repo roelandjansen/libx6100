@@ -86,7 +86,6 @@ under GEN until a better key turns up.
 ## CAT / network
 
 - ATT / preamp from wfview: compare a socat trace with IU1WXY (see `x6100_civ.md` §7).
-- Band buttons (1A 01): retest with wfview.
 - 1A 05 0131 CI-V transceive on / off.
 - PTT in USB-D with the C-Media sound card (CAT PTT, rear USB audio).
 - Icom LAN server (ports 50001-50003): faster scope, network audio; then RADE via

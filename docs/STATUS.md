@@ -23,7 +23,9 @@ Verified on the radio:
 - PWR: display off, quit, power off
 - CI-V as IC-705 on the DEV USB-C (ttyS2; 19200 is the port's limit: 9600 / 19200 work,
   38400 and up do not, checked 2026-10-25 with the divisor written), wfview:
-  frequency, mode, filters, gains, power, ATU, tune, meters, scope
+  frequency, mode, filters, gains, power, ATU, tune, meters, scope, band buttons (1A 01)
+- CAT on a pseudo-terminal (`cat pty`): /tmp/x6100-civ, served over the LAN with socat
+  (TCP 4532, one client) to a virtual port on the PC; wfview works through it (2026-10-26)
 - memory channels (V/M), `memr` list; console with own line editing
 - liquid-dsp v1.8.3 static build, `x6100_liquid` runs on the radio
 - CW keyer (KEY short key type, KEY long panel; registers 33 / 34; CI-V 14 09 / 0C / 0F):
@@ -52,8 +54,6 @@ Built, not yet tried on the radio (2026-10-25):
 - birdies: scan (GEN BIRDIE SCAN / `birdiescan`), birdies.conf, yellow ticks on the
   scope, automatic notch in USB / LSB / AM (BIRDIE NOTCH, off for now); host simulation
   of 80 m finds the IU1WXY reference list within 3 Hz
-- CAT on a pseudo-terminal (`cat pty`, GEN CAT row PTY): /tmp/x6100-civ, any speed, for
-  a client on the radio (wfserver, rigctld, socat to TCP); host test answers 03
 
 ## Open items to check on the radio
 
@@ -62,7 +62,7 @@ Built, not yet tried on the radio (2026-10-25):
 2. Battery low notes at 20 / 10 % (on battery only).
 3. GEN WiFi / Bluetooth rows: WiFi / Bluetooth on / off, pair a headset (may need a
    bluez agent; see S39btpairings), panel stutter from polling.
-4. wfview over CAT: VFO A / B, split, duplex, RIT / XIT, band buttons, keyer levels;
+4. wfview over CAT: VFO A / B, split, duplex, RIT / XIT, keyer levels;
    ATT / PRE (socat trace against IU1WXY).
 5. Repeater duplex, the rest: CAT PTT, mem 22 (AUTO) and a memory with dup- 100, state
    after a restart, split over duplex, MFK hold resets, panel layout. Scope TX line:
@@ -72,9 +72,6 @@ Built, not yet tried on the radio (2026-10-25):
    squelch closes in FM); the gain ranges (0-50, 0-100) against the stock UI.
 7. Birdies: 80 m scan against the IU1WXY list (TODO), tick on the scope line, the
    notch on 3837.014 (LSB, dial 3838.000: 986 Hz), PRE / ATT.
-8. CAT pty on the radio: `x6100_trx --cat=pty`, then `socat TCP-LISTEN:4532,reuseaddr,fork
-   /tmp/x6100-civ,raw,echo=0` and a logger at the PC on that TCP port (a virtual serial
-   port over TCP, e.g. socat on the PC side).
 
 ## Next steps (suggested order)
 
