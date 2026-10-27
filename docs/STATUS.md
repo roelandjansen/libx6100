@@ -122,10 +122,10 @@ Built, not yet tried on the radio (2026-10-25):
     Linux). 4.4 clean 2026-10-27: no i2c lines on PTT / CAT / tune / split un-keys, band
     changes or the hand mic. TOT kept over a restart (state file). Still open: CAT PTT
     timeout (4.2).
+12a. TX meter choice (F4) kept over a restart: verified 2026-10-27 (ALC; fix 98584bb).
 13. Scope panel: each row on the radio (VBW, averaging, waveform, colours, max hold,
     waterfall off / speed / size / peak level, center type, scope during TX off), the
     audio scope AF rows (own colours etc.), values back after a restart.
-12a. TX meter choice (F4) kept over a restart: verified 2026-10-27 (ALC; fix 98584bb).
 14. Messages. Verified 2026-10-27: CW message in CW mode at zero beat on the IC-7851,
     clean keying, ALC fine at -10 dBFS; repeat (MSG long) every 10 s with the countdown
     (after the TOT wrap fix fbc9fbf); any key stops. Still: the PTT key stops, CI-V 17
