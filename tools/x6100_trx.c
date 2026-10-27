@@ -2282,6 +2282,7 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 #define SCR_FREQ	0xF4F4F4
 #define SCR_ACCENT	0x40C0FF
 #define SCR_WARN	0xFF6040
+#define BAND_OUT	0xD03030	/* scope: outside the TX allocations, band edges */
 
 //
 // Scope colours, as set on the IC-7851 (Waveform Fill+Line, averaging 2)
@@ -4964,6 +4965,35 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 		snprintf(lbl, sizeof(lbl), "%d", db + (int) SMETER_CAL_DB);
 		x6100_lcd_fill(lcd, 0, gy - 10, LBL_W, 9, 0x05080C);
 		x6100_lcd_text(lcd, 2, gy - 9, 1, lbl, SCR_DIM);
+	}
+
+	//
+	// Band edges of the selected region (the TX allocations of the TX check): a red bar
+	// along the top over what lies outside them, a dashed red line at each edge in view
+	//
+	{
+		const region_t *rg = &g_regions[g_region];
+
+		for (int x = LBL_W; x < SW; x++) {
+			int64_t f = v.lo + (int64_t) x * v.span / v.w;
+
+			if (f > 0 && !in_allocation((uint32_t) f))
+				x6100_lcd_vline(lcd, x, SPEC_Y, SPEC_Y + 2, BAND_OUT);
+		}
+
+		for (int i = 0; i < 12 && rg->seg[i].high != 0; i++) {
+			const uint32_t edge[2] = { rg->seg[i].low, rg->seg[i].high };
+
+			for (int k = 0; k < 2; k++) {
+				int ex = f_to_x(&v, edge[k]);
+
+				if (ex <= LBL_W || ex >= SW - 1)
+					continue;
+
+				for (int y = SPEC_Y; y < SPEC_Y + SPEC_H; y += 6)
+					x6100_lcd_vline(lcd, ex, y, y + 2 < SPEC_Y + SPEC_H ? y + 2 : SPEC_Y + SPEC_H - 1, BAND_OUT);
+			}
+		}
 	}
 
 	//

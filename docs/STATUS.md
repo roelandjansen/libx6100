@@ -58,6 +58,8 @@ Built, not yet tried on the radio (2026-10-25):
   with RIT: 20 Hz already better, 500 Hz clean); the RF scope now maps the IQ around
   the real receive frequency (RIT and the AM offset no longer shift the trace)
 - CI-V scope: SCROLL-C sends its edges (the wfview waterfall froze in SCROLL-C)
+- band edges on the RF scope from the region table (red bar outside the allocations,
+  dashed line at each edge)
 - CI-V memories (08 select / tune, 09 write, 0A to VFO, 0B clear, 1A 00 contents in the
   IC-705 layout) and the transceive switch 1A 05 0131; host tests and a pty test pass
 
@@ -89,15 +91,14 @@ Built, not yet tried on the radio (2026-10-25):
 1. Radio checks above.
 2. Lost I2C writes (safety): resend a failed write, and the register block after every
    un-key, as OpenX6X00 does (TODO).
-3. Band edge markers on the scope from the region table.
-4. Network CAT and audio: wfview's wfserver on the radio over `cat pty` (decided
+3. Network CAT and audio: wfview's wfserver on the radio over `cat pty` (decided
    2026-10-27): build it for the R16 (Qt5, opus; buildroot package), run, measure.
    Own Icom LAN server only as the fallback (`x6100_netaudio_design.md`).
-5. liquid-dsp in use: network audio / RADE (Icom LAN server design in
+4. liquid-dsp in use: network audio / RADE (Icom LAN server design in
    `x6100_netaudio_design.md`), recordings, RX / TX equaliser.
-6. Measurements: S-meter calibration, codec level against ALC.
-7. CTCSS for the repeaters (see TODO: no tone encoder known, mic bypasses Linux).
-8. Later: own buildroot, self-contained (now the IU1WXY image is the base): a full image
+5. Measurements: S-meter calibration, codec level against ALC.
+6. CTCSS for the repeaters (see TODO: no tone encoder known, mic bypasses Linux).
+7. Later: own buildroot, self-contained (now the IU1WXY image is the base): a full image
    and an applications-only package (TODO, Image and distribution).
 
 ## Working notes

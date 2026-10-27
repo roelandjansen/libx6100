@@ -434,3 +434,6 @@ until you leave CH), the VFO knob fine-tunes around them in 100 Hz steps.
 kHz unless stated. The dial frequency is checked, not the edges of the signal. nl: F
 registration (stcrt 2015-3772, 2021-31799; 60 m per WRC-15). National rules and power
 limits are the operator's to know; national 60 m channels (e.g. US) are not in r2.
+
+On the RF scope the selected region shows: a red bar along the top over what lies
+outside its allocations, and a dashed red line at each band edge in view.
