@@ -126,7 +126,9 @@ Built, not yet tried on the radio (2026-10-25):
 
 ## Next steps (suggested order)
 
-1. Radio checks above.
+1. Radio checks above: 10-15 planned for the evening of 2026-10-27 (checklist handed over
+   separately, order: scope panel, fixed edges, wfview X6100.rig, TX safety, messages,
+   SWR scan).
 2. Network CAT and audio: wfview's wfserver on the radio over `cat pty` (decided
    2026-10-27): build it for the R16 (Qt5, opus; buildroot package), run, measure.
    Own Icom LAN server only as the fallback (`x6100_netaudio_design.md`).
