@@ -105,7 +105,8 @@ under GEN until a better key turns up.
     (up to ±500 kHz) that can be 1 MHz: our 96 kHz cut applies. It never reads 27 1E
     back (the reply is ignored), so our read is for other clients only.
   - CI-V transceive: the rig file has 1A 05 0112 (on the IC-7610 0112 is transceive; on
-    the IC-705 0131, as we answer). Looks like a copy from the IC-7610: check against
+    the IC-705 0131, as we answer; hamlib ic7300.c ic705_extcmds also uses 0131).
+    Looks like a copy from the IC-7610: check against
     the IC-705 CI-V reference, then fix it in wfview (and in our X6100 rig file).
     Over a pty (VSP) wfview answers 1A 05 transceive itself and does not forward it.
 - wfview rig file for the X6100: built 2026-10-27, `contrib/wfview/X6100.rig` (made by
