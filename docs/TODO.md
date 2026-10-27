@@ -28,8 +28,8 @@ Status: 2026-10-27 (v0.13.0). Summary and next steps: `STATUS.md`.
     (-96), 3840.834 (-112), 3908.134 (-116), 3959.191 (-120); 9 found, 7 in the photo
   - whether the IQ centre is the dial frequency exactly (an offset would shift every
     birdie and the notch) and whether the yellow tick sits on the scope line: the scope
-    maps bins as n - 1 - i, the scan as n - i (one bin, 187.5 Hz, apart); fix the scope
-    if the tick is right
+    mapped bins as n - 1 - i, the scan as n - i: a host simulation (tones on exact bins,
+    both sides) shows n - i is right; the scope uses it since 2026-10-27 (was 187.5 Hz off)
   - the notch: 3837.014 in LSB at dial 3838.000 = 986 Hz; does a 40 Hz notch take it
     out, how far off may it be; then BIRDIE NOTCH on as the default
   - birdies with PRE / ATT, and drift with temperature (scan again later)

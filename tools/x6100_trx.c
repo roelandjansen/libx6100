@@ -3824,7 +3824,7 @@ static int spec_index(const view_t *v, int x)
 	if (i < 0 || i >= n)
 		return -1;
 
-	return X6100_FLOW_IQ_MIRRORED ? n - 1 - i : i;
+	return X6100_FLOW_IQ_MIRRORED ? (n - i) % n : i;	/* mirrored: RF +f at IQ -f, bin n - i */
 }
 
 //
@@ -3842,11 +3842,11 @@ static float bin_at(const float *arr, const view_t *v, int x)
 	int i1 = i0 + 1;
 
 	if (i0 < 0 || i1 >= n)
-		return i0 >= 0 && i0 < n ? arr[X6100_FLOW_IQ_MIRRORED ? n - 1 - i0 : i0] : SPEC_DB_MIN - 20.0f;
+		return i0 >= 0 && i0 < n ? arr[X6100_FLOW_IQ_MIRRORED ? (n - i0) % n : i0] : SPEC_DB_MIN - 20.0f;
 
 	if (X6100_FLOW_IQ_MIRRORED) {
-		i0 = n - 1 - i0;
-		i1 = n - 1 - i1;
+		i0 = (n - i0) % n;	/* as spec_index: bin n - i, not n - 1 - i (one bin, 187.5 Hz) */
+		i1 = (n - i1) % n;
 	}
 
 	return (float) (arr[i0] * (1.0 - t) + arr[i1] * t);
