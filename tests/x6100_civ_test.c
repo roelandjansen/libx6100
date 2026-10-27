@@ -344,6 +344,11 @@ int main(void)
 	check(&civ, "27 1E 00 01", "FA");					/* range 00 */
 	check(&civ, "27 16 00 03", "FB");
 	check(&civ, "27 16 00", "27 16 00 03");
+	check(&civ, "27 1B 00", "FB");			/* scope during TX off: no selector */
+	check(&civ, "27 1B", "27 1B 00");
+	check(&civ, "27 1C 00 01", "FB");		/* center type: carrier point */
+	check(&civ, "27 1C", "27 1C 00 01");
+	check(&civ, "27 1C 01 00", "FA");		/* sub scope */
 
 	// Memories (08-0B, 1A 00) and the transceive switch (1A 05 0131)
 	{

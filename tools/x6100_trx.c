@@ -1649,23 +1649,27 @@ static bool edge_store(rx_t *rx)
 }
 
 //
-// Scope settings (F1 long: scope panel), as the IC-7851 scope set menu: mode, VBW,
-// averaging, waveform type, max hold, the colours of the trace (current = fill, line,
-// max hold) and the waterfall. Defaults as set on the IC-7851. One table for the panel,
-// the console and the state file; the mode row is rx->scope (kept on the scope line).
+// Scope settings (F1 long: scope panel), as the IC-7851 scope set menu: mode, center
+// type, VBW, averaging, waveform type, max hold, the colours of the trace (current =
+// fill, line, max hold), the waterfall (on, speed, size, peak level) and the scope
+// during TX. Defaults as set on the IC-7851. One table for the panel, the console and
+// the state file; the mode row is rx->scope (kept on the scope line).
 //
 
-enum { SP_MODE, SP_VBW, SP_AVG, SP_WAVE, SP_HOLD, SP_FILL_R, SP_FILL_G, SP_FILL_B, SP_LINE_R, SP_LINE_G,
-	SP_LINE_B, SP_HOLD_R, SP_HOLD_G, SP_HOLD_B, SP_WF, SP_WF_SPEED, SPARS };
+enum { SP_MODE, SP_CTYPE, SP_VBW, SP_AVG, SP_WAVE, SP_HOLD, SP_FILL_R, SP_FILL_G, SP_FILL_B, SP_LINE_R,
+	SP_LINE_G, SP_LINE_B, SP_HOLD_R, SP_HOLD_G, SP_HOLD_B, SP_WF, SP_WF_SPEED, SP_WF_SIZE, SP_WF_LEVEL,
+	SP_TXSCOPE, SPARS };
 
 enum { WAVE_FILL, WAVE_LINE, WAVE_FILL_LINE };
+enum { HOLD_OFF, HOLD_DECAY, HOLD_10S, HOLD_ON };
 
 static const kpar_t g_spar[SPARS] = {
 	[SP_MODE] = { "MODE", "", 0, 3, 1, 0 },
+	[SP_CTYPE] = { "CENTER TYPE", "ctype", 0, 1, 1, 1 },
 	[SP_VBW] = { "VBW", "vbw", 0, 1, 1, 0 },
 	[SP_AVG] = { "AVERAGING", "scavg", 1, 4, 1, 2 },
 	[SP_WAVE] = { "WAVEFORM TYPE", "wave", 0, 2, 1, WAVE_FILL_LINE },
-	[SP_HOLD] = { "MAX HOLD", "maxhold", 0, 1, 1, 1 },
+	[SP_HOLD] = { "MAX HOLD", "maxhold", 0, 3, 1, HOLD_DECAY },
 	[SP_FILL_R] = { "CURRENT RED", "fillr", 0, 255, 1, 255 },
 	[SP_FILL_G] = { "CURRENT GREEN", "fillg", 0, 255, 1, 63 },
 	[SP_FILL_B] = { "CURRENT BLUE", "fillb", 0, 255, 1, 127 },
@@ -1677,18 +1681,33 @@ static const kpar_t g_spar[SPARS] = {
 	[SP_HOLD_B] = { "MAX HOLD BLUE", "holdb", 0, 255, 1, 127 },
 	[SP_WF] = { "WATERFALL", "wf", 0, 1, 1, 1 },
 	[SP_WF_SPEED] = { "WATERFALL SPEED", "wfspeed", 0, 2, 1, 2 },
+	[SP_WF_SIZE] = { "WATERFALL SIZE", "wfsize", 0, 2, 1, 1 },
+	[SP_WF_LEVEL] = { "WF PEAK LEVEL", "wflevel", 30, 80, 10, 50 },
+	[SP_TXSCOPE] = { "SCOPE DURING TX", "txscope", 0, 1, 1, 1 },
 };
 
 static int g_sp[SPARS];
+static uint32_t g_iq_hz;	/* IQ centre of the last spectrum (max hold starts again when it moves) */
 
-static const char *g_vbw_tok[2] = { "narrow", "wide" };
-static const char *g_wave_tok[3] = { "fill", "line", "fill+line" };
-static const char *g_wfspeed_tok[3] = { "slow", "mid", "fast" };
-static const char *g_scmode_tok[4] = { "center", "scroll-c", "fix", "scroll-f" };
+//
+// The words of a row (console, state file, panel in upper case); NULL: a number
+//
+
+static const char *const g_sp_words[SPARS][4] = {
+	[SP_MODE] = { "center", "scroll-c", "fix", "scroll-f" },
+	[SP_CTYPE] = { "filter", "carrier" },
+	[SP_VBW] = { "narrow", "wide" },
+	[SP_WAVE] = { "fill", "line", "fill+line" },
+	[SP_HOLD] = { "off", "decay", "10s", "on" },
+	[SP_WF] = { "off", "on" },
+	[SP_WF_SPEED] = { "slow", "mid", "fast" },
+	[SP_WF_SIZE] = { "small", "mid", "large" },
+	[SP_TXSCOPE] = { "off", "on" },
+};
 
 static bool spar_onoff(int i)
 {
-	return i == SP_HOLD || i == SP_WF;
+	return i == SP_WF || i == SP_TXSCOPE;
 }
 
 static bool spar_colour(int i)
@@ -1727,18 +1746,10 @@ static void spar_token(const rx_t *rx, int i, char *s, size_t n)
 {
 	int v = spar_get(rx, i);
 
-	if (i == SP_MODE)
-		snprintf(s, n, "%s", g_scmode_tok[v]);
-	else if (i == SP_VBW)
-		snprintf(s, n, "%s", g_vbw_tok[v]);
+	if (g_sp_words[i][0] != NULL)
+		snprintf(s, n, "%s", g_sp_words[i][v]);
 	else if (i == SP_AVG)
 		snprintf(s, n, "%s%.0d", v == 1 ? "off" : "", v == 1 ? 0 : v);
-	else if (i == SP_WAVE)
-		snprintf(s, n, "%s", g_wave_tok[v]);
-	else if (i == SP_WF_SPEED)
-		snprintf(s, n, "%s", g_wfspeed_tok[v]);
-	else if (spar_onoff(i))
-		snprintf(s, n, "%s", v ? "on" : "off");
 	else
 		snprintf(s, n, "%d", v);
 }
@@ -1751,24 +1762,28 @@ static int spar_parse(int i, const char *vs)
 	if (vs == NULL)
 		return -1;
 
-	if (i == SP_VBW) {
-		for (int k = 0; k < 2; k++)
-			v = strcasecmp(vs, g_vbw_tok[k]) == 0 ? k : v;
-	} else if (i == SP_WAVE) {
-		for (int k = 0; k < 3; k++)
-			v = strcasecmp(vs, g_wave_tok[k]) == 0 ? k : v;
-	} else if (i == SP_WF_SPEED) {
-		for (int k = 0; k < 3; k++)
-			v = strcasecmp(vs, g_wfspeed_tok[k]) == 0 ? k : v;
+	if (g_sp_words[i][0] != NULL) {
+		for (int k = 0; k < 4 && g_sp_words[i][k] != NULL; k++)
+			v = strcasecmp(vs, g_sp_words[i][k]) == 0 ? k : v;
 	} else if (i == SP_AVG && strcasecmp(vs, "off") == 0) {
 		v = 1;
-	} else if (spar_onoff(i)) {
-		v = strcasecmp(vs, "on") == 0 ? 1 : strcasecmp(vs, "off") == 0 ? 0 : -1;
 	} else if (isdigit((unsigned char) vs[0])) {
 		v = atoi(vs);
 	}
 
+	if (i == SP_WF_LEVEL && v % 10 != 0)
+		return -1;
+
 	return v >= g_spar[i].min && v <= g_spar[i].max ? v : -1;
+}
+
+// The words a row takes, for a console error ("narrow, wide"); empty for numbers
+static void spar_words(int i, char *s, size_t n)
+{
+	s[0] = '\0';
+
+	for (int k = 0; k < 4 && g_sp_words[i][k] != NULL; k++)
+		snprintf(s + strlen(s), n - strlen(s), "%s%s", k > 0 ? ", " : "", g_sp_words[i][k]);
 }
 
 static void spar_defaults(void)
@@ -2601,7 +2616,7 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 // Scope: max hold decay and waterfall scale (colours, averaging: scope panel)
 //
 #define PEAK_DECAY_DB	0.3f
-#define WF_RANGE_DB	50.0f
+#define WF_RANGE_DB	((float) g_sp[SP_WF_LEVEL])	/* scope panel WF PEAK LEVEL */
 #define WF_BELOW_DB	3.0f
 #define LBL_W		28
 
@@ -2637,7 +2652,8 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 #define AS_RANGE_DB	80.0f		/* normalised window height */
 #define AS_FLOOR_DB	10.0f		/* window bottom under the audio floor */
 #define SPEC_Y		180
-#define SPEC_H		150
+static int g_spec_h = 150;	/* RF / audio scope height: the scope panel WATERFALL SIZE */
+#define SPEC_H		g_spec_h
 #define WF_Y		(SPEC_Y + SPEC_H + 4)
 #define TAG_H		20		/* F1-F5 tags along the bottom edge */
 #define WF_H(lcd)	((lcd)->h - WF_Y - TAG_H)
@@ -2812,6 +2828,23 @@ static void spectrum_update(screen_t *scr, const x6100_flow_frame_t *f)
 	//
 	const float avg = 1.0f / (float) g_sp[SP_AVG];
 
+	//
+	// Max hold: DECAY falls slowly from each peak; 10 S holds the maximum and starts again
+	// every 10 s, ON holds it; both start again when the IQ centre moves (tuning)
+	//
+	static uint64_t hold_t;
+	static uint32_t hold_hz;
+	static int hold_mode = -1;
+	uint64_t t = now_ms();
+	bool restart = !scr->spec_valid || g_sp[SP_HOLD] != hold_mode || g_iq_hz != hold_hz
+		|| (g_sp[SP_HOLD] == HOLD_10S && t - hold_t >= 10000);
+
+	if (restart) {
+		hold_t = t;
+		hold_hz = g_iq_hz;
+		hold_mode = g_sp[SP_HOLD];
+	}
+
 	for (int i = 0; i < n; i++) {
 		float db = dbs[i];
 
@@ -2819,8 +2852,13 @@ static void spectrum_update(screen_t *scr, const x6100_flow_frame_t *f)
 			db = (dbs[i - 1] + 2.0f * dbs[i] + dbs[i + 1]) / 4.0f;
 
 		scr->spec[i] = scr->spec_valid ? scr->spec[i] * (1.0f - avg) + db * avg : db;
-		scr->peak[i] = scr->spec_valid && scr->peak[i] - PEAK_DECAY_DB > scr->spec[i]
-			? scr->peak[i] - PEAK_DECAY_DB : scr->spec[i];
+
+		if (restart)
+			scr->peak[i] = scr->spec[i];
+		else if (g_sp[SP_HOLD] == HOLD_DECAY)
+			scr->peak[i] = scr->peak[i] - PEAK_DECAY_DB > scr->spec[i] ? scr->peak[i] - PEAK_DECAY_DB : scr->spec[i];
+		else
+			scr->peak[i] = scr->peak[i] > scr->spec[i] ? scr->peak[i] : scr->spec[i];
 	}
 
 	//
@@ -3110,7 +3148,14 @@ static view_t scope_view(const rx_t *rx, int w)
 {
 	view_t v = { .span = scope_width(rx), .vfo = rx_hz(rx), .w = w };	/* vfo: the IQ centre (RIT, AM offset) */
 
-	v.lo = scope_fixed(rx) ? rx->fix_lo : (int64_t) rx->freq - rx->span / 2;
+	// CENTER / SCROLL-C: the carrier in the middle, or the middle of the receive
+	// filter (scope panel CENTER TYPE)
+	int lo = 0, hi = 0;
+
+	if (g_sp[SP_CTYPE] == 0)
+		passband(rx, &lo, &hi);
+
+	v.lo = scope_fixed(rx) ? rx->fix_lo : (int64_t) rx->freq + (lo + hi) / 2 - rx->span / 2;
 	return v;
 }
 
@@ -4460,6 +4505,9 @@ static void draw_scope_panel(x6100_lcd_t *lcd, const rx_t *rx)
 		for (char *p = v; *p != '\0'; p++)	/* the panel font is upper case */
 			*p = (char) toupper((unsigned char) *p);
 
+		if (i == SP_WF_LEVEL)
+			snprintf(v + strlen(v), sizeof(v) - strlen(v), " DB");
+
 		vw = x6100_lcd_text_width(v, 2);
 		x6100_lcd_text(lcd, px + pw - 12 - vw, y, 2, v, c);
 
@@ -4842,7 +4890,7 @@ static void trace_col(x6100_lcd_t *lcd, int x, int y, int py, int prev_y)
 	if (g_sp[SP_WAVE] != WAVE_LINE)
 		x6100_lcd_vline(lcd, x, y, SPEC_Y + SPEC_H - 1, spar_rgb(SP_FILL_R));
 
-	if (g_sp[SP_HOLD])
+	if (g_sp[SP_HOLD] != HOLD_OFF)
 		x6100_lcd_fill(lcd, x, py, 1, 1, spar_rgb(SP_HOLD_R));
 
 	if (g_sp[SP_WAVE] != WAVE_FILL)
@@ -5004,6 +5052,15 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 	}
 
 	wf_shown = g_sp[SP_WF] != 0;
+
+	// Waterfall size: the scope above gives or takes the rows (small waterfall = tall scope)
+	static const int spec_h[3] = { 190, 150, 110 };
+
+	if (g_spec_h != spec_h[g_sp[SP_WF_SIZE]]) {
+		g_spec_h = spec_h[g_sp[SP_WF_SIZE]];
+		x6100_lcd_fill(lcd, 0, SPEC_Y, W, lcd->h - TAG_H - SPEC_Y, 0x000000);
+		scr->wf_scope = (scope_mode_t) -1;	/* waterfall re-aligns */
+	}
 
 	//
 	// Status line, TX indicator, indicators right (TUNE while the tuner searches)
@@ -6086,8 +6143,9 @@ static bool console_line(rx_t *rx, char *line)
 			}
 		}
 
-		// Scope panel: vbw narrow|wide, scavg off|2|3|4, wave fill|line|fill+line,
-		// maxhold on|off, fillr .. holdb 0-255, wf on|off, wfspeed slow|mid|fast
+		// Scope panel: ctype filter|carrier, vbw narrow|wide, scavg off|2|3|4, wave fill|line|fill+line,
+		// maxhold off|decay|10s|on, fillr .. holdb 0-255, wf on|off, wfspeed slow|mid|fast,
+		// wfsize small|mid|large, wflevel 30-80, txscope on|off
 		{
 			int k = -1;
 
@@ -6096,17 +6154,16 @@ static bool console_line(rx_t *rx, char *line)
 
 			if (k >= 0) {
 				int v = spar_parse(k, strtok(NULL, " \t\r\n"));
+				char w[48];
 
-				if (v < 0 && k == SP_VBW)
-					fprintf(stderr, "\nvbw: narrow or wide\n");
-				else if (v < 0 && k == SP_AVG)
+				spar_words(k, w, sizeof(w));
+
+				if (v < 0 && k == SP_AVG)
 					fprintf(stderr, "\nscavg: off, 2, 3 or 4\n");
-				else if (v < 0 && k == SP_WAVE)
-					fprintf(stderr, "\nwave: fill, line or fill+line\n");
-				else if (v < 0 && k == SP_WF_SPEED)
-					fprintf(stderr, "\nwfspeed: slow, mid or fast\n");
-				else if (v < 0 && spar_onoff(k))
-					fprintf(stderr, "\n%s: on or off\n", t);
+				else if (v < 0 && k == SP_WF_LEVEL)
+					fprintf(stderr, "\nwflevel: 30 to 80 dB in steps of 10\n");
+				else if (v < 0 && w[0] != '\0')
+					fprintf(stderr, "\n%s: %s\n", t, w);
 				else if (v < 0)
 					fprintf(stderr, "\n%s: %d to %d\n", t, g_spar[k].min, g_spar[k].max);
 				else
@@ -6926,6 +6983,12 @@ static bool cat_get(void *ctx, x6100_civ_item_t item, int vfo, int32_t *v)
 	case X6100_CIV_SCOPE_VBW:
 		*v = g_sp[SP_VBW];	/* 0 narrow, 1 wide: as the scope panel */
 		return true;
+	case X6100_CIV_SCOPE_TX:
+		*v = g_sp[SP_TXSCOPE];
+		return true;
+	case X6100_CIV_SCOPE_CTYPE:	/* 0 filter centre, 1 carrier point */
+		*v = g_sp[SP_CTYPE];
+		return true;
 	case X6100_CIV_BAND_FREQ:
 	case X6100_CIV_BAND_MODE:
 	case X6100_CIV_BAND_FIL: {
@@ -7235,6 +7298,15 @@ static bool cat_set(void *ctx, x6100_civ_item_t item, int vfo, int32_t v)
 		break;
 	case X6100_CIV_SCOPE_VBW:
 		g_sp[SP_VBW] = v != 0;
+		break;
+	case X6100_CIV_SCOPE_TX:
+		g_sp[SP_TXSCOPE] = v != 0;
+		break;
+	case X6100_CIV_SCOPE_CTYPE:
+		if (v < 0 || v > 2)
+			return false;
+
+		g_sp[SP_CTYPE] = v != 0;	/* 2 (carrier, absolute frequency): carrier point */
 		break;
 	case X6100_CIV_BAND_FREQ: {
 		int b = civ_band(vfo);
@@ -7674,7 +7746,7 @@ static void cat_scope(cat_t *cat, uint64_t t)
 
 	x6100_civ_scope_t s = {
 		.mode = civ_scope_mode(rx->scope),
-		.centre = rx->freq,
+		.centre = (uint32_t) (v.lo + v.span / 2),	/* the carrier, or the filter centre (CENTER TYPE) */
 		.half_span = (uint32_t) rx->span / 2,
 		.lo = (uint32_t) v.lo,
 		.hi = (uint32_t) (v.lo + v.span),
@@ -8569,7 +8641,9 @@ int main(int argc, char **argv)
 			level += iq_level_db(&frame);
 			level_n++;
 
-			if (scr.on) {
+			// SCOPE DURING TX off: the scope and the waterfall keep the last RX picture
+			if (scr.on && (g_sp[SP_TXSCOPE] || !scr.tx)) {
+				g_iq_hz = rx_hz(&rx);	/* max hold starts again when the IQ centre moves */
 				spectrum_update(&scr, &frame);
 				scr.sig_dbm = passband_dbm(&scr, &rx);
 				new_frame = true;

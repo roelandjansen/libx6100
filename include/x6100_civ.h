@@ -59,6 +59,9 @@
 //   TRANSCEIVE         0 / 1: unasked 00 / 01 frames on a local change (1A 05 0131)
 //   SCOPE_FEDGE_LO / _HI   fixed edge frequencies (27 1E), Hz; vfo = (range - 1) * 4 + edge - 1,
 //                      range 1-12 (IC-705 codes), edge 1-4; a set sends LO, then HI
+//   SCOPE_TX           scope during TX 0 / 1 (27 1B)
+//   SCOPE_CTYPE        center type 0 filter centre, 1 carrier point, 2 carrier point with
+//                      absolute frequency (27 1C)
 //
 // The vfo argument: 0 = foreground (selected), 1 = background (unselected).
 //
@@ -135,6 +138,8 @@ typedef enum
 	X6100_CIV_TRANSCEIVE,
 	X6100_CIV_SCOPE_FEDGE_LO,
 	X6100_CIV_SCOPE_FEDGE_HI,
+	X6100_CIV_SCOPE_TX,
+	X6100_CIV_SCOPE_CTYPE,
 	X6100_CIV_ITEM_COUNT
 } x6100_civ_item_t;
 

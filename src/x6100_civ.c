@@ -1198,6 +1198,8 @@ static const scope_map_t g_scope[] = {
 	{ 0x16, X6100_CIV_SCOPE_EDGE, true },
 	{ 0x17, X6100_CIV_SCOPE_HOLD, true },
 	{ 0x1A, X6100_CIV_SCOPE_SPEED, true },
+	{ 0x1B, X6100_CIV_SCOPE_TX, false },
+	{ 0x1C, X6100_CIV_SCOPE_CTYPE, true },
 	{ 0x1D, X6100_CIV_SCOPE_VBW, true },
 };
 
@@ -1331,7 +1333,7 @@ static size_t cmd_scope(req_t *r)
 		return out_end(r->o);
 	}
 
-	return reply_ng(r);	/* 00 (read only, streamed), 1B, 1C, 1E, 20 */
+	return reply_ng(r);	/* 00 (read only, streamed), 20 */
 }
 
 //

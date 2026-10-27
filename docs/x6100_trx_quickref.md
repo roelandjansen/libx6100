@@ -81,20 +81,24 @@ Four edges per range, the IC-705 ranges (MHz): 01 below 1.6, 02 1.6-2, 03 2-6, 0
 ## Scope panel (F1 long, IC-7851 style)
 
 MFK turn: adjust; MFK push: next row; MFK hold: default; F1 long, another key or 10 s
-idle closes. Kept in the state file (three lines: trace, colours, waterfall).
+idle closes. Kept in the state file (three lines: trace, colours, waterfall and TX).
 
 | Row | Values (default) | Console / state |
 |---|---|---|
 | MODE | CENTER, SCROLL-C, FIX, SCROLL-F (CENTER) | on the scope line |
+| CENTER TYPE | FILTER, CARRIER (CARRIER): CENTER / SCROLL-C centred on the carrier or on the middle of the receive filter | `ctype filter\|carrier`; CI-V 27 1C |
 | VBW | NARROW, WIDE (NARROW): narrow smooths over neighbouring bins | `vbw narrow\|wide`; CI-V 27 1D |
 | AVERAGING | OFF, 2, 3, 4 (2): over frames | `scavg off\|2\|3\|4` |
 | WAVEFORM TYPE | FILL, LINE, FILL+LINE (FILL+LINE) | `wave fill\|line\|fill+line` |
-| MAX HOLD | ON, OFF (ON): the peak dots, falling slowly | `maxhold on\|off` |
+| MAX HOLD | OFF, DECAY, 10 S, ON (DECAY): DECAY falls slowly from each peak, 10 S holds the maximum for 10 s, ON holds it; tuning starts it again | `maxhold off\|decay\|10s\|on` |
 | CURRENT RED / GREEN / BLUE | 0-255 (255, 63, 127): the fill | `fillr`, `fillg`, `fillb` |
 | LINE RED / GREEN / BLUE | 0-255 (255, 255, 0) | `liner`, `lineg`, `lineb` |
 | MAX HOLD RED / GREEN / BLUE | 0-255 (0, 127, 127) | `holdr`, `holdg`, `holdb` |
 | WATERFALL | ON, OFF (ON) | `wf on\|off` |
 | WATERFALL SPEED | SLOW, MID, FAST (FAST): a line every 4th / 2nd / frame | `wfspeed slow\|mid\|fast` |
+| WATERFALL SIZE | SMALL, MID, LARGE (MID): the scope above takes or gives the rows | `wfsize small\|mid\|large` |
+| WF PEAK LEVEL | 30-80 dB in steps of 10 (50): the range from the noise to the top colour | `wflevel 50` |
+| SCOPE DURING TX | ON, OFF (ON): off keeps the last RX picture while transmitting | `txscope on\|off`; CI-V 27 1B |
 
 The defaults are the IC-7851 settings the scope was modelled on. The colours and the
 waveform type apply to the audio scope too.
