@@ -116,7 +116,8 @@ Built, not yet tried on the radio (2026-10-25):
 11. wfview with X6100.rig: `civaddr 61`, the rig file in wfview, connect on 61 and on
     auto; NG answers do not upset it; scope, fixed edges, memories with names and a
     split TX side (also with the IC-705 file on A4), transceive.
-12. Lost I2C writes and TX timeout: console lines on a NAK (band change), no stuck-TX
+12. Lost I2C writes and TX timeout (TOT 1 min verified 2026-10-27: PTT key drops, hand mic
+    stays keyed as expected; the note now clears after 10 s): console lines on a NAK (band change), no stuck-TX
     line on normal un-keys; TOT 1 min with the PTT key, CAT PTT (drops) and the hand
     mic (power to 0.1 W, back after RX); TOT row in the TX panel and the state file.
 13. Scope panel: each row on the radio (VBW, averaging, waveform, colours, max hold,

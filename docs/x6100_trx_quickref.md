@@ -314,6 +314,9 @@ stays. The SWR trip is off during the scan (it measures).
 - TX timeout (TX panel, `tot`: off, 1, 3, 5 min; 3 out of the box): our PTT (key, CAT) drops;
   a TX keyed outside Linux (hand mic, VOX) cannot be dropped: its power goes to the
   minimum (0.1 W) until the baseband is back in RX
+- a refusal or trip (OUT OF BAND, TX TIMEOUT, SWR HIGH, ...) shows on the scope for 10 s
+  (or until the next TX); after a power cut (TOT on hand mic / VOX, stuck TX) 10 s from
+  the end of the cut (verified 2026-10-27: TOT drops the PTT key TX; hand mic stays keyed)
 - SWR above 3.0 for 300 ms drops TX
 - any key except PTT and F1-F5 drops a latched TX; tune aborts on any key
 - hand mic PTT keys the baseband directly; the display follows the TX flag. It does

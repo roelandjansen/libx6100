@@ -110,6 +110,7 @@ static const int g_tot_min[4] = { 0, 1, 3, 5 };	/* TX timeout (TX panel TOT): of
 #define TUNE_TIMEOUT_MS	20000
 #define TUNE_SHOW_MS	4000	/* TUNED result stays on screen */
 #define TXPWR_DEF	50	/* 0.1 W units */
+#define WARN_MS		10000	/* a TX refusal / trip note stays this long (longer while a power cut lasts) */
 #define TXPWR_MAX	100
 
 typedef enum
@@ -286,7 +287,7 @@ typedef struct
 	double tune_swr;
 	x6100_atu_t atu_last;	/* network of the last tune (tune panel); memories: g_atum */
 	bool atu_last_valid;
-	const char *warn;	/* last TX refusal / trip reason, shown until next TX */
+	const char *warn;	/* last TX refusal / trip reason, on the scope for WARN_MS or until the next TX */
 
 	//
 	// Spectrum scope
@@ -6484,7 +6485,7 @@ overlays:
 	}
 
 	//
-	// Last TX refusal or trip, until the next TX
+	// Last TX refusal or trip, for WARN_MS or until the next TX
 	//
 	if (rx->warn != NULL) {
 		int tw = x6100_lcd_text_width(rx->warn, 2);
@@ -9293,6 +9294,20 @@ int main(int argc, char **argv)
 		// Keyer panel after 10 s
 		if (rx.kedit && t - rx.kedit_since >= 10000) {
 			rx.kedit = false;
+			dirty = true;
+		}
+
+		// TX refusal / trip note: gone WARN_MS after it was set, or after the power cut it
+		// reports (TOT on hand mic / VOX, stuck TX) has ended
+		static const char *warn_seen;
+		static uint64_t warn_at;
+
+		if (rx.warn != warn_seen || rx.tot_cut) {
+			warn_seen = rx.warn;
+			warn_at = t;
+		} else if (rx.warn != NULL && t - warn_at >= WARN_MS) {
+			rx.warn = NULL;
+			warn_seen = NULL;
 			dirty = true;
 		}
 
