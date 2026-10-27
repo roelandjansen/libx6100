@@ -320,8 +320,11 @@ stays. The SWR trip is off during the scan (it measures).
   failed one stays pending for the next pass; the whole register block goes out every
   second, after every un-key and after a write error; if the baseband is still in TX
   0.3-2 s after an un-key (up to 10 s after an error) the block goes out every 250 ms.
-  Each event is a console line. Quits after 2 s of failures
-  (the baseband keeps its last state, so audio continues)
+  Each event is a console line. Still in TX 2 s into a watch armed by a write error:
+  power to the minimum (0.1 W) until the baseband is in RX (`TX STUCK: POWER MIN`).
+  After 2 s of failed writes: our TX drops, new TX is refused (`I2C ERROR`) and
+  x6100_trx keeps trying instead of quitting (nobody would send the PTT off); on
+  recovery all registers go out again
 
 ## Birdies
 

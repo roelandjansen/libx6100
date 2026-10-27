@@ -66,7 +66,9 @@ Built, not yet tried on the radio (2026-10-25):
   state, console `edge` / `fixedge`, CI-V 27 16 / 27 1E (host tests pass)
 - lost I2C writes (2026-10-27): a failed write resent at once (3 tries, the rest of the
   block still goes out), the whole register block after every un-key and write error,
-  stuck-TX watch after an un-key; TX timeout off / 1 / 3 / 5 min in the TX panel (`tot`)
+  stuck-TX watch after an un-key; TX timeout off / 1 / 3 / 5 min in the TX panel (`tot`); later the
+  same day: power to the minimum on a TX stuck after a write error, no quit on I2C
+  failures (TX dropped and refused, still trying)
 - scope panel (F1 long, 2026-10-27; the CENTER / FIX family switch is its MODE row): VBW,
   averaging, waveform type, max hold, colours of fill / line / max hold (R, G, B), waterfall
   on / off, speed, size and peak level, max hold off / decay / 10 s / on, center type

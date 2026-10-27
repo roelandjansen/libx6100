@@ -55,9 +55,9 @@ Status: 2026-10-27 (v0.13.0). Summary and next steps: `STATUS.md`.
   in TX 0.3-2 s after an un-key; TOT off / 1 / 3 / 5 min (TX panel), hand mic / VOX TX
   to 0.1 W at the timeout. To check: the console lines on a band change NAK, normal
   un-keys without the stuck-TX line, TOT 1 min with the PTT key, CAT and the hand mic.
-  Open: a power cut 2 s after a stuck TX that follows a write error (OpenX6X00
-  tx_watch_power); x6100_trx quits after 2 s of I2C failures, also while keyed (the
-  baseband keeps its state): keep trying with PTT off instead?
+  Since 2026-10-27 evening (not tried): power to the minimum when the baseband stays in
+  TX 2 s into a watch armed by a write error (OpenX6X00 tx_watch_power); after 2 s of
+  I2C failures TX drops and is refused, x6100_trx keeps trying instead of quitting.
 - Fixed scope edges (IC-705 style, built 2026-10-27, not tried on the radio): F2 / F2
   long in FIX and SCROLL-F, the scope label, a band change moves the window, edges kept
   over a restart; wfview fixed edge window (27 16 / 27 1E set and read), a 200 kHz edge

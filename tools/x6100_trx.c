@@ -421,6 +421,7 @@ static bool g_ext;
 static int g_cat_baud;		/* CI-V baud, 0 = no CAT, CAT_PTY: conf token cat, or --cat */
 
 #define CAT_PTY		(-1)		/* g_cat_baud: CI-V on a pseudo-terminal instead, at any speed */
+static bool g_i2c_down;		/* 2 s of failed I2C writes: TX dropped and refused, still trying */
 static int g_civ_addr = X6100_CIV_ADDR_IC705;	/* conf token civaddr: a4 (IC-705) or 61 (X6100 rig file) */
 static char g_ntp_server[64];	/* conf token ntp <server> | off; empty = ntp.conf or pool.ntp.org */
 static int g_bright;		/* backlight level, % (10-100); 0 = leave as the OS set it */
@@ -1075,6 +1076,11 @@ static bool tx_allowed(rx_t *rx)
 
 	if (bscan_running()) {
 		rx->warn = "BIRDIE SCAN";
+		return false;
+	}
+
+	if (g_i2c_down) {
+		rx->warn = "I2C ERROR";
 		return false;
 	}
 
@@ -9026,6 +9032,8 @@ int main(int argc, char **argv)
 	bool force_refresh = false;	/* whole register block on the next pass */
 	uint64_t watch_from = 0;	/* stuck-TX watch armed from .. until (ms) */
 	uint64_t watch_until = 0;
+	bool watch_err = false;		/* the watch was armed by a write error */
+	uint64_t stuck_since = 0;	/* baseband in TX inside the watch since (ms) */
 	uint64_t last_force = 0;
 	uint64_t last_refresh = now_ms();
 	uint64_t last_meter = last_refresh;
@@ -9316,15 +9324,35 @@ int main(int argc, char **argv)
 			force_refresh = true;
 			watch_from = t + 300;	/* the baseband takes a moment to drop TX */
 			watch_until = t + 2000;
+			watch_err = false;
 		}
 
 		was_keyed = keyed;
 
-		if (rx.bb_tx && !keyed && t >= watch_from && t < watch_until && t - last_force >= 250) {
-			if (!force_refresh)
-				fprintf(stderr, "\ni2c: baseband still in TX after un-key, registers sent again\n");
+		//
+		// Still in TX 2 s into a watch armed by a write error (OpenX6X00 tx_watch_power):
+		// the power goes to the minimum until the baseband is in RX again (as the TX
+		// timeout does for a TX we cannot drop)
+		//
+		if (rx.bb_tx && !keyed && t >= watch_from && t < watch_until) {
+			if (stuck_since == 0)
+				stuck_since = t;
 
-			force_refresh = true;
+			if (t - last_force >= 250) {
+				if (!force_refresh)
+					fprintf(stderr, "\ni2c: baseband still in TX after un-key, registers sent again\n");
+
+				force_refresh = true;
+			}
+
+			if (watch_err && !rx.tot_cut && t - stuck_since >= 2000) {
+				rx.tot_cut = true;
+				rx.warn = "TX STUCK: POWER MIN";
+				fprintf(stderr, "\ni2c: baseband in TX for 2 s after a write error, power to minimum\n");
+				changed = true;
+			}
+		} else {
+			stuck_since = 0;
 		}
 
 		if (rx.tuning && t - rx.tune_since >= TUNE_TIMEOUT_MS) {
@@ -9367,23 +9395,32 @@ int main(int argc, char **argv)
 			force_refresh = true;
 			watch_from = t;
 			watch_until = t + 10000;
+			watch_err = true;
 		}
 
 		//
 		// A single NAK happens (seen on a band change); the registers stay pending
-		// and go out on the next pass. Give up only after 2 s of failures.
+		// and go out on the next pass. After 2 s of failures: our TX drops (PTT off is
+		// then pending too) and x6100_trx keeps trying, it does not quit: quitting
+		// while keyed would leave nobody to send the PTT off
 		//
 		if (rc < 0) {
 			if (i2c_fails++ == 0)
 				i2c_fail_since = t;
 
-			if (t - i2c_fail_since >= 2000) {
-				fprintf(stderr, "\ni2c: %s, %u failures in 2 s, giving up\n", strerror(-rc), i2c_fails);
-				break;
+			if (!g_i2c_down && t - i2c_fail_since >= 2000) {
+				fprintf(stderr, "\ni2c: %s, %u failures in 2 s: TX dropped, still trying\n", strerror(-rc), i2c_fails);
+				tx_drop(&rx, "I2C ERROR");
+				g_send.repeat = false;
+				g_i2c_down = true;
+				changed = true;
 			}
 		} else if (i2c_fails > 0) {
-			fprintf(stderr, "\ni2c: recovered after %u failed write(s)\n", i2c_fails);
+			fprintf(stderr, "\ni2c: recovered after %u failed write(s) in %.1f s\n", i2c_fails,
+				(double) (t - i2c_fail_since) / 1000.0);
 			i2c_fails = 0;
+			g_i2c_down = false;
+			force_refresh = true;	/* everything again */
 		}
 
 		while ((rc = x6100_flow_read(&flow, &frame)) > 0) {
