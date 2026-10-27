@@ -119,8 +119,9 @@ Built, not yet tried on the radio (2026-10-25):
 12. Lost I2C writes and TX timeout. TOT verified 2026-10-27 (1 min): PTT key TX drops;
     hand mic TX: TX enable off stops it at once, it stays off with the mic PTT held, a key
     ends the block and the next mic PTT transmits (the mic PTT itself cannot, unseen by
-    Linux). Still open: CAT PTT timeout (4.2), console lines on a NAK (band change), no
-    stuck-TX line on normal un-keys, TOT row in the state file.
+    Linux). 4.4 clean 2026-10-27: no i2c lines on PTT / CAT / tune / split un-keys, band
+    changes or the hand mic. Still open: CAT PTT timeout (4.2), the TOT row in the state
+    file.
 13. Scope panel: each row on the radio (VBW, averaging, waveform, colours, max hold,
     waterfall off / speed / size / peak level, center type, scope during TX off), the
     audio scope AF rows (own colours etc.), values back after a restart.
