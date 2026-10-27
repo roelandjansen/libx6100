@@ -296,12 +296,13 @@ messages and the WAV files.
 
 ## SWR scan (APP)
 
-APP long, or APP and MFK push (console: `swrscan`): a 1 W NFM carrier stepped over the
-allocation segment the VFO is in (inside its band, region table), 41 points of 300 ms,
-the SWR read in the second half of each; about 12 s. The curve replaces the RF scope
+APP long, or APP and MFK push (console: `swrscan`): the baseband's own scan carrier
+(register 12 `swrscan` 0x10 in AM at 5 W, no PTT and no microphone, as R1CBU's x6100_gui
+keys it) stepped over the allocation segment the VFO is in (inside its band, region
+table), 41 points of 300 ms, the SWR read in the second half of each; about 12 s. The curve replaces the RF scope
 (SWR 1 at the bottom, 4 at the top, grid at 1.5 / 2 / 3, red above 3) with the lowest
 point marked, until a key. Any key or the PTT key stops the scan; the curve so far
-stays. The SWR trip is off during the scan (it measures); the 1 W limit protects.
+stays. The SWR trip is off during the scan (it measures).
 
 ## TX safety
 

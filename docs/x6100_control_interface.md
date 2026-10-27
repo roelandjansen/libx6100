@@ -89,14 +89,37 @@ Gaps 16, 18–19, 26, 30–32, 35–40, 52, 54: unknown.
 | Bit mask  | Meaning |
 |-----------|---------|
 | `0x00002` | split |
-| `0x00008` | voice rec: codec plays on the speaker instead of RX audio (local playback); must not be set for TX |
-| `0x00010` | SWR scan |
+| `0x00008` | voice rec: codec plays on the speaker instead of RX audio (local playback); must not be set for TX. x6100_gui also sets it (with both mic gains at 0) while it records a voice message from the codec capture: the capture then likely carries the microphone (see below) |
+| `0x00010` | SWR scan: the baseband keys its own carrier, no PTT (see below) |
 | `0x01000` | ATU enable |
 | `0x02000` | ATU tune start |
 | `0x04000` | codec TX ("modem"): key TX with the R16 codec playback as audio (FT8, voice messages); stock IAP also uses it with xmodem |
 | `0x08000` | calibration (after STM32 update) |
 | `0x10000` | power off |
 | `0x40000` | PTT |
+
+### SWR scan and voice record flags in R1CBU's x6100_gui (traced 2026-10-27)
+
+Read from x6100_gui (strijar/x6100_gui 3f009c4, LGPL-2.1, `radio.c`, `dialog_swrscan.c`,
+`audio.c`, `dialog_msg_voice.c`) and X6100Control (gdyuldin, `control.c`); no code taken.
+
+SWR scan (`radio_start_swrscan`, `dialog_swrscan.c`):
+
+1. VFO mode AM, TX power 5 W, then register 12 `0x10` on. No PTT bit: the flag keys
+   the carrier.
+2. Every flow packet: its `vswr` (x 0.1) is the SWR at the frequency in use; then the
+   frequency moves one step. 50 steps over a span centred on the VFO (50 / 100 / 200 /
+   500 kHz, default 200 kHz), 5-point smoothing, linear or log scale; it loops until
+   stopped. The TX flag of the packet is not checked.
+3. Stop: `0x10` off, TX power back, the VFO restored from a memory saved at the start.
+
+x6100_trx (APP, SWR scan) keys the same way: AM, 5 W, `0x10`, with 300 ms steps over
+the allocation segment of the VFO.
+
+Voice record (`audio_play_en`): both mic gains (register 20) to 0 and `0x08` on, for
+local playback and for recording; while recording, x6100_gui writes the codec capture
+samples to the file. With the gains at 0 the TX path stays quiet, so the capture most
+likely carries the microphone when `0x08` is set (not measured here).
 
 ### Modes (registers 4 / 10)
 

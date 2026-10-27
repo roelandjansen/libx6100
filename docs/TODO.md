@@ -85,9 +85,11 @@ Status: 2026-10-27 (v0.13.0). Summary and next steps: `STATUS.md`.
   and level against ALC (USB tone, -10 dBFS), voice WAV in LSB / AM / NFM (codec TX is
   verified in USB / USB-D only), the turnaround (100 ms silence first), repeat, stop by
   key / PTT / TOT; SWR scan on a dummy load and an antenna, the step time (300 ms) and
-  whether NFM on PTT is a clean carrier; CI-V 17 from a logger (built 2026-10-27). Then:
-  recording a voice message on the radio (register 12 `voice_rec` 0x8 or the
-  mic path: unknown); the stock `swrscan` flag (0x10, trace the stock UI).
+  whether the swrscan flag keys at once (no TX flag needed); CI-V 17 from a logger. Then:
+  recording a voice message on the radio: x6100_gui records the codec capture with
+  register 12 `voice_rec` 0x8 on and both mic gains at 0, so the capture likely carries
+  the microphone then (measure: capture with 0x8, speak into each mic). The `swrscan`
+  flag: traced 2026-10-27 (x6100_control_interface.md), the scan now uses it.
 - RX / TX equaliser (baseband or liquid-dsp; GEN TX panel).
 - Digital modes on the radio (FT8, CW / RTTY decoder); CW / voice message memories.
 

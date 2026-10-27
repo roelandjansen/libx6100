@@ -977,7 +977,7 @@ static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 {
 	uint32_t low, high;
 	bool keyed = rx->ptt || rx->tuning || rx->bb_tx || rx->send != SEND_NONE
-		|| (ctl->sent[X6100_REG_FLAGS] & (X6100_FLAG_IPTT | X6100_FLAG_ATU_TUNE | X6100_FLAG_CODEC_TX));
+		|| (ctl->sent[X6100_REG_FLAGS] & (X6100_FLAG_IPTT | X6100_FLAG_ATU_TUNE | X6100_FLAG_CODEC_TX | X6100_FLAG_SWRSCAN));
 	uint32_t hz = keyed ? (rx->tx_hz_ovr != 0 ? rx->tx_hz_ovr : tx_hz(rx)) : rx_hz(rx);
 	x6100_mode_t mode = keyed ? (rx->tx_mode_ovr >= 0 ? (x6100_mode_t) rx->tx_mode_ovr : tx_mode(rx)) : rx->mode;
 
@@ -1054,7 +1054,8 @@ static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 static void apply_flags(x6100_ctl_t *ctl, const rx_t *rx)
 {
 	x6100_ctl_set(ctl, X6100_REG_FLAGS, 0);
-	x6100_set_ptt(ctl, rx->ptt || rx->send == SEND_SCAN);	/* the scan: an NFM carrier */
+	x6100_set_ptt(ctl, rx->ptt);
+	x6100_ctl_update(ctl, X6100_REG_FLAGS, X6100_FLAG_SWRSCAN, rx->send == SEND_SCAN ? X6100_FLAG_SWRSCAN : 0);
 	x6100_set_codec_tx(ctl, rx->codec_tx);
 	x6100_atu_enable(ctl, rx->atu_on || rx->tuning);
 	x6100_atu_tune(ctl, rx->tuning);
@@ -2170,15 +2171,16 @@ static bool msg_fill(sender_t *s, int16_t *buf)
 }
 
 //
-// SWR scan (APP): a 1 W NFM carrier stepped over the allocation the VFO is in (inside
-// its band), SCAN_STEPS points, SCAN_STEP_MS each; the SWR read in the second half
-// of each step. The curve stays on the scope until a key is pressed.
+// SWR scan (APP): the baseband's own scan carrier (register 12 swrscan 0x10, in AM, no
+// PTT and no microphone), as R1CBU's x6100_gui keys it, stepped over the allocation the
+// VFO is in (inside its band): SCAN_STEPS points, SCAN_STEP_MS each, the SWR read in the
+// second half of each step. The curve stays on the scope until a key is pressed.
 //
 
 #define SCAN_STEPS	41
 #define SCAN_STEP_MS	300
 #define SCAN_SETTLE_MS	150
-#define SCAN_PWR	10	/* 0.1 W units */
+#define SCAN_PWR	50	/* 0.1 W units: 5 W, as x6100_gui sets it */
 
 typedef struct
 {
@@ -2230,7 +2232,7 @@ static bool scan_start(rx_t *rx)
 	rx->send = SEND_SCAN;
 	rx->send_since = g_scan.step_at;
 	rx->tx_hz_ovr = scan_hz(0);
-	rx->tx_mode_ovr = X6100_MODE_NFM;
+	rx->tx_mode_ovr = X6100_MODE_AM;	/* the baseband's scan carrier, as x6100_gui sets it */
 	rx->tx_pwr_ovr = SCAN_PWR;
 	rx->warn = NULL;
 
@@ -2239,11 +2241,11 @@ static bool scan_start(rx_t *rx)
 
 //
 // Every pass of the main loop: feed the message audio, end it, repeat it; step the
-// SWR scan. tx / swr: the baseband TX flag and SWR from the last flow frame.
+// SWR scan. swr: the SWR from the last flow frame.
 // Returns true when the screen changes.
 //
 
-static bool send_poll(rx_t *rx, uint64_t t, bool tx, double swr)
+static bool send_poll(rx_t *rx, uint64_t t, double swr)
 {
 	sender_t *s = &g_send;
 	static int16_t buf[SEND_PERIOD * 2];
@@ -2291,7 +2293,7 @@ static bool send_poll(rx_t *rx, uint64_t t, bool tx, double swr)
 	}
 
 	if (rx->send == SEND_SCAN) {
-		if (tx && t - g_scan.step_at >= SCAN_SETTLE_MS) {
+		if (t - g_scan.step_at >= SCAN_SETTLE_MS) {	/* x6100_gui reads every packet, TX flag or not */
 			g_scan.acc += swr;
 			g_scan.acc_n++;
 		}
@@ -5191,7 +5193,7 @@ static void draw_app_panel(x6100_lcd_t *lcd, const rx_t *rx)
 
 	x6100_lcd_fill(lcd, px + 6, y - 3, pw - 12, 19, sel);
 	x6100_lcd_text(lcd, px + 14, y, 2, "SWR SCAN", white);
-	snprintf(v, sizeof(v), "%d.%d W NFM, %d POINTS", SCAN_PWR / 10, SCAN_PWR % 10, SCAN_STEPS);
+	snprintf(v, sizeof(v), "%d W AM, %d POINTS", SCAN_PWR / 10, SCAN_STEPS);
 	x6100_lcd_text(lcd, px + pw - 12 - x6100_lcd_text_width(v, 2), y, 2, v, dim);
 	x6100_lcd_text(lcd, px + 14, y + 21, 1, "THE BAND SEGMENT THE VFO IS IN; THE CURVE STAYS UNTIL A KEY", dim);
 	(void) rx;
@@ -9233,7 +9235,7 @@ int main(int argc, char **argv)
 		}
 
 		// Messages and the SWR scan: audio, end, repeat, scan steps
-		if (send_poll(&rx, t, scr.tx, scr.swr))
+		if (send_poll(&rx, t, scr.swr))
 			changed = true;
 
 		// Scope panel after 10 s

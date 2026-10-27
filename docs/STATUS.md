@@ -73,7 +73,8 @@ Built, not yet tried on the radio (2026-10-25):
   (filter / carrier), scope during TX, as the IC-7851 scope set menu; state file,
   console, CI-V 27 1B / 1C / 1D
 - messages (MSG, 2026-10-27): M1-M8 in messages.conf, CW (USB tone, carrier on the dial)
-  or voice (WAV), sent with codec TX; MSG long repeats; SWR scan (APP): 1 W NFM carrier
+  or voice (WAV), sent with codec TX, also from CI-V 17; MSG long repeats; SWR scan (APP):
+  the swrscan flag (AM, 5 W, as x6100_gui)
   over the band segment, 41 points, curve on the scope; host tests of the Morse timing,
   the WAV reader and the CW level
 - wfview rig file for the X6100 (2026-10-27): `contrib/wfview/X6100.rig` from the IC-705
@@ -121,7 +122,7 @@ Built, not yet tried on the radio (2026-10-25):
 14. Messages: a CW message in CW mode (heard on another receiver on the dial, keying,
     ALC at -10 dBFS), a voice WAV in USB and LSB, repeat, stop by key / PTT / TOT.
 15. SWR scan: on a dummy load (flat 1.0-1.2) and on an antenna, against the stock UI's
-    SWR scan; the 1 W carrier and the curve.
+    SWR scan; the carrier (AM, 5 W, swrscan flag) and the curve.
 
 ## Next steps (suggested order)
 
