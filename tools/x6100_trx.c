@@ -192,6 +192,8 @@ typedef struct
 	int dedit_par;		/* selected value, index into g_dsp */
 	uint64_t dedit_since;	/* last panel activity, for the idle close */
 	uint32_t band_freq[11];
+	uint32_t gen_freq;	/* GEN band (outside the ham bands): last frequency there */
+	x6100_mode_t gen_mode;	/* and its mode */
 
 	//
 	// VFO B: the other VFO (A/B key swaps, A/B long = A=B); on_b: B is the one in use
@@ -1196,6 +1198,8 @@ static void set_freq(rx_t *rx, int64_t freq)
 
 	if (rx->band >= 0)
 		rx->band_freq[rx->band] = rx->freq;
+	else
+		rx->gen_freq = rx->freq;	/* GEN band: the last frequency outside the ham bands */
 }
 
 //
@@ -1533,20 +1537,24 @@ static void xpar_defaults(rx_t *rx)
 		*xpar_value(rx, i) = g_xpar[i].def;
 }
 
+//
+// Band keys: 160m .. 6m, then GEN (everything outside the ham bands, as Icom's GENE),
+// then 160m again. GEN keeps the last frequency used outside the bands and its mode.
+//
+
 static void band_step(rx_t *rx, int dir)
 {
-	int band = rx->band;
+	int band = rx->band < 0 ? BAND_COUNT : rx->band;	/* BAND_COUNT: GEN */
 
-	if (band < 0) {
-		band = 0;
+	if (rx->band < 0)
+		rx->gen_mode = rx->mode;			/* leaving GEN: keep its mode */
 
-		while (band < BAND_COUNT - 1 && g_bands[band].high < rx->freq)
-			band++;
+	band = (band + dir + BAND_COUNT + 1) % (BAND_COUNT + 1);
 
-		if (dir < 0 && g_bands[band].low > rx->freq && band > 0)
-			band--;
-	} else {
-		band = (band + dir + BAND_COUNT) % BAND_COUNT;
+	if (band == BAND_COUNT) {
+		set_freq(rx, rx->gen_freq);
+		rx->mode = rx->gen_mode;
+		return;
 	}
 
 	set_freq(rx, rx->band_freq[band]);
@@ -2833,22 +2841,9 @@ static bool on_key(rx_t *rx, int key)
 		rx->atu_on = !rx->atu_on;
 		break;
 	case X6100_KEY_F1:
-		// Short: toggle scroll within the current family (long press switches family)
-		switch (rx->scope) {
-		case SCOPE_CENTER:
-			rx->scope = SCOPE_CENTER_S;
-			break;
-		case SCOPE_CENTER_S:
-			rx->scope = SCOPE_CENTER;
-			break;
-		case SCOPE_FIX:
-			rx->scope = SCOPE_FIX_S;
-			break;
-		case SCOPE_FIX_S:
-			rx->scope = SCOPE_FIX;
-			break;
-		}
-
+		// Short: the next scope mode, CENTER -> SCROLL-C -> FIX -> SCROLL-F -> CENTER (long:
+		// scope panel); into FIX the window goes to the edge in use
+		spar_set(rx, SP_MODE, ((int) rx->scope + 1) % 4);
 		break;
 	case X6100_KEY_F3:	/* short: audio scope on / off; long: RF + audio side by side */
 		rx->ascope = rx->asplit ? false : !rx->ascope;
@@ -7034,6 +7029,27 @@ static bool console_line(rx_t *rx, char *line)
 			}
 		}
 
+		// GEN band memory: gen <Hz> <lsb|usb|cw|cwr|am|nfm>
+		if (strcasecmp(t, "gen") == 0) {
+			static const char *const names[] = { [X6100_MODE_LSB] = "lsb", [X6100_MODE_USB] = "usb",
+				[X6100_MODE_CW] = "cw", [X6100_MODE_CWR] = "cwr", [X6100_MODE_AM] = "am", [X6100_MODE_NFM] = "nfm" };
+			const char *fs = strtok(NULL, " \t\r\n"), *ms = fs == NULL ? NULL : strtok(NULL, " \t\r\n");
+			uint32_t f = fs == NULL ? 0 : (uint32_t) strtoul(fs, NULL, 10);
+			int m = -1;
+
+			for (int i = 0; ms != NULL && i < (int) (sizeof(names) / sizeof(names[0])); i++)
+				m = names[i] != NULL && strcasecmp(ms, names[i]) == 0 ? i : m;
+
+			if (f >= FREQ_MIN && f <= FREQ_MAX && m >= 0) {
+				rx->gen_freq = f;
+				rx->gen_mode = (x6100_mode_t) m;
+			} else {
+				fprintf(stderr, "\ngen <Hz> <lsb|usb|cw|cwr|am|nfm>\n");
+			}
+
+			continue;
+		}
+
 		// TX meter on the dial (F4): meter po|swr|alc
 		if (strcasecmp(t, "meter") == 0) {
 			const char *v = strtok(NULL, " \t\r\n");
@@ -7564,6 +7580,8 @@ static void state_save(const rx_t *rx)
 
 	for (int i = 0; i < BAND_COUNT; i++)
 		fprintf(fp, "band %s %u\n", g_bands[i].name, (unsigned) rx->band_freq[i]);
+
+	fprintf(fp, "gen %u %s\n", (unsigned) rx->gen_freq, modes[rx->band < 0 ? rx->mode : rx->gen_mode]);	/* GEN band */
 
 	for (int i = 0; i < g_natum; i++)
 		fprintf(fp, "atumem %u %u %u %u\n", (unsigned) g_atum[i].hz, g_atum[i].net.l, g_atum[i].net.c, g_atum[i].net.s);
@@ -8952,6 +8970,9 @@ int main(int argc, char **argv)
 
 	for (int i = 0; i < BAND_COUNT; i++)
 		rx.band_freq[i] = g_bands[i].def;
+
+	rx.gen_freq = 10000000;		/* GEN band out of the box: 10 MHz time signal, AM */
+	rx.gen_mode = X6100_MODE_AM;
 
 	kpar_defaults(&rx);
 	xpar_defaults(&rx);

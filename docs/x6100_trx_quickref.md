@@ -32,7 +32,7 @@ Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
 | VOL knob | volume; push = mute | |
 | MFK knob | RF gain or TX power | |
 | MFK push | RF gain 100 / TX power 5.0 W | switch RF gain <-> TX power |
-| BAND- / BAND+ | previous / next band (last frequency per band kept) | |
+| BAND- / BAND+ | previous / next band (last frequency per band kept): 160m .. 6m, GEN, 160m; GEN is everything outside the ham bands (last frequency and mode there; 10.000 MHz AM out of the box; state `gen <Hz> <mode>`) | |
 | SSB / CW / AM-FM | USB <-> LSB / CW <-> CWR / AM <-> NFM | |
 | A/B | VFO A <-> B (frequency, mode, filter) | A=B: the other VFO takes the one in use |
 | PRE | preamp on / off | attenuator on / off (~12 dB) |
@@ -40,7 +40,7 @@ Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
 | DFL | notch on / off | DSP panel (NR, NB, notch levels) |
 | AGC | off / slow / fast / auto, per mode group | RIT / XIT panel |
 | V/M | memory panel (channels 1-99) | split on / off: RX on the VFO in use, TX on the other |
-| F1 | scroll on / off: CENTER <-> SCROLL-C, FIX <-> SCROLL-F | scope panel: mode, VBW, averaging, waveform, colours, waterfall (see Scope panel) |
+| F1 | next scope mode: CENTER -> SCROLL-C -> FIX -> SCROLL-F -> CENTER | scope panel: mode, VBW, averaging, waveform, colours, waterfall (see Scope panel) |
 | F2 | span ±48 / 24 / 12 / 6 / 3 / 1.5 kHz; FIX / SCROLL-F: next fixed edge 1-4; audio scope: 0-3 / 0-6 kHz | FIX / SCROLL-F: store the edge in use (see Fixed edges); else reference level: MFK turn = ±1 dB (±30), MFK push = RF <-> AF scope; F2 long, other key or 10 s idle closes |
 | F3 | audio scope on / off (RF <-> AF) | RF scope left (5/8) + audio scope right (3/8), on / off |
 | F4 | TX meter: PO / SWR / ALC | TX panel: mic, compressor, VOX, monitor, squelch, TX timeout |
