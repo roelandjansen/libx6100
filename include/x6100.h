@@ -33,6 +33,8 @@
 //
 #define X6100_FLOW_IQ_MIRRORED	1
 
+#define X6100_CTL_TRIES	3	/* one register write: tries before it stays pending */
+
 typedef struct
 {
 	int fd;
@@ -48,6 +50,14 @@ typedef struct
 	//
 	uint32_t want[X6100_REG_COUNT];
 	uint32_t sent[X6100_REG_COUNT];
+
+	//
+	// Write errors (a NAK): writes that went through on a resend, writes still
+	// pending after X6100_CTL_TRIES (the next sync sends them again). The caller reads
+	// and clears them
+	//
+	unsigned resent;
+	unsigned lost;
 } x6100_ctl_t;
 
 typedef struct __attribute__((__packed__))

@@ -103,7 +103,7 @@ static bool g_cat_log;	/* --cat-log: print CI-V frames in and out */
 #define PWR_OFF_MS	4000	/* PWR held this long: shut the radio down (as the stock UI) */
 #define REFRESH_MS	1000
 #define METER_MS	500
-#define TX_TIMEOUT_MS	180000
+static const int g_tot_min[4] = { 0, 1, 3, 5 };	/* TX timeout (TX panel TOT): off, 1, 3, 5 minutes */
 #define TX_TAP_MS	400
 #define SWR_LIMIT	3.0
 #define SWR_TRIP_MS	300
@@ -241,6 +241,9 @@ typedef struct
 	int moni;		/* TX monitor on / off */
 	int moni_lvl;		/* monitor level */
 	int sql;		/* squelch threshold, 0 = open */
+	int tot;		/* TX timeout, index into g_tot_min (0 = off) */
+	bool tot_cut;		/* TX timeout on a TX we cannot drop (hand mic, VOX): power 0 */
+	uint64_t bb_tx_since;	/* baseband in TX since (ms), 0 = in RX */
 	bool xedit;
 	int xedit_par;
 	uint64_t xedit_since;
@@ -1006,7 +1009,7 @@ static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 	x6100_set_filter(ctl, mode, low, high);
 	x6100_ctl_set(ctl, X6100_REG_RXVOL, rx->mute ? 0 : (uint32_t) rx->vol);
 	x6100_ctl_update(ctl, X6100_REG_RFG_TXPWR_FFTDEC, 0xFF, (uint32_t) rx->rfg);
-	x6100_set_txpwr(ctl, rx->txpwr / 10.0f);
+	x6100_set_txpwr(ctl, rx->tot_cut ? 0.0f : rx->txpwr / 10.0f);	/* TX timeout on hand mic / VOX TX */
 	x6100_cal_apply(ctl, cal, x6100_band_index(hz));
 
 	//
@@ -1386,7 +1389,7 @@ static void kpar_defaults(rx_t *rx)
 //
 
 enum { XP_MIC, XP_IMICG, XP_HMICG, XP_CMP, XP_CMPLVL, XP_VOX, XP_VOXG, XP_ANTIVOX, XP_VOXDLY,
-	XP_MONI, XP_MONILVL, XP_SQL, XPARS };
+	XP_MONI, XP_MONILVL, XP_SQL, XP_TOT, XPARS };
 
 static const kpar_t g_xpar[XPARS] = {
 	[XP_MIC] = { "MIC", "mic", 0, 2, 1, 2 },
@@ -1401,6 +1404,7 @@ static const kpar_t g_xpar[XPARS] = {
 	[XP_MONI] = { "MONITOR", "moni", 0, 1, 1, 1 },
 	[XP_MONILVL] = { "MONI LEVEL", "monilvl", 0, 100, 1, 30 },
 	[XP_SQL] = { "SQUELCH", "sql", 0, 100, 1, 0 },
+	[XP_TOT] = { "TX TIMEOUT", "tot", 0, 3, 1, 2 },
 };
 
 static const char *g_mic_tok[3] = { "int", "hand", "auto" };
@@ -1409,7 +1413,7 @@ static const char *g_cmp_tok[4] = { "", "1:2", "1:4", "1:8" };
 static int *xpar_value(rx_t *rx, int i)
 {
 	int *v[XPARS] = { &rx->micsel, &rx->imicg, &rx->hmicg, &rx->cmp, &rx->cmp_lvl, &rx->vox, &rx->voxg,
-		&rx->voxag, &rx->voxdly, &rx->moni, &rx->moni_lvl, &rx->sql };
+		&rx->voxag, &rx->voxdly, &rx->moni, &rx->moni_lvl, &rx->sql, &rx->tot };
 
 	return v[i];
 }
@@ -1428,6 +1432,8 @@ static void xpar_token(const rx_t *rx, int i, char *s, size_t n)
 		snprintf(s, n, "%s", g_mic_tok[v]);
 	else if (i == XP_CMPLVL)
 		snprintf(s, n, "%s", g_cmp_tok[v]);
+	else if (i == XP_TOT)
+		snprintf(s, n, "%s%.0d", v == 0 ? "off" : "", g_tot_min[v]);
 	else if (xpar_onoff(i))
 		snprintf(s, n, "%s", v ? "on" : "off");
 	else
@@ -1441,6 +1447,8 @@ static void xpar_text(const rx_t *rx, int i, char *s, size_t n)
 
 	if (i == XP_VOXDLY)
 		snprintf(s + strlen(s), n - strlen(s), " MS");
+	else if (i == XP_TOT && *xpar_value((rx_t *) rx, i) > 0)
+		snprintf(s + strlen(s), n - strlen(s), " MIN");
 
 	for (char *c = s; *c != '\0'; c++)	/* the panel font is upper case */
 		*c = (char) toupper((unsigned char) *c);
@@ -1460,6 +1468,11 @@ static int xpar_parse(int i, const char *vs)
 	} else if (i == XP_CMPLVL) {
 		for (int k = 1; k < 4; k++)
 			v = strcasecmp(vs, g_cmp_tok[k]) == 0 ? k : v;
+	} else if (i == XP_TOT) {
+		for (int k = 0; k < 4; k++)
+			v = strcasecmp(vs, "off") == 0 ? 0 : atoi(vs) == g_tot_min[k] && isdigit((unsigned char) vs[0]) ? k : v;
+
+		return v;
 	} else if (xpar_onoff(i)) {
 		v = strcasecmp(vs, "on") == 0 ? 1 : strcasecmp(vs, "off") == 0 ? 0 : -1;
 	}
@@ -5806,6 +5819,8 @@ static bool console_line(rx_t *rx, char *line)
 					fprintf(stderr, "\nmic: int, hand or auto\n");
 				else if (v < 0 && k == XP_CMPLVL)
 					fprintf(stderr, "\ncomplvl: 1:2, 1:4 or 1:8\n");
+				else if (v < 0 && k == XP_TOT)
+					fprintf(stderr, "\ntot: off, 1, 3 or 5 (minutes)\n");
 				else if (v < 0 && xpar_onoff(k))
 					fprintf(stderr, "\n%s: on or off\n", t);
 				else if (v < 0)
@@ -7793,6 +7808,11 @@ int main(int argc, char **argv)
 
 	uint64_t i2c_fail_since = 0;	/* first failed I2C write of a run, 0 = none */
 	unsigned i2c_fails = 0;
+	bool was_keyed = false;		/* our PTT or tune on the last pass */
+	bool force_refresh = false;	/* whole register block on the next pass */
+	uint64_t watch_from = 0;	/* stuck-TX watch armed from .. until (ms) */
+	uint64_t watch_until = 0;
+	uint64_t last_force = 0;
 	uint64_t last_refresh = now_ms();
 	uint64_t last_meter = last_refresh;
 	uint64_t last_disp = last_refresh;
@@ -8024,9 +8044,54 @@ int main(int argc, char **argv)
 			changed = true;
 		}
 
-		if (rx.ptt && t - rx.ptt_since >= TX_TIMEOUT_MS) {
+		//
+		// TX timeout (TX panel TOT): our PTT drops; a TX keyed outside Linux (hand mic,
+		// VOX) cannot be dropped, its power goes to the minimum until the baseband is in
+		// RX again
+		//
+		uint64_t tot_ms = (uint64_t) g_tot_min[rx.tot] * 60000u;
+
+		if (rx.ptt && tot_ms > 0 && t - rx.ptt_since >= tot_ms) {
 			tx_drop(&rx, "TX TIMEOUT");
 			changed = true;
+		}
+
+		if (rx.bb_tx && rx.bb_tx_since == 0)
+			rx.bb_tx_since = t;
+		else if (!rx.bb_tx)
+			rx.bb_tx_since = 0;
+
+		if (!rx.tot_cut && tot_ms > 0 && rx.bb_tx && !rx.ptt && !rx.tuning && t - rx.bb_tx_since >= tot_ms) {
+			rx.tot_cut = true;
+			rx.warn = "TX TIMEOUT";
+			fprintf(stderr, "\nTX timeout: baseband keyed from outside (hand mic, VOX), power to minimum\n");
+			changed = true;
+		} else if (rx.tot_cut && !rx.bb_tx) {
+			rx.tot_cut = false;
+			changed = true;
+		}
+
+		//
+		// Lost I2C writes (OpenX6X00 base_guard.h): the library resends a failed write
+		// at once; on top, the whole register block goes out again after every un-key
+		// and after a write error, and while the baseband stays in TX within 2 s of an
+		// un-key (10 s after an error), every 250 ms
+		//
+		bool keyed = rx.ptt || rx.tuning;
+
+		if (was_keyed && !keyed) {
+			force_refresh = true;
+			watch_from = t + 300;	/* the baseband takes a moment to drop TX */
+			watch_until = t + 2000;
+		}
+
+		was_keyed = keyed;
+
+		if (rx.bb_tx && !keyed && t >= watch_from && t < watch_until && t - last_force >= 250) {
+			if (!force_refresh)
+				fprintf(stderr, "\ni2c: baseband still in TX after un-key, registers sent again\n");
+
+			force_refresh = true;
 		}
 
 		if (rx.tuning && t - rx.tune_since >= TUNE_TIMEOUT_MS) {
@@ -8049,11 +8114,26 @@ int main(int argc, char **argv)
 		//
 		// Full refresh resends register 17 too: not while the tuner is searching
 		//
-		if (t - last_refresh >= REFRESH_MS && !rx.tuning) {
+		if ((t - last_refresh >= REFRESH_MS || force_refresh) && !rx.tuning) {
 			rc = x6100_ctl_refresh(&ctl);
 			last_refresh = t;
+
+			if (force_refresh)
+				last_force = t;
+
+			force_refresh = false;
 		} else {
 			rc = x6100_ctl_sync(&ctl);
+		}
+
+		if (ctl.resent > 0 || ctl.lost > 0) {
+			fprintf(stderr, "\ni2c: %u write(s) went through on a resend, %u still pending; all registers again\n",
+				ctl.resent, ctl.lost);
+			ctl.resent = 0;
+			ctl.lost = 0;
+			force_refresh = true;
+			watch_from = t;
+			watch_until = t + 10000;
 		}
 
 		//

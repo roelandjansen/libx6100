@@ -64,6 +64,9 @@ Built, not yet tried on the radio (2026-10-25):
 - fixed edges, IC-705 style (2026-10-27): 4 per range on the 12 IC-705 ranges, at most
   96 kHz; F2 in FIX / SCROLL-F picks one, F2 long stores the window round the VFO;
   state, console `edge` / `fixedge`, CI-V 27 16 / 27 1E (host tests pass)
+- lost I2C writes (2026-10-27): a failed write resent at once (3 tries, the rest of the
+  block still goes out), the whole register block after every un-key and write error,
+  stuck-TX watch after an un-key; TX timeout off / 1 / 3 / 5 min in the TX panel (`tot`)
 - wfview rig file for the X6100 (2026-10-27): `contrib/wfview/X6100.rig` from the IC-705
   one by `mkrig.sh`; `civaddr 61` in the settings file makes x6100_trx an X6100 on
   address 61 (default stays A4 / IC-705); 19 00 answered to a broadcast. The Icom way:
@@ -100,20 +103,21 @@ Built, not yet tried on the radio (2026-10-25):
 11. wfview with X6100.rig: `civaddr 61`, the rig file in wfview, connect on 61 and on
     auto; NG answers do not upset it; scope, fixed edges, memories with names and a
     split TX side (also with the IC-705 file on A4), transceive.
+12. Lost I2C writes and TX timeout: console lines on a NAK (band change), no stuck-TX
+    line on normal un-keys; TOT 1 min with the PTT key, CAT PTT (drops) and the hand
+    mic (power to 0.1 W, back after RX); TOT row in the TX panel and the state file.
 
 ## Next steps (suggested order)
 
 1. Radio checks above.
-2. Lost I2C writes (safety): resend a failed write, and the register block after every
-   un-key, as OpenX6X00 does (TODO).
-3. Network CAT and audio: wfview's wfserver on the radio over `cat pty` (decided
+2. Network CAT and audio: wfview's wfserver on the radio over `cat pty` (decided
    2026-10-27): build it for the R16 (Qt5, opus; buildroot package), run, measure.
    Own Icom LAN server only as the fallback (`x6100_netaudio_design.md`).
-4. liquid-dsp in use: network audio / RADE (Icom LAN server design in
+3. liquid-dsp in use: network audio / RADE (Icom LAN server design in
    `x6100_netaudio_design.md`), recordings, RX / TX equaliser.
-5. Measurements: S-meter calibration, codec level against ALC.
-6. CTCSS for the repeaters (see TODO: no tone encoder known, mic bypasses Linux).
-7. Later: own buildroot, self-contained (now the IU1WXY image is the base): a full image
+4. Measurements: S-meter calibration, codec level against ALC.
+5. CTCSS for the repeaters (see TODO: no tone encoder known, mic bypasses Linux).
+6. Later: own buildroot, self-contained (now the IU1WXY image is the base): a full image
    and an applications-only package (TODO, Image and distribution).
 
 ## Working notes

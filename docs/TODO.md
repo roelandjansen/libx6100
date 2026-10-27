@@ -49,6 +49,15 @@ Status: 2026-10-27 (v0.13.0). Summary and next steps: `STATUS.md`.
 - S-meter calibration (signal generator): SMETER_CAL_DB is provisional (-21: -15 from
   an IC-7851 comparison, then 6 dB lower); also the overload point with PRE / ATT.
 - Codec level vs ALC test (x6100_tx codec at -40 / -30 / -20 dBFS).
+- Lost I2C writes and TX timeout (built 2026-10-27, not tried on the radio): a failed
+  write is resent at once (3 tries, the rest of the block still goes out), the whole
+  block after every un-key and write error, and every 250 ms while the baseband stays
+  in TX 0.3-2 s after an un-key; TOT off / 1 / 3 / 5 min (TX panel), hand mic / VOX TX
+  to 0.1 W at the timeout. To check: the console lines on a band change NAK, normal
+  un-keys without the stuck-TX line, TOT 1 min with the PTT key, CAT and the hand mic.
+  Open: a power cut 2 s after a stuck TX that follows a write error (OpenX6X00
+  tx_watch_power); x6100_trx quits after 2 s of I2C failures, also while keyed (the
+  baseband keeps its state): keep trying with PTT off instead?
 - Fixed scope edges (IC-705 style, built 2026-10-27, not tried on the radio): F2 / F2
   long in FIX and SCROLL-F, the scope label, a band change moves the window, edges kept
   over a restart; wfview fixed edge window (27 16 / 27 1E set and read), a 200 kHz edge
@@ -144,9 +153,6 @@ under GEN until a better key turns up.
 
 - Baseband (STM32) clean-room firmware: `x6100_baseband_handover.md`.
 - RX IQ balance (registers 48 / 49): `tools/x6100_iqcal.c`.
-- Lost I2C writes (OpenX6X00 base_guard.h: a NAK lost a PTT off, radio keyed for 8-10 s):
-  check what libx6100 does after a failed write (x6100_trx counts and reports them); resend
-  at once, and the whole register block after every un-key, as OpenX6X00 does.
 - Hand mic PTT is invisible to Linux (cannot abort a tune); evtest / GPIO not checked.
 - Band edge markers on the scope from the region table (`region`, done: r1 / r2 / r3 / nl;
   TX check uses it; scope markers done 2026-10-26, fixed edges 2026-10-27). Next: signal edges in the check, N registration, more countries.

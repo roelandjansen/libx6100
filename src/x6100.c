@@ -179,27 +179,49 @@ uint32_t x6100_ctl_get(const x6100_ctl_t *ctl, x6100_reg_t reg)
 	return (unsigned) reg < X6100_REG_COUNT ? ctl->want[reg] : 0;
 }
 
+// One write, sent again at once on a NAK (OpenX6X00 base_guard.h: a lost write kept the
+// radio keyed for seconds); counted in resent / lost
+static int ctl_write(x6100_ctl_t *ctl, uint16_t addr, const void *buf, size_t len)
+{
+	int rc = 0;
+
+	for (int i = 0; i < X6100_CTL_TRIES; i++) {
+		if ((rc = x6100_i2c_write(ctl->i2c, addr, buf, len)) == 0) {
+			ctl->resent += i > 0;
+			return 0;
+		}
+	}
+
+	ctl->lost++;
+
+	return rc;
+}
+
+// Changed registers in order; a failed one stays pending (sent unchanged) and the rest
+// still go out. Returns the first error
 int x6100_ctl_sync(x6100_ctl_t *ctl)
 {
+	int err = 0;
+
 	for (int n = 0; n < X6100_REG_COUNT; n++) {
 		if (ctl->want[n] == ctl->sent[n])
 			continue;
 
 		uint32_t val = ctl->want[n];
-		int rc = x6100_i2c_write(ctl->i2c, X6100_REG_ADDR(n), &val, sizeof(val));
+		int rc = ctl_write(ctl, X6100_REG_ADDR(n), &val, sizeof(val));
 
 		if (rc < 0)
-			return rc;
-
-		ctl->sent[n] = val;
+			err = err < 0 ? err : rc;
+		else
+			ctl->sent[n] = val;
 	}
 
-	return 0;
+	return err;
 }
 
 int x6100_ctl_refresh(x6100_ctl_t *ctl)
 {
-	int rc = x6100_i2c_write(ctl->i2c, X6100_REG_ADDR(0), ctl->want, sizeof(ctl->want));
+	int rc = ctl_write(ctl, X6100_REG_ADDR(0), ctl->want, sizeof(ctl->want));
 
 	if (rc == 0)
 		memcpy(ctl->sent, ctl->want, sizeof(ctl->sent));

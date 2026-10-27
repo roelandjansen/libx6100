@@ -43,7 +43,7 @@ Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
 | F1 | scroll on / off: CENTER <-> SCROLL-C, FIX <-> SCROLL-F | CENTER family <-> FIX family |
 | F2 | span ±48 / 24 / 12 / 6 / 3 / 1.5 kHz; FIX / SCROLL-F: next fixed edge 1-4; audio scope: 0-3 / 0-6 kHz | FIX / SCROLL-F: store the edge in use (see Fixed edges); else reference level: MFK turn = ±1 dB (±30), MFK push = RF <-> AF scope; F2 long, other key or 10 s idle closes |
 | F3 | audio scope on / off (RF <-> AF) | RF scope left (5/8) + audio scope right (3/8), on / off |
-| F4 | TX meter: PO / SWR / ALC | TX panel: mic, compressor, VOX, monitor, squelch |
+| F4 | TX meter: PO / SWR / ALC | TX panel: mic, compressor, VOX, monitor, squelch, TX timeout |
 | F5 | filter FIL1 / FIL2 / FIL3 | filter panel |
 | PTT | hold = TX; tap (< 400 ms) = latch, next press drops | |
 | ATU | tuner in / out | tune (keys TX at tune power); the result becomes a tuner memory |
@@ -247,13 +247,21 @@ The status line starts with the VFO in use (A / B); with split, RIT or XIT it ad
 
 ## TX safety
 
-- TX only inside the allocations of the region (`region` in the conf: r1, r2, r3, nl; default r1) and a band the baseband transmits in, unless `oob`; TX timeout
+- TX only inside the allocations of the region (`region` in the conf: r1, r2, r3, nl; default r1) and a band the baseband transmits in, unless `oob`
+- TX timeout (TX panel, `tot`: off, 1, 3, 5 min; 3 out of the box): our PTT (key, CAT) drops;
+  a TX keyed outside Linux (hand mic, VOX) cannot be dropped: its power goes to the
+  minimum (0.1 W) until the baseband is back in RX
 - SWR above 3.0 for 300 ms drops TX
 - any key except PTT and F1-F5 drops a latched TX; tune aborts on any key
 - hand mic PTT keys the baseband directly; the display follows the TX flag. It does
   not abort a tune: Linux never sees it (flow flags show only b1 TX, 2026-10-24).
   Abort a tune with the PTT key, any other key or CAT PTT
-- transient I2C errors are retried; quits after 2 s of failures
+- lost I2C writes (a NAK; OpenX6X00 base_guard.h: a lost PTT off kept a radio keyed): a
+  failed write is sent again at once (3 tries), the other registers still go out and a
+  failed one stays pending for the next pass; the whole register block goes out every
+  second, after every un-key and after a write error; if the baseband is still in TX
+  0.3-2 s after an un-key (up to 10 s after an error) the block goes out every 250 ms.
+  Each event is a console line. Quits after 2 s of failures
   (the baseband keeps its last state, so audio continues)
 
 ## Birdies
@@ -343,12 +351,13 @@ nothing changes until a value is set. Ranges and register layout as in X6100Cont
 | MONITOR | ON / OFF (ON) | 29 (0 when off) |
 | MONI LEVEL | 0-100 (30) | 29 |
 | SQUELCH | 0-100 (0 = open) | 21 [15:8] |
+| TX TIMEOUT | OFF, 1, 3, 5 MIN (3) | none: x6100_trx |
 
 VOX keys the baseband itself, as the hand mic PTT: x6100_trx follows the TX flag, so
 with split or duplex the first few ms go out on the RX frequency. Kept in the state
 file. Console: `mic int|hand|auto`, `imicg 30`, `hmicg 20`, `comp on|off`,
 `complvl 1:2|1:4|1:8`, `vox on|off`, `voxg 50`, `antivox 0`, `voxdly 500`,
-`moni on|off`, `monilvl 30`, `sql 0`. CI-V: 14 03 / 0B / 0E / 15 / 16 / 17 (squelch,
+`moni on|off`, `monilvl 30`, `sql 0`, `tot off|1|3|5`. CI-V: 14 03 / 0B / 0E / 15 / 16 / 17 (squelch,
 mic gain, compressor level, monitor, VOX gain, anti-VOX), 16 44 / 45 / 46
 (compressor, monitor, VOX).
 
