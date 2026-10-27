@@ -270,7 +270,11 @@ typedef struct
 	//
 	scope_mode_t scope;
 	int64_t fix_lo;		/* left edge of the fixed window, Hz */
-	int span;		/* window width, Hz */
+	int fix_w;		/* its width: the edge in use (FIX / SCROLL-F) */
+	int edge;		/* fixed edge 1-4 (IC-705 EDGE) */
+	int fix_range;		/* edge range and edge the window was last set from */
+	int fix_edge;
+	int span;		/* CENTER / SCROLL-C window width, Hz */
 	bool ascope;		/* F3: audio scope instead of the RF scope */
 	bool asplit;		/* F3 long: RF scope left, audio scope right */
 	int arange;		/* audio scope range: 0 = 0-3 kHz, 1 = 0-6 kHz */
@@ -1490,28 +1494,139 @@ static void band_step(rx_t *rx, int dir)
 //
 
 //
-// Scope window: fixed window starts centred on the VFO, on a 1 kHz boundary;
-// the sliding window follows the VFO when it leaves the window
+// Fixed edges, IC-705 style: four windows (EDGE 1-4) per frequency range, used by FIX
+// and SCROLL-F. The ranges are the IC-705's as wfview numbers them for 27 1E (from the
+// Range values in its IC-705 rig file): 01 below 1.6 MHz, 02 1.6-2, 03 2-6, 04 6-8,
+// 05 8-11, 06 11-15, 07 15-20, 08 20-22, 09 22-26, 10 26-30, 11 30-45, 12 45-60 MHz.
+// An edge is at most 96 kHz wide (the IQ width); defaults: four 96 kHz windows from the
+// bottom of the ham band in the range (the last one at its top), or of the range itself.
 //
 
-static void scope_fix_start(rx_t *rx)
+#define EDGE_RANGES	12
+#define EDGE_MAX_HZ	96000		/* the IQ width */
+
+typedef struct
 {
-	rx->fix_lo = ((int64_t) rx->freq - rx->span / 2) / 1000 * 1000;
+	uint32_t lo, hi;
+} edge_t;
+
+static const uint32_t g_edge_bound[EDGE_RANGES + 1] = {
+	500000, 1600000, 2000000, 6000000, 8000000, 11000000, 15000000, 20000000, 22000000, 26000000,
+	30000000, 45000000, 60000000,
+};
+
+static edge_t g_edge[EDGE_RANGES][4];
+
+// Range index 0-11 of a frequency, -1 outside
+static int edge_range(uint32_t hz)
+{
+	for (int r = 0; r < EDGE_RANGES; r++)
+		if (hz < g_edge_bound[r + 1])
+			return hz >= g_edge_bound[r] ? r : -1;
+
+	return -1;
 }
 
+static void edge_default(int r, int e, edge_t *out)
+{
+	uint32_t lo = g_edge_bound[r], hi = g_edge_bound[r + 1] - 1;
+
+	for (int b = 0; b < BAND_COUNT; b++) {
+		if (g_bands[b].low >= lo && g_bands[b].low < hi) {
+			lo = g_bands[b].low;
+			hi = g_bands[b].high;
+			break;
+		}
+	}
+
+	uint32_t w = hi - lo < EDGE_MAX_HZ ? hi - lo : EDGE_MAX_HZ;
+	uint32_t from = e < 3 ? lo + (uint32_t) e * EDGE_MAX_HZ : hi - w;
+
+	out->lo = from + w > hi ? hi - w : from;
+	out->hi = out->lo + w;
+}
+
+static void edge_defaults(void)
+{
+	for (int r = 0; r < EDGE_RANGES; r++)
+		for (int e = 0; e < 4; e++)
+			edge_default(r, e, &g_edge[r][e]);
+}
+
+//
+// Scope window. CENTER / SCROLL-C: the VFO in the middle, rx->span wide. FIX / SCROLL-F:
+// the selected edge of the VFO's range; SCROLL-F slides the window along when the VFO
+// leaves it. Outside every range (below 0.5 MHz) the fixed window starts at the VFO.
+//
+
+static bool scope_fixed(const rx_t *rx)
+{
+	return rx->scope == SCOPE_FIX || rx->scope == SCOPE_FIX_S;
+}
+
+static int scope_width(const rx_t *rx)
+{
+	return scope_fixed(rx) ? rx->fix_w : rx->span;
+}
+
+// Put the fixed window on the edge in use (on entering FIX, a new range or edge)
+static void scope_fix_start(rx_t *rx)
+{
+	int r = edge_range(rx->freq), e = clampi(rx->edge, 1, 4) - 1;
+
+	rx->fix_range = r;
+	rx->fix_edge = rx->edge;
+
+	if (r < 0) {
+		rx->fix_w = rx->span;
+		rx->fix_lo = ((int64_t) rx->freq - rx->span / 2) / 1000 * 1000;
+		return;
+	}
+
+	rx->fix_lo = g_edge[r][e].lo;
+	rx->fix_w = (int) (g_edge[r][e].hi - g_edge[r][e].lo);
+}
+
+// Every pass: a new range or edge moves the window, SCROLL-F follows the VFO
 static void scope_follow(rx_t *rx)
 {
+	if (!scope_fixed(rx))
+		return;
+
+	int r = edge_range(rx->freq), e = clampi(rx->edge, 1, 4) - 1;
+
+	if (r != rx->fix_range || rx->edge != rx->fix_edge
+		|| (r >= 0 && rx->scope == SCOPE_FIX && (rx->fix_lo != (int64_t) g_edge[r][e].lo
+		|| rx->fix_w != (int) (g_edge[r][e].hi - g_edge[r][e].lo))))
+		scope_fix_start(rx);
+
 	if (rx->scope != SCOPE_FIX_S)
 		return;
 
 	if ((int64_t) rx->freq < rx->fix_lo)
 		rx->fix_lo = rx->freq;
-	else if ((int64_t) rx->freq > rx->fix_lo + rx->span)
-		rx->fix_lo = (int64_t) rx->freq - rx->span;
+	else if ((int64_t) rx->freq > rx->fix_lo + rx->fix_w)
+		rx->fix_lo = (int64_t) rx->freq - rx->fix_w;
+}
+
+// F2 long in FIX / SCROLL-F: the selected edge becomes the window centred on the VFO, as
+// wide as the CENTER span (F2 in CENTER), on 1 kHz
+static bool edge_store(rx_t *rx)
+{
+	int r = edge_range(rx->freq), e = clampi(rx->edge, 1, 4) - 1;
+
+	if (r < 0)
+		return false;
+
+	g_edge[r][e].lo = (uint32_t) (((int64_t) rx->freq - rx->span / 2) / 1000 * 1000);
+	g_edge[r][e].hi = g_edge[r][e].lo + (uint32_t) rx->span;
+	scope_fix_start(rx);
+
+	return true;
 }
 
 //
-// Span (F3): full IQ width down to 3 kHz; the fixed window keeps its centre
+// Span (F2 in CENTER / SCROLL-C): full IQ width down to 3 kHz; FIX / SCROLL-F use the edges
 //
 
 static const int g_spans[] = { 96000, 48000, 24000, 12000, 6000, 3000 };
@@ -1521,15 +1636,11 @@ static const int g_spans[] = { 96000, 48000, 24000, 12000, 6000, 3000 };
 static void scope_span_next(rx_t *rx)
 {
 	int i = 0;
-	int64_t centre = rx->fix_lo + rx->span / 2;
 
 	while (i < SPAN_COUNT && g_spans[i] != rx->span)
 		i++;
 
 	rx->span = g_spans[(i + 1) % SPAN_COUNT];
-
-	if (rx->scope == SCOPE_FIX || rx->scope == SCOPE_FIX_S)
-		rx->fix_lo = centre - rx->span / 2;
 }
 
 //
@@ -1906,10 +2017,19 @@ static bool on_key(rx_t *rx, int key)
 		rx->asplit = false;
 		break;
 	case X6100_KEY_F2:
-		if (rx->ascope)
+		if (rx->ascope) {
 			rx->arange = !rx->arange;	/* audio scope: 0-3 / 0-6 kHz */
-		else
+		} else if (scope_fixed(rx)) {		/* FIX / SCROLL-F: the next edge, EDGE 1-4 */
+			char s[24];
+
+			rx->edge = rx->edge % 4 + 1;
+			scope_fix_start(rx);
+			snprintf(s, sizeof(s), "EDGE %d %u-%u", rx->edge, (unsigned) (rx->fix_lo / 1000) % 100000u,
+				(unsigned) ((rx->fix_lo + rx->fix_w) / 1000) % 100000u);
+			toast(s);
+		} else {
 			scope_span_next(rx);
+		}
 		break;
 	case X6100_KEY_F4:
 		rx->meter = (rx->meter + 1) % 3;
@@ -2048,6 +2168,22 @@ static bool on_long_key(rx_t *rx, int key)
 		rx->warn = NULL;
 		return true;
 	case X6100_KEY_F2:
+		// Long in FIX / SCROLL-F (RF scope): store the edge (the window centred on the VFO,
+		// as wide as the CENTER span); otherwise the reference level edit
+		if (!rx->redit && !rx->ascope && scope_fixed(rx)) {
+			if (!edge_store(rx)) {
+				toast("NO EDGE HERE");
+				return true;
+			}
+
+			char s[24];
+
+			snprintf(s, sizeof(s), "EDGE %d SET %u-%u", rx->edge, (unsigned) (rx->fix_lo / 1000) % 100000u,
+				(unsigned) ((rx->fix_lo + rx->fix_w) / 1000) % 100000u);
+			toast(s);
+			return true;
+		}
+
 		// Long: reference level edit; starts on the scope that is shown (split: RF)
 		rx->redit = !rx->redit;
 		rx->redit_af = rx->ascope;
@@ -2784,9 +2920,9 @@ typedef struct
 
 static view_t scope_view(const rx_t *rx, int w)
 {
-	view_t v = { .span = rx->span, .vfo = rx_hz(rx), .w = w };	/* vfo: the IQ centre (RIT, AM offset) */
+	view_t v = { .span = scope_width(rx), .vfo = rx_hz(rx), .w = w };	/* vfo: the IQ centre (RIT, AM offset) */
 
-	v.lo = rx->scope == SCOPE_FIX || rx->scope == SCOPE_FIX_S ? rx->fix_lo : (int64_t) rx->freq - rx->span / 2;
+	v.lo = scope_fixed(rx) ? rx->fix_lo : (int64_t) rx->freq - rx->span / 2;
 	return v;
 }
 
@@ -4856,10 +4992,11 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 	// Waterfall alignment: a mode change clears it; in the scrolling modes a moved
 	// window shifts it by the same number of pixels, so it stays frequency aligned
 	//
-	if (rx->scope != scr->wf_scope || rx->span != scr->wf_span) {
+	if (rx->scope != scr->wf_scope || scope_width(rx) != scr->wf_span
+		|| (rx->scope == SCOPE_FIX && (double) v.lo != scr->wf_ref)) {	/* FIX: another edge */
 		x6100_lcd_fill(lcd, 0, WF_Y, SW, WF_H(lcd), 0x000000);
 		scr->wf_scope = rx->scope;
-		scr->wf_span = rx->span;
+		scr->wf_span = scope_width(rx);
 		scr->wf_ref = (double) v.lo;
 	} else if (rx->scope == SCOPE_CENTER_S || rx->scope == SCOPE_FIX_S) {
 		int dx = (int) lround((scr->wf_ref - (double) v.lo) * SW / v.span);
@@ -5117,11 +5254,14 @@ overlays:
 	{
 		static const char *names[] = { "CENTER", "SCROLL-C", "FIX", "SCROLL-F" };
 		static const char *ranges[] = { "0-3K", "0-6K" };
-		char m[24];
+		char m[40];
 		int tw;
 
 		if (rx->ascope)
 			snprintf(m, sizeof(m), "AUDIO %s", ranges[rx->arange]);
+		else if (scope_fixed(rx))	/* FIX / SCROLL-F: the edge and its window, kHz */
+			snprintf(m, sizeof(m), "%s E%d %u-%u", names[rx->scope], rx->edge, (unsigned) (rx->fix_lo / 1000),
+				(unsigned) ((rx->fix_lo + rx->fix_w) / 1000));
 		else if (rx->span % 2000 == 0)
 			snprintf(m, sizeof(m), "%s +-%dk", names[rx->scope], rx->span / 2000);
 		else
@@ -5934,6 +6074,49 @@ static bool console_line(rx_t *rx, char *line)
 			continue;
 		}
 
+		if (strcasecmp(t, "edge") == 0) {	/* fixed edge in use, 1-4 */
+			want_lvl = &rx->edge;
+			lvl_min = 1;
+			lvl_max = 4;
+			continue;
+		}
+
+		// fixedge <range 1-12> <edge 1-4> <low Hz> <high Hz>: set a fixed edge (state file,
+		// console); fixedge alone: list the edges of the VFO's range
+		if (strcasecmp(t, "fixedge") == 0) {
+			const char *s[4];
+
+			for (int i = 0; i < 4; i++)
+				s[i] = strtok(NULL, " \t\r\n");
+
+			if (s[0] == NULL) {
+				int r = edge_range(rx->freq);
+
+				for (int e = 0; r >= 0 && e < 4; e++)
+					printf("range %d edge %d: %.3f-%.3f kHz%s\n", r + 1, e + 1, g_edge[r][e].lo / 1000.0,
+						g_edge[r][e].hi / 1000.0, e + 1 == rx->edge ? "  (in use)" : "");
+
+				if (r < 0)
+					printf("no edge range below %.1f MHz\n", g_edge_bound[0] / 1e6);
+
+				continue;
+			}
+
+			int r = atoi(s[0]) - 1, e = s[1] ? atoi(s[1]) - 1 : -1;
+			uint32_t lo = s[2] ? (uint32_t) strtoul(s[2], NULL, 10) : 0, hi = s[3] ? (uint32_t) strtoul(s[3], NULL, 10) : 0;
+
+			if (r < 0 || r >= EDGE_RANGES || e < 0 || e > 3 || hi <= lo || hi - lo > EDGE_MAX_HZ) {
+				fprintf(stderr, "\nfixedge: <range 1-%d> <edge 1-4> <low Hz> <high Hz>, at most %d kHz wide\n",
+					EDGE_RANGES, EDGE_MAX_HZ / 1000);
+				continue;
+			}
+
+			g_edge[r][e].lo = lo;
+			g_edge[r][e].hi = hi;
+			changed = true;
+			continue;
+		}
+
 		if (strcasecmp(t, "dupshift") == 0) {
 			want_lvl = &rx->dup_khz;
 			lvl_min = 10;
@@ -6091,8 +6274,20 @@ static void state_save(const rx_t *rx)
 		fprintf(fp, " bright %d", g_bright);
 
 	fprintf(fp, "\n");
-	fprintf(fp, "%s span %d %s %s ref %d aref %d\n", scopes[rx->scope], rx->span,
+	fprintf(fp, "%s span %d edge %d %s %s ref %d aref %d\n", scopes[rx->scope], rx->span, rx->edge,
 		rx->asplit ? "split" : rx->ascope ? "af" : "rf", rx->arange ? "af6" : "af3", rx->rref, rx->aref);
+
+	// Fixed edges that differ from their default
+	for (int r = 0; r < EDGE_RANGES; r++) {
+		for (int e = 0; e < 4; e++) {
+			edge_t d;
+
+			edge_default(r, e, &d);
+
+			if (g_edge[r][e].lo != d.lo || g_edge[r][e].hi != d.hi)
+				fprintf(fp, "fixedge %d %d %u %u\n", r + 1, e + 1, (unsigned) g_edge[r][e].lo, (unsigned) g_edge[r][e].hi);
+		}
+	}
 
 	// fsync before the rename: also written after a tune, while the power may still go
 	bool ok = fflush(fp) == 0 && fsync(fileno(fp)) == 0;
@@ -6219,7 +6414,7 @@ typedef struct
 	bool scope_out;
 	bool scope_hold;
 	bool scope_vbw;
-	int scope_edge;
+	uint32_t fedge_lo;	/* 27 1E: LO arrives first, HI stores the pair */
 	int scope_ref;		/* 0.1 dB */
 	int scope_speed;	/* 0 fast, 1 mid, 2 slow */
 	uint64_t scope_ms;
@@ -6380,7 +6575,15 @@ static bool cat_get(void *ctx, x6100_civ_item_t item, int vfo, int32_t *v)
 		*v = rx->span / 2;
 		return true;
 	case X6100_CIV_SCOPE_EDGE:
-		*v = cat->scope_edge;
+		*v = rx->edge;
+		return true;
+	case X6100_CIV_SCOPE_FEDGE_LO:
+	case X6100_CIV_SCOPE_FEDGE_HI:
+		if (vfo < 0 || vfo >= EDGE_RANGES * 4)
+			return false;
+
+		*v = (int32_t) (item == X6100_CIV_SCOPE_FEDGE_LO ? g_edge[vfo / 4][vfo % 4].lo
+			: g_edge[vfo / 4][vfo % 4].hi);
 		return true;
 	case X6100_CIV_SCOPE_HOLD:
 		*v = cat->scope_hold;
@@ -6667,8 +6870,25 @@ static bool cat_set(void *ctx, x6100_civ_item_t item, int vfo, int32_t v)
 		if (v < 1 || v > 4)
 			return false;
 
-		cat->scope_edge = v;
+		rx->edge = v;		/* scope_follow moves the window */
 		break;
+	case X6100_CIV_SCOPE_FEDGE_LO:
+		if (vfo < 0 || vfo >= EDGE_RANGES * 4 || v <= 0)
+			return false;
+
+		cat->fedge_lo = (uint32_t) v;
+		break;
+	case X6100_CIV_SCOPE_FEDGE_HI: {
+		// Wider than the IQ: cut to 96 kHz from the lower end
+		if (vfo < 0 || vfo >= EDGE_RANGES * 4 || (uint32_t) v <= cat->fedge_lo)
+			return false;
+
+		edge_t *ed = &g_edge[vfo / 4][vfo % 4];
+
+		ed->lo = cat->fedge_lo;
+		ed->hi = (uint32_t) v - cat->fedge_lo > EDGE_MAX_HZ ? cat->fedge_lo + EDGE_MAX_HZ : (uint32_t) v;
+		break;
+	}
 	case X6100_CIV_SCOPE_HOLD:
 		cat->scope_hold = v != 0;
 		break;
@@ -6951,7 +7171,6 @@ static int cat_open(cat_t *cat, rx_t *rx, const screen_t *scr, int baud)
 	cat->rx = rx;
 	cat->scr = scr;
 	cat->ann_mode = -1;
-	cat->scope_edge = 1;
 	x6100_civ_init(&cat->civ, &ops);
 	x6100_civ_framer_reset(&cat->framer);
 	cat->pty_slave = -1;
@@ -7122,7 +7341,7 @@ static void cat_scope(cat_t *cat, uint64_t t)
 		.centre = rx->freq,
 		.half_span = (uint32_t) rx->span / 2,
 		.lo = (uint32_t) v.lo,
-		.hi = (uint32_t) (v.lo + rx->span),
+		.hi = (uint32_t) (v.lo + v.span),
 		.wave = wave,
 		.len = X6100_CIV_SCOPE_POINTS,
 	};
@@ -7362,6 +7581,8 @@ int main(int argc, char **argv)
 	xpar_defaults(&rx);
 	rx.dup = DUP_AUTO;
 	rx.dup_khz = DUP_KHZ_DEF;
+	rx.edge = 1;
+	edge_defaults();
 
 	for (int g = 0; g < FG_COUNT; g++)
 		rx.agc_group[g] = g == FG_AM || g == FG_FM ? X6100_AGC_SLOW : X6100_AGC_AUTO;

@@ -41,7 +41,7 @@ Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
 | AGC | off / slow / fast / auto, per mode group | RIT / XIT panel |
 | V/M | memory panel (channels 1-99) | split on / off: RX on the VFO in use, TX on the other |
 | F1 | scroll on / off: CENTER <-> SCROLL-C, FIX <-> SCROLL-F | CENTER family <-> FIX family |
-| F2 | span ±48 / 24 / 12 / 6 / 3 / 1.5 kHz; audio scope: 0-3 / 0-6 kHz | reference level: MFK turn = ±1 dB (±30), MFK push = RF <-> AF scope; F2 long, other key or 10 s idle closes |
+| F2 | span ±48 / 24 / 12 / 6 / 3 / 1.5 kHz; FIX / SCROLL-F: next fixed edge 1-4; audio scope: 0-3 / 0-6 kHz | FIX / SCROLL-F: store the edge in use (see Fixed edges); else reference level: MFK turn = ±1 dB (±30), MFK push = RF <-> AF scope; F2 long, other key or 10 s idle closes |
 | F3 | audio scope on / off (RF <-> AF) | RF scope left (5/8) + audio scope right (3/8), on / off |
 | F4 | TX meter: PO / SWR / ALC | TX panel: mic, compressor, VOX, monitor, squelch |
 | F5 | filter FIL1 / FIL2 / FIL3 | filter panel |
@@ -59,8 +59,24 @@ Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
 |---|---|
 | CENTER | tuned frequency in the middle, spectrum moves with tuning |
 | SCROLL-C | as CENTER, waterfall shifts with tuning |
-| FIX | fixed window at the frequency where FIX was entered |
-| SCROLL-F | fixed window that slides when tuning past an edge |
+| FIX | fixed window: the edge in use (1-4) of the range the VFO is in; a new range moves it |
+| SCROLL-F | as FIX, the window slides when tuning past its edge |
+
+## Fixed edges (FIX / SCROLL-F, IC-705 style)
+
+Four edges per range, the IC-705 ranges (MHz): 01 below 1.6, 02 1.6-2, 03 2-6, 04 6-8,
+05 8-11, 06 11-15, 07 15-20, 08 20-22, 09 22-26, 10 26-30, 11 30-45, 12 45-60.
+
+- F2 in FIX / SCROLL-F: next edge (1 -> 2 -> 3 -> 4 -> 1); the scope label shows
+  `FIX E2 14096-14192`. The edge number holds for every range.
+- F2 long in FIX / SCROLL-F: the edge in use becomes the window centred on the VFO, as
+  wide as the CENTER span, on 1 kHz (set the span in CENTER first).
+- An edge is at most 96 kHz wide (the IQ width); a wider one (CI-V) is cut to 96 kHz
+  from its lower end.
+- Defaults: 96 kHz windows from the bottom of the ham band in the range, the fourth at
+  its top, each kept inside the band (20 m: 14000-14096, 14096-14192, 14192-14288,
+  14254-14350); a range without a band uses the range itself.
+- CI-V 27 16 (edge in use) and 27 1E (edge frequencies) set and read them, as wfview does.
 
 ## Filter panel (F5 long, IC-705 style)
 
@@ -204,6 +220,8 @@ The status line starts with the VFO in use (A / B); with split, RIT or XIT it ad
 | `atu noatu` | tuner in / out |
 | `rf af split`, `af3 af6` | scope view, audio range |
 | `span 96000-3000` | scope span in Hz |
+| `edge 1-4` | fixed edge in use (state) |
+| `fixedge 6 2 14100000 14196000` | fixed edge: range 1-12, edge 1-4, lower and upper Hz (at most 96 kHz); state file holds the changed ones; `fixedge` alone lists the edges of the VFO range |
 | `band 40m 7074000` | remembered frequency of a band |
 | `agc ssb|ssbd|cw|am|fm off|slow|fast|auto` | AGC of a mode group |
 | `atumem 7120000 L C S` | a tuner memory (state file; `atunet 40m L C S` from older ones still loads) |

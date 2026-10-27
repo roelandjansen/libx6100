@@ -320,6 +320,14 @@ int main(void)
 			printf("FAIL scope SCROLL-C: edges expected\n");
 		}
 	}
+	// Fixed edges (27 1E, wfview's layout: range, edge, lower, upper) and the edge number (27 16)
+	check(&civ, "27 1E 06 02 00 00 05 14 00 00 60 14 14 00", "FB");	/* 14.050-14.146 MHz */
+	check(&civ, "27 1E 06 02", "27 1E 06 02 00 00 05 14 00 00 60 14 14 00");
+	check(&civ, "27 1E 06 05", "FA");					/* edge 5 */
+	check(&civ, "27 1E 00 01", "FA");					/* range 00 */
+	check(&civ, "27 16 00 03", "FB");
+	check(&civ, "27 16 00", "27 16 00 03");
+
 	// Memories (08-0B, 1A 00) and the transceive switch (1A 05 0131)
 	{
 		static const char calls_name[] = " 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20";

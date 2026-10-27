@@ -118,4 +118,4 @@ under GEN until a better key turns up.
   at once, and the whole register block after every un-key, as OpenX6X00 does.
 - Hand mic PTT is invisible to Linux (cannot abort a tune); evtest / GPIO not checked.
 - Band edge markers on the scope from the region table (`region`, done: r1 / r2 / r3 / nl;
-  TX check uses it). Next: markers, signal edges in the check, N registration, more countries.
+  TX check uses it; scope markers done 2026-10-26, fixed edges 2026-10-27). Next: signal edges in the check, N registration, more countries.

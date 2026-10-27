@@ -1,6 +1,6 @@
 # libx6100 / x6100_trx — status
 
-Snapshot: 2026-10-26. Last tag: v0.12.0 (2026-10-26, on 0fab380; AM receive offset,
+Snapshot: 2026-10-27. Last tag: v0.12.0 (2026-10-26, on 0fab380; AM receive offset,
 wfview SCROLL-C fix, CAT over the LAN). Before: v0.11.0 on c3e536f (TX panel, birdies,
 CAT findings, CI-V on a pty), v0.10.0 on 40d00ac. Tags are made by hand: they cannot be
 pushed from the cloud sessions.
@@ -60,6 +60,9 @@ Built, not yet tried on the radio (2026-10-25):
 - CI-V scope: SCROLL-C sends its edges (the wfview waterfall froze in SCROLL-C)
 - band edges on the RF scope from the region table (red bar outside the allocations,
   dashed line at each edge)
+- fixed edges, IC-705 style (2026-10-27): 4 per range on the 12 IC-705 ranges, at most
+  96 kHz; F2 in FIX / SCROLL-F picks one, F2 long stores the window round the VFO;
+  state, console `edge` / `fixedge`, CI-V 27 16 / 27 1E (host tests pass)
 - CI-V memories (08 select / tune, 09 write, 0A to VFO, 0B clear, 1A 00 contents in the
   IC-705 layout) and the transceive switch 1A 05 0131; host tests and a pty test pass
 
@@ -85,6 +88,9 @@ Built, not yet tried on the radio (2026-10-25):
    at the right place in AM and with RIT on; wfview SCROLL-C waterfall runs.
 9. wfview with CI-V memories (its memory window: read, write, recall, clear) and with
    transceive off (mouse-wheel tuning without jumps?).
+10. Fixed edges: F2 / F2 long in FIX and SCROLL-F, the label, a new band moves the window,
+    the band edge markers on 40 / 20 m, edges after a restart; wfview fixed edge window
+    (27 1E set / read), a 200 kHz edge from wfview is cut to 96 kHz.
 
 ## Next steps (suggested order)
 

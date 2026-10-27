@@ -1210,6 +1210,34 @@ static size_t cmd_scope(req_t *r)
 
 		return out_end(r->o);
 	}
+	case 0x1E: {	/* fixed edges: range (BCD 01-12), edge (BCD 01-04), lower, upper (5 bytes each) */
+		int range = m >= 2 ? bcd_val(a[0]) : -1, edge = m >= 2 ? bcd_val(a[1]) : -1;
+		int32_t lo, hi;
+		uint32_t flo, fhi;
+
+		if (range < 1 || edge < 1 || edge > 4)
+			return reply_ng(r);
+
+		int key = (range - 1) * 4 + edge - 1;
+
+		if (m >= 12)
+			return reply_ok(r, get_freq_bcd(a + 2, &flo) && get_freq_bcd(a + 7, &fhi)
+				&& set(r, X6100_CIV_SCOPE_FEDGE_LO, key, (int32_t) flo)
+				&& set(r, X6100_CIV_SCOPE_FEDGE_HI, key, (int32_t) fhi));
+
+		if (m != 2 || !get(r, X6100_CIV_SCOPE_FEDGE_LO, key, &lo) || !get(r, X6100_CIV_SCOPE_FEDGE_HI, key, &hi))
+			return reply_ng(r);
+
+		reply_head(r);
+		out_byte(r->o, 0x27);
+		out_byte(r->o, 0x1E);
+		out_byte(r->o, a[0]);
+		out_byte(r->o, a[1]);
+		out_freq(r->o, (uint32_t) lo);
+		out_freq(r->o, (uint32_t) hi);
+
+		return out_end(r->o);
+	}
 	case 0x19: {	/* reference level: 00, dB (BCD), 0.1 dB << 4, sign */
 		if (m >= 4) {
 			int db = bcd_val(a[1]), tenth = a[2] >> 4;

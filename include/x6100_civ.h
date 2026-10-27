@@ -56,6 +56,8 @@
 //   MEM_CH             selected memory channel 1-99 (08 0001-0099 sets it, then MEM_TO_VFO)
 //   MEM_WRITE, MEM_TO_VFO, MEM_CLEAR   set only, value = the channel: 09 / 0A / 0B
 //   TRANSCEIVE         0 / 1: unasked 00 / 01 frames on a local change (1A 05 0131)
+//   SCOPE_FEDGE_LO / _HI   fixed edge frequencies (27 1E), Hz; vfo = (range - 1) * 4 + edge - 1,
+//                      range 1-12 (IC-705 codes), edge 1-4; a set sends LO, then HI
 //
 // The vfo argument: 0 = foreground (selected), 1 = background (unselected).
 //
@@ -130,6 +132,8 @@ typedef enum
 	X6100_CIV_MEM_TO_VFO,
 	X6100_CIV_MEM_CLEAR,
 	X6100_CIV_TRANSCEIVE,
+	X6100_CIV_SCOPE_FEDGE_LO,
+	X6100_CIV_SCOPE_FEDGE_HI,
 	X6100_CIV_ITEM_COUNT
 } x6100_civ_item_t;
 
