@@ -81,7 +81,13 @@ Status: 2026-10-27 (v0.13.0). Summary and next steps: `STATUS.md`.
   ranges and register 22 layout now from X6100Control v0.16.1 (VOX: [6:0] gain, [14:8]
   anti-VOX, [29:16] delay, [30] on; the old layout never switched VOX on). Test on the
   radio. Line in / out levels (register 20 [7:0] / [15:8]) still fixed at 10.
-- SWR scan over a band (register 12 `swrscan`).
+- Messages and SWR scan (built 2026-10-27, not tried on the radio): CW message keying
+  and level against ALC (USB tone, -10 dBFS), voice WAV in LSB / AM / NFM (codec TX is
+  verified in USB / USB-D only), the turnaround (100 ms silence first), repeat, stop by
+  key / PTT / TOT; SWR scan on a dummy load and an antenna, the step time (300 ms) and
+  whether NFM on PTT is a clean carrier. Then: CI-V 17 (send CW) into the CW message
+  sender; recording a voice message on the radio (register 12 `voice_rec` 0x8 or the
+  mic path: unknown); the stock `swrscan` flag (0x10, trace the stock UI).
 - RX / TX equaliser (baseband or liquid-dsp; GEN TX panel).
 - Digital modes on the radio (FT8, CW / RTTY decoder); CW / voice message memories.
 
@@ -91,8 +97,8 @@ Status: 2026-10-27 (v0.13.0). Summary and next steps: `STATUS.md`.
 |---|---|---|---|
 | GEN | settings panel: brightness, CAT, NTP, WiFi, Bluetooth (done); next: region, LAN server (wfview) (TX panel: F4 long, done) | status page: IP, uptime, battery, CAT, NTP, build (done); next: temperature, baseband version | partly done |
 | KEY | key type straight / paddle / reversed | keyer panel: speed, iambic A / B, pitch, sidetone, break-in delay, ratio | done |
-| MSG | message list: play CW / voice memory | record / edit a message | planned |
-| APP | app list: FT8, CW / RTTY decoder, SWR scan, recorder | last app | planned |
+| MSG | message panel: send CW / voice message M1-M8 | send the selected one again every msgrepeat s | built 2026-10-27 |
+| APP | app panel: SWR scan (next: FT8, CW / RTTY decoder, recorder) | SWR scan | built 2026-10-27 |
 | DFN | NR on / off | NB on / off | done |
 | DFL | notch on / off | DSP panel (NR, NB, notch values) | done |
 

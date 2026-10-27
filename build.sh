@@ -230,6 +230,9 @@ settings_seed() {
 		if [[ -f "${G_CONFIG}/${L_FILE}" ]]; then
 			scp -q -- "${G_CONFIG}/${L_FILE}" "${G_HOST}:${C_RADIO_SETTINGS}/${L_FILE}"
 			printf 'restored %s from %s\n' "${L_FILE}" "${G_CONFIG}"
+		elif [[ "${L_FILE}" == messages.conf ]]; then
+			scp -q -- docs/x6100_messages.conf.example "${G_HOST}:${C_RADIO_SETTINGS}/${L_FILE}"
+			printf 'installed %s from the example\n' "${L_FILE}"
 		elif [[ "${L_FILE}" == memories.conf ]]; then
 			scp -q -- docs/x6100_memories.conf.example "${G_HOST}:${C_RADIO_SETTINGS}/${L_FILE}"
 			printf 'installed %s from the example\n' "${L_FILE}"
@@ -259,6 +262,15 @@ settings_backup() {
 	else
 		printf '%s\n' 'no WiFi profiles on the radio'
 	fi
+
+	# Voice messages (MSG): the WAV files
+	mkdir -p -- "${G_CONFIG}/voice"
+
+	if scp -q -- "${G_HOST}:${C_RADIO_SETTINGS}/voice/*.wav" "${G_CONFIG}/voice/" 2> /dev/null; then
+		printf 'saved voice messages in %s\n' "${G_CONFIG}/voice"
+	else
+		printf '%s\n' 'no voice messages on the radio'
+	fi
 }
 
 settings_restore() {
@@ -278,6 +290,13 @@ settings_restore() {
 		scp -q -- "${G_CONFIG}/${C_NM_DIR##*/}/"*.nmconnection "${G_HOST}:${C_NM_DIR}/"
 		ssh -- "${G_HOST}" "chmod 600 ${C_NM_DIR}/*.nmconnection && /etc/init.d/S45network-manager restart"
 		printf '%s\n' 'restored WiFi profiles, NetworkManager restarted'
+	fi
+
+	# Voice messages (MSG)
+	if compgen -G "${G_CONFIG}/voice/*.wav" > /dev/null; then
+		ssh -- "${G_HOST}" "mkdir -p ${C_RADIO_SETTINGS}/voice"
+		scp -q -- "${G_CONFIG}/voice/"*.wav "${G_HOST}:${C_RADIO_SETTINGS}/voice/"
+		printf '%s\n' 'restored voice messages'
 	fi
 }
 
@@ -306,7 +325,7 @@ usage() {
 readonly C_STAMP="${C_OUT}/.fingerprint"
 readonly C_DEPLOY=("${C_OUT}/x6100_trx" scripts/x6100_ui.sh docs/x6100_trx_quickref.md)
 readonly C_RADIO_SETTINGS="/etc/x6100"
-readonly C_SETTINGS=(x6100_trx.conf x6100_trx.state filters.conf memories.conf birdies.conf)
+readonly C_SETTINGS=(x6100_trx.conf x6100_trx.state filters.conf memories.conf birdies.conf messages.conf)
 readonly C_NM_DIR="/etc/NetworkManager/system-connections"
 
 G_HOST="${X6100_HOST:-root@x6100}"

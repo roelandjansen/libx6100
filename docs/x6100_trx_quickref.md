@@ -51,7 +51,8 @@ Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
 | PWR | display on / off | release after 1.5-4 s: quit; hold 4 s: power off (as the stock UI). TX is dropped and filters saved first |
 | GEN | settings panel: brightness, CAT, NTP (MFK turn = change, push = next row, long = default; GEN, other key or 10 s idle closes) | status page: IP, uptime, battery, CAT, NTP result, build (any key or 30 s closes) |
 | KEY | key type: straight / paddle / paddle reversed | keyer panel |
-| MSG / APP | not used yet (see the key plan in `TODO.md`) | |
+| MSG | message panel: M1-M8, MFK push sends (see Messages) | send the selected message again every `msgrepeat` s |
+| APP | app panel: SWR SCAN, MFK push starts | SWR scan of the band segment the VFO is in |
 
 ## Scope modes
 
@@ -269,6 +270,36 @@ The status line starts with the VFO in use (A / B); with split, RIT or XIT it ad
 | `vfob 7074000 lsb fil1`, `vfo a\|b` | the VFO not in use; which one is in use (state file) |
 | `region r1\|r2\|r3\|nl` | transmit allocations for the TX check and the OOB marker (default r1) |
 | `oob`, `nolimit` | as `--oob` / `--no-limit` (settings file): warned at every start, red OOB on the dial |
+
+## Messages (MSG)
+
+M1-M8, kept in `/etc/x6100/messages.conf` (example: `docs/x6100_messages.conf.example`).
+Sent with the codec as TX audio (register 12 `0x4000`), not with the PTT:
+
+- **CW** (`msg 1 cw CQ CQ DE PA3XYZ K`), in CW / CW-R only: a keyed tone at the CW
+  pitch in USB with the VFO the pitch below the dial, so the carrier lands on the dial;
+  keyer speed, smoothed edges (about 5 ms), about -10 dBFS. Letters, digits, / ? . , = + -.
+- **Voice** (`msg 2 voice cq.wav`), not in CW: a WAV file in `/etc/x6100/voice`
+  (48 kHz, 16 bit, mono or stereo), played at its own level in the mode in use. The
+  microphone does not reach Linux: record the file on a PC.
+
+MSG: panel (MFK turn: select; MFK push: send). MSG long: send the selected message,
+then again every `msgrepeat` s (1-600, default 10) until a key. Any key or the PTT
+key stops a message; TX timeout, SWR trip and the band check apply as on PTT. The scope
+shows `MSG n` while sending, `MSG n AGAIN IN s S` between repeats.
+
+Console: `msg` (list), `msg <n> cw <text>`, `msg <n> voice <file>`, `msg <n> clear`,
+`msgrepeat <s>`, `msgsend <n>`, `msgstop`. `build.sh backup` / `restore` keep the
+messages and the WAV files.
+
+## SWR scan (APP)
+
+APP long, or APP and MFK push (console: `swrscan`): a 1 W NFM carrier stepped over the
+allocation segment the VFO is in (inside its band, region table), 41 points of 300 ms,
+the SWR read in the second half of each; about 12 s. The curve replaces the RF scope
+(SWR 1 at the bottom, 4 at the top, grid at 1.5 / 2 / 3, red above 3) with the lowest
+point marked, until a key. Any key or the PTT key stops the scan; the curve so far
+stays. The SWR trip is off during the scan (it measures); the 1 W limit protects.
 
 ## TX safety
 

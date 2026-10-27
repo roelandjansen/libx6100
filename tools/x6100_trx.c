@@ -160,6 +160,8 @@ typedef enum
 	SCOPE_FIX_S
 } scope_mode_t;
 
+enum { SEND_NONE, SEND_MSG, SEND_SCAN };	/* rx_t.send: our TX without the PTT key */
+
 typedef struct
 {
 	uint32_t freq;
@@ -244,6 +246,21 @@ typedef struct
 	int tot;		/* TX timeout, index into g_tot_min (0 = off) */
 	bool tot_cut;		/* TX timeout on a TX we cannot drop (hand mic, VOX): power 0 */
 	uint64_t bb_tx_since;	/* baseband in TX since (ms), 0 = in RX */
+	//
+	// Sending without the PTT key: a message (MSG) or the SWR scan (APP)
+	//
+	int send;		/* SEND_NONE, SEND_MSG, SEND_SCAN */
+	uint64_t send_since;
+	bool codec_tx;		/* keyed with the codec as TX audio (register 12 0x4000) */
+	uint32_t tx_hz_ovr;	/* 0, else the TX frequency (CW message: tone below the carrier; scan step) */
+	int tx_mode_ovr;	/* -1, else the TX mode (CW message: USB; SWR scan: NFM) */
+	int tx_pwr_ovr;		/* -1, else the TX power in 0.1 W (SWR scan) */
+	bool msedit;		/* message panel (MSG) */
+	int msedit_par;
+	uint64_t msedit_since;
+	bool apedit;		/* app panel (APP) */
+	int apedit_par;
+	uint64_t apedit_since;
 	bool sedit;		/* scope panel (F1 long) */
 	int sedit_par;
 	uint64_t sedit_since;
@@ -959,9 +976,10 @@ static void atu_store(uint32_t hz, const x6100_atu_t *net)
 static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 {
 	uint32_t low, high;
-	bool keyed = rx->ptt || rx->tuning || rx->bb_tx || (ctl->sent[X6100_REG_FLAGS] & (X6100_FLAG_IPTT | X6100_FLAG_ATU_TUNE));
-	uint32_t hz = keyed ? tx_hz(rx) : rx_hz(rx);
-	x6100_mode_t mode = keyed ? tx_mode(rx) : rx->mode;
+	bool keyed = rx->ptt || rx->tuning || rx->bb_tx || rx->send != SEND_NONE
+		|| (ctl->sent[X6100_REG_FLAGS] & (X6100_FLAG_IPTT | X6100_FLAG_ATU_TUNE | X6100_FLAG_CODEC_TX));
+	uint32_t hz = keyed ? (rx->tx_hz_ovr != 0 ? rx->tx_hz_ovr : tx_hz(rx)) : rx_hz(rx);
+	x6100_mode_t mode = keyed ? (rx->tx_mode_ovr >= 0 ? (x6100_mode_t) rx->tx_mode_ovr : tx_mode(rx)) : rx->mode;
 
 	mode_filter(mode, keyed && rx->split ? rx->b_fil : rx->fil, &low, &high);
 
@@ -1012,7 +1030,7 @@ static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 	x6100_set_filter(ctl, mode, low, high);
 	x6100_ctl_set(ctl, X6100_REG_RXVOL, rx->mute ? 0 : (uint32_t) rx->vol);
 	x6100_ctl_update(ctl, X6100_REG_RFG_TXPWR_FFTDEC, 0xFF, (uint32_t) rx->rfg);
-	x6100_set_txpwr(ctl, rx->tot_cut ? 0.0f : rx->txpwr / 10.0f);	/* TX timeout on hand mic / VOX TX */
+	x6100_set_txpwr(ctl, rx->tot_cut ? 0.0f : (rx->tx_pwr_ovr >= 0 ? rx->tx_pwr_ovr : rx->txpwr) / 10.0f);	/* TOT cut, scan power */
 	x6100_cal_apply(ctl, cal, x6100_band_index(hz));
 
 	//
@@ -1036,7 +1054,8 @@ static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 static void apply_flags(x6100_ctl_t *ctl, const rx_t *rx)
 {
 	x6100_ctl_set(ctl, X6100_REG_FLAGS, 0);
-	x6100_set_ptt(ctl, rx->ptt);
+	x6100_set_ptt(ctl, rx->ptt || rx->send == SEND_SCAN);	/* the scan: an NFM carrier */
+	x6100_set_codec_tx(ctl, rx->codec_tx);
 	x6100_atu_enable(ctl, rx->atu_on || rx->tuning);
 	x6100_atu_tune(ctl, rx->tuning);
 }
@@ -1075,6 +1094,11 @@ static void tx_drop(rx_t *rx, const char *why)
 	rx->ptt = false;
 	rx->ptt_latch = false;
 	rx->tuning = false;
+	rx->send = SEND_NONE;		/* the sender closes its audio on the next pass */
+	rx->codec_tx = false;
+	rx->tx_hz_ovr = 0;
+	rx->tx_mode_ovr = -1;
+	rx->tx_pwr_ovr = -1;
 
 	if (why != NULL)
 		rx->warn = why;
@@ -1793,6 +1817,467 @@ static void spar_defaults(void)
 }
 
 //
+// Messages (MSG): M1-M8 in MSG_PATH, CW text or a WAV file in VOICE_DIR, sent with
+// the codec as TX audio (register 12 0x4000), the way FT8 programs do; no PTT. A voice
+// message plays in the mode in use (LSB / USB / AM / NFM). A CW message is a keyed
+// tone at the CW pitch in USB, the VFO the pitch below the dial, so the carrier lands
+// on the dial as with the keyer; the keying edges are smoothed (about 5 ms). The radio's
+// microphone never reaches Linux: voice messages are recorded elsewhere (48 kHz,
+// 16 bit WAV, mono or stereo). MSG long repeats the last message every msgrepeat s.
+//
+
+#define MSG_COUNT	8
+#define MSG_PATH	"/etc/x6100/messages.conf"
+#define VOICE_DIR	"/etc/x6100/voice"
+#define SEND_RATE	48000
+#define SEND_PERIOD	512
+#define SEND_PERIODS	4
+#define SEND_PREROLL	4800	/* frames of silence first: 100 ms for the baseband to key */
+#define SEND_LEVEL	0.3	/* CW tone level (about -10 dBFS); voice plays at the file level. ALC test: TODO */
+
+enum { MSG_EMPTY, MSG_CW, MSG_VOICE };
+
+typedef struct
+{
+	int type;
+	char text[64];		/* CW text, or the WAV file name in VOICE_DIR */
+} msg_t;
+
+static msg_t g_msg[MSG_COUNT + 1];	/* index = message number; 0 unused */
+static int g_msg_repeat = 10;		/* s between repeats (MSG long) */
+
+typedef struct
+{
+	x6100_pcm_t pcm;
+	bool open;
+	int msg;		/* message being sent */
+	bool repeat;		/* MSG long: send again after g_msg_repeat s */
+	uint64_t next_at;	/* repeat: next start (ms) */
+	uint64_t start_ms;
+	uint64_t written;	/* frames given to the codec */
+	bool done;		/* all audio written */
+	// CW: one flag per dot unit
+	uint8_t units[1600];
+	int nunits;
+	double unit_frames;
+	double phase, env;
+	double tone;
+	// Voice
+	FILE *wav;
+	uint32_t wav_left;	/* bytes of sample data left */
+	int wav_ch;
+} sender_t;
+
+static sender_t g_send;
+
+static void msg_save(void)
+{
+	char tmp[] = MSG_PATH ".tmp";
+	FILE *fp;
+
+	if (g_conf_loading)
+		return;
+
+	if ((fp = fopen(tmp, "w")) == NULL) {
+		fprintf(stderr, "\nmessages: cannot write %s: %s\n", tmp, strerror(errno));
+		return;
+	}
+
+	fprintf(fp, "# x6100_trx messages: msg <1-%d> cw <text> | msg <n> voice <file.wav in %s>\n", MSG_COUNT, VOICE_DIR);
+	fprintf(fp, "msgrepeat %d\n", g_msg_repeat);
+
+	for (int i = 1; i <= MSG_COUNT; i++)
+		if (g_msg[i].type != MSG_EMPTY)
+			fprintf(fp, "msg %d %s %s\n", i, g_msg[i].type == MSG_CW ? "cw" : "voice", g_msg[i].text);
+
+	fclose(fp);
+
+	if (rename(tmp, MSG_PATH) < 0)
+		fprintf(stderr, "\nmessages: cannot write %s: %s\n", MSG_PATH, strerror(errno));
+}
+
+// Morse of one character as dots and dashes; NULL: not sendable
+static const char *morse(char c)
+{
+	static const char *const az[26] = { ".-", "-...", "-.-.", "-..", ".", "..-.", "--.", "....", "..", ".---",
+		"-.-", ".-..", "--", "-.", "---", ".--.", "--.-", ".-.", "...", "-", "..-", "...-", ".--", "-..-",
+		"-.--", "--.." };
+	static const char *const num[10] = { "-----", ".----", "..---", "...--", "....-", ".....", "-....", "--...",
+		"---..", "----." };
+	static const struct { char c; const char *m; } punct[] = {
+		{ '/', "-..-." }, { '?', "..--.." }, { '.', ".-.-.-" }, { ',', "--..--" }, { '=', "-...-" },
+		{ '+', ".-.-." }, { '-', "-....-" },
+	};
+
+	c = (char) toupper((unsigned char) c);
+
+	if (c >= 'A' && c <= 'Z')
+		return az[c - 'A'];
+
+	if (c >= '0' && c <= '9')
+		return num[c - '0'];
+
+	for (size_t i = 0; i < sizeof(punct) / sizeof(punct[0]); i++)
+		if (punct[i].c == c)
+			return punct[i].m;
+
+	return NULL;
+}
+
+// CW text into key units (1 = key down): dot 1, dash 3, gap 1, letter 3, word 7
+static int cw_units(const char *text, uint8_t *u, int max)
+{
+	int n = 0;
+
+	for (const char *p = text; *p != '\0'; p++) {
+		const char *m = morse(*p);
+
+		if (*p == ' ') {
+			for (int k = 0; k < 4 && n < max; k++)	/* 3 after the letter + 4 = 7 */
+				u[n++] = 0;
+			continue;
+		}
+
+		if (m == NULL)
+			continue;
+
+		for (const char *e = m; *e != '\0'; e++) {
+			for (int k = 0; k < (*e == '-' ? 3 : 1) && n < max; k++)
+				u[n++] = 1;
+
+			for (int k = 0; k < (e[1] != '\0' ? 1 : 3) && n < max; k++)
+				u[n++] = 0;
+		}
+	}
+
+	return n;
+}
+
+// WAV: the sample data of a 48 kHz, 16 bit PCM file; false when it is not one
+static bool wav_open(sender_t *s, const char *name)
+{
+	char path[192];
+	uint8_t h[12], ck[8], fmt[16];
+
+	snprintf(path, sizeof(path), "%s/%s", VOICE_DIR, name);
+
+	if ((s->wav = fopen(path, "rb")) == NULL)
+		return false;
+
+	if (fread(h, 1, 12, s->wav) != 12 || memcmp(h, "RIFF", 4) != 0 || memcmp(h + 8, "WAVE", 4) != 0)
+		goto bad;
+
+	s->wav_ch = 0;
+
+	while (fread(ck, 1, 8, s->wav) == 8) {
+		uint32_t len = (uint32_t) ck[4] | (uint32_t) ck[5] << 8 | (uint32_t) ck[6] << 16 | (uint32_t) ck[7] << 24;
+
+		if (memcmp(ck, "fmt ", 4) == 0 && len >= 16) {
+			if (fread(fmt, 1, 16, s->wav) != 16)
+				goto bad;
+
+			uint32_t rate = (uint32_t) fmt[4] | (uint32_t) fmt[5] << 8 | (uint32_t) fmt[6] << 16 | (uint32_t) fmt[7] << 24;
+
+			if (fmt[0] != 1 || fmt[1] != 0 || fmt[14] != 16 || rate != SEND_RATE || (fmt[2] != 1 && fmt[2] != 2))
+				goto bad;
+
+			s->wav_ch = fmt[2];
+
+			if (fseek(s->wav, (long) (len - 16 + (len & 1)), SEEK_CUR) < 0)
+				goto bad;
+		} else if (memcmp(ck, "data", 4) == 0 && s->wav_ch > 0) {
+			s->wav_left = len;
+			return true;
+		} else if (fseek(s->wav, (long) (len + (len & 1)), SEEK_CUR) < 0) {
+			goto bad;
+		}
+	}
+
+bad:
+	fclose(s->wav);
+	s->wav = NULL;
+	return false;
+}
+
+static void send_close(sender_t *s)
+{
+	if (s->open)
+		x6100_pcm_close(&s->pcm);
+
+	if (s->wav != NULL)
+		fclose(s->wav);
+
+	s->open = false;
+	s->wav = NULL;
+}
+
+// Start message n; false (and rx->warn) when it cannot go out here
+static bool msg_start(rx_t *rx, int n)
+{
+	sender_t *s = &g_send;
+	const msg_t *m = n >= 1 && n <= MSG_COUNT ? &g_msg[n] : NULL;
+	bool cw_mode = rx->mode == X6100_MODE_CW || rx->mode == X6100_MODE_CWR;
+	int rc;
+
+	if (m == NULL || m->type == MSG_EMPTY) {
+		toast("NO MESSAGE");
+		return false;
+	}
+
+	if (rx->ptt || rx->tuning || rx->send != SEND_NONE || rx->bb_tx || !tx_allowed(rx))
+		return false;
+
+	if (m->type == MSG_CW && !cw_mode) {
+		rx->warn = "CW MESSAGE: CW MODE";
+		return false;
+	}
+
+	if (m->type == MSG_VOICE && cw_mode) {
+		rx->warn = "VOICE MESSAGE: NOT IN CW";
+		return false;
+	}
+
+	send_close(s);
+	s->msg = n;
+	s->written = 0;
+	s->done = false;
+	s->phase = 0.0;
+	s->env = 0.0;
+
+	if (m->type == MSG_CW) {
+		s->nunits = cw_units(m->text, s->units, (int) sizeof(s->units));
+		s->unit_frames = 1.2 / (double) rx->wpm * SEND_RATE;
+		s->tone = (double) rx->cwtone;
+	} else if (!wav_open(s, m->text)) {
+		rx->warn = "WAV: 48 KHZ 16 BIT";
+		return false;
+	}
+
+	if ((rc = x6100_mixer_tx_setup(X6100_PCM_CARD)) < 0)
+		fprintf(stderr, "\nmessage: mixer setup: %s\n", strerror(-rc));
+
+	if ((rc = x6100_pcm_open(&s->pcm, X6100_PCM_CARD, X6100_PCM_DEVICE, false, SEND_RATE, 2, SEND_PERIOD,
+		SEND_PERIODS)) < 0) {
+		fprintf(stderr, "\nmessage: playback: %s\n", strerror(-rc));
+		send_close(s);
+		rx->warn = "NO AUDIO OUT";
+		return false;
+	}
+
+	s->open = true;
+	s->start_ms = now_ms();
+	rx->send = SEND_MSG;
+	rx->send_since = s->start_ms;
+	rx->codec_tx = true;
+	rx->tx_hz_ovr = m->type == MSG_CW ? tx_hz(rx) - (uint32_t) rx->cwtone : 0;
+	rx->tx_mode_ovr = m->type == MSG_CW ? X6100_MODE_USB : -1;
+	rx->warn = NULL;
+
+	return true;
+}
+
+// One period of message audio (stereo); false when the message has ended
+static bool msg_fill(sender_t *s, int16_t *buf)
+{
+	bool more = false;
+
+	for (int i = 0; i < SEND_PERIOD; i++) {
+		double v = 0.0;
+		uint64_t f = s->written + (uint64_t) i;
+
+		if (f < SEND_PREROLL) {
+			more = true;
+		} else if (g_msg[s->msg].type == MSG_CW) {
+			int u = (int) ((double) (f - SEND_PREROLL) / s->unit_frames);
+			double target = u < s->nunits ? s->units[u] : 0.0;
+
+			// Smoothed keying: the envelope follows the key, about 5 ms from 0 to 95 %
+			s->env += (target - s->env) * (1.0 - exp(-1.0 / (0.005 * SEND_RATE / 3.0)));
+			v = sin(s->phase) * s->env * SEND_LEVEL;
+			s->phase = fmod(s->phase + 2.0 * M_PI * s->tone / SEND_RATE, 2.0 * M_PI);
+			more |= u < s->nunits || s->env > 0.001;
+		} else if (s->wav != NULL && s->wav_left >= (uint32_t) (2 * s->wav_ch)) {
+			int16_t smp[2] = { 0, 0 };
+
+			if (fread(smp, 2, (size_t) s->wav_ch, s->wav) == (size_t) s->wav_ch) {
+				v = (s->wav_ch == 2 ? (smp[0] + smp[1]) / 2.0 : smp[0]) / 32768.0;	/* the file's own level */
+				s->wav_left -= (uint32_t) (2 * s->wav_ch);
+				more = true;
+			} else {
+				s->wav_left = 0;
+			}
+		}
+
+		int16_t o = (int16_t) lrint(v * 32767.0);
+
+		buf[2 * i] = o;
+		buf[2 * i + 1] = o;
+	}
+
+	return more;
+}
+
+//
+// SWR scan (APP): a 1 W NFM carrier stepped over the allocation the VFO is in (inside
+// its band), SCAN_STEPS points, SCAN_STEP_MS each; the SWR read in the second half
+// of each step. The curve stays on the scope until a key is pressed.
+//
+
+#define SCAN_STEPS	41
+#define SCAN_STEP_MS	300
+#define SCAN_SETTLE_MS	150
+#define SCAN_PWR	10	/* 0.1 W units */
+
+typedef struct
+{
+	bool shown;		/* curve on the scope */
+	uint32_t lo, hi;
+	float swr[SCAN_STEPS];
+	int step;		/* step running; SCAN_STEPS when done */
+	uint64_t step_at;	/* step started (ms) */
+	double acc;
+	int acc_n;
+} scan_t;
+
+static scan_t g_scan;
+
+static uint32_t scan_hz(int i)
+{
+	return g_scan.lo + (uint32_t) ((uint64_t) (g_scan.hi - g_scan.lo) * (uint64_t) i / (SCAN_STEPS - 1));
+}
+
+static bool scan_start(rx_t *rx)
+{
+	uint32_t f = tx_hz(rx);
+
+	if (rx->ptt || rx->tuning || rx->send != SEND_NONE || rx->bb_tx || rx->band < 0 || !tx_allowed(rx))
+		return false;
+
+	// The allocation around the VFO, in 1 kHz steps, inside the band
+	g_scan.lo = g_scan.hi = f;
+
+	while (g_scan.lo - 1000 >= g_bands[rx->band].low && in_allocation(g_scan.lo - 1000))
+		g_scan.lo -= 1000;
+
+	while (g_scan.hi + 1000 <= g_bands[rx->band].high && in_allocation(g_scan.hi + 1000))
+		g_scan.hi += 1000;
+
+	if (g_scan.hi - g_scan.lo < 10000) {
+		rx->warn = "SWR SCAN: SEGMENT < 10 KHZ";
+		return false;
+	}
+
+	for (int i = 0; i < SCAN_STEPS; i++)
+		g_scan.swr[i] = 0.0f;
+
+	g_scan.step = 0;
+	g_scan.step_at = now_ms();
+	g_scan.acc = 0.0;
+	g_scan.acc_n = 0;
+	g_scan.shown = true;
+	rx->send = SEND_SCAN;
+	rx->send_since = g_scan.step_at;
+	rx->tx_hz_ovr = scan_hz(0);
+	rx->tx_mode_ovr = X6100_MODE_NFM;
+	rx->tx_pwr_ovr = SCAN_PWR;
+	rx->warn = NULL;
+
+	return true;
+}
+
+//
+// Every pass of the main loop: feed the message audio, end it, repeat it; step the
+// SWR scan. tx / swr: the baseband TX flag and SWR from the last flow frame.
+// Returns true when the screen changes.
+//
+
+static bool send_poll(rx_t *rx, uint64_t t, bool tx, double swr)
+{
+	sender_t *s = &g_send;
+	static int16_t buf[SEND_PERIOD * 2];
+
+	// Stopped from outside (key, TOT, SWR, band edge): close the audio, no repeat
+	if (rx->send != SEND_MSG && s->open) {
+		s->repeat = false;
+		send_close(s);
+		return true;
+	}
+
+	if (rx->send == SEND_NONE && s->repeat && t >= s->next_at) {
+		if (!msg_start(rx, s->msg))
+			s->repeat = false;
+
+		return true;
+	}
+
+	if (rx->send == SEND_MSG) {
+		uint64_t played = t > s->start_ms ? (t - s->start_ms) * SEND_RATE / 1000 : 0;
+
+		while (!s->done && s->written < played + 3 * SEND_PERIOD) {
+			s->done = !msg_fill(s, buf);
+
+			if (x6100_pcm_write(&s->pcm, buf, SEND_PERIOD) < 0) {
+				tx_drop(rx, "AUDIO OUT FAILED");
+				send_close(s);
+				s->repeat = false;
+				return true;
+			}
+
+			s->written += SEND_PERIOD;
+		}
+
+		// All of it played (and 50 ms more): un-key
+		if (s->done && t >= s->start_ms + s->written * 1000 / SEND_RATE + 50) {
+			tx_drop(rx, NULL);
+			send_close(s);
+
+			if (s->repeat)
+				s->next_at = t + (uint64_t) g_msg_repeat * 1000;
+
+			return true;
+		}
+	}
+
+	if (rx->send == SEND_SCAN) {
+		if (tx && t - g_scan.step_at >= SCAN_SETTLE_MS) {
+			g_scan.acc += swr;
+			g_scan.acc_n++;
+		}
+
+		if (t - g_scan.step_at >= SCAN_STEP_MS) {
+			g_scan.swr[g_scan.step] = g_scan.acc_n > 0 ? (float) (g_scan.acc / g_scan.acc_n) : 0.0f;
+			g_scan.acc = 0.0;
+			g_scan.acc_n = 0;
+			g_scan.step_at = t;
+
+			if (++g_scan.step >= SCAN_STEPS) {
+				tx_drop(rx, NULL);
+				return true;
+			}
+
+			rx->tx_hz_ovr = scan_hz(g_scan.step);
+			return true;
+		}
+	}
+
+	return false;
+}
+
+// Any key: stop what is being sent or repeated; true when something was stopped
+static bool send_stop(rx_t *rx)
+{
+	if (rx->send == SEND_NONE && !g_send.repeat)
+		return false;
+
+	if (rx->send == SEND_SCAN)
+		g_scan.step = SCAN_STEPS;	/* the curve so far stays */
+
+	g_send.repeat = false;
+	tx_drop(rx, rx->send != SEND_NONE ? "STOPPED" : NULL);
+	return true;
+}
+
+//
 // Span (F2 in CENTER / SCROLL-C): full IQ width down to 3 kHz; FIX / SCROLL-F use the edges
 //
 
@@ -1934,6 +2419,16 @@ static bool on_key(rx_t *rx, int key)
 		return true;
 	}
 
+	// Any key stops a message (and its repeat) or the SWR scan, then clears the scan
+	// curve; it does nothing else
+	if (send_stop(rx))
+		return true;
+
+	if (g_scan.shown) {
+		g_scan.shown = false;
+		return true;
+	}
+
 	//
 	// Any other key drops a latched TX or aborts a tune, and does nothing else;
 	// F1-F5 are exempt (scope, meter, receive filter)
@@ -1990,6 +2485,38 @@ static bool on_key(rx_t *rx, int key)
 		}
 
 		rx->kedit = false;
+	}
+
+	//
+	// Message panel open (MSG): MFK push sends the selected message; MSG closes it, any
+	// other key closes it and does its normal job
+	//
+	if (rx->msedit) {
+		rx->msedit = false;
+
+		if (key == X6100_KEY_MFK_PUSH) {
+			msg_start(rx, rx->msedit_par + 1);
+			return true;
+		}
+
+		if (key == X6100_KEY_MSG)
+			return true;
+	}
+
+	//
+	// App panel open (APP): MFK push starts the selected app; APP closes it, any other key
+	// closes it and does its normal job
+	//
+	if (rx->apedit) {
+		rx->apedit = false;
+
+		if (key == X6100_KEY_MFK_PUSH) {
+			scan_start(rx);		/* the only app so far */
+			return true;
+		}
+
+		if (key == X6100_KEY_APP)
+			return true;
 	}
 
 	//
@@ -2129,6 +2656,14 @@ static bool on_key(rx_t *rx, int key)
 	case X6100_KEY_AB:	/* short: VFO A <-> B; long: A=B (the other VFO takes this one) */
 		vfo_swap(rx);
 		break;
+	case X6100_KEY_MSG:	/* short: message panel; long: repeat the selected message */
+		rx->msedit = !rx->msedit;
+		rx->msedit_since = now_ms();
+		break;
+	case X6100_KEY_APP:	/* short: app panel; long: SWR scan */
+		rx->apedit = !rx->apedit;
+		rx->apedit_since = now_ms();
+		break;
 	case X6100_KEY_GEN:	/* short: settings panel; long: status page */
 		rx->gedit = !rx->gedit;
 		rx->gedit_since = now_ms();
@@ -2249,7 +2784,8 @@ static bool has_long(int key)
 	return key == X6100_KEY_PRE || key == X6100_KEY_FST || key == X6100_KEY_ATU || key == X6100_KEY_MFK_PUSH
 		|| key == X6100_KEY_F1 || key == X6100_KEY_F2 || key == X6100_KEY_F3 || key == X6100_KEY_F4 || key == X6100_KEY_F5 || key == X6100_KEY_DFN || key == X6100_KEY_DFL
 		|| key == X6100_KEY_GEN || key == X6100_KEY_AB
-		|| key == X6100_KEY_VM || key == X6100_KEY_AGC || key == X6100_KEY_KEY;
+		|| key == X6100_KEY_VM || key == X6100_KEY_AGC || key == X6100_KEY_KEY || key == X6100_KEY_MSG
+		|| key == X6100_KEY_APP;
 }
 
 static bool on_long_key(rx_t *rx, int key)
@@ -2258,6 +2794,9 @@ static bool on_long_key(rx_t *rx, int key)
 		g_bscan_req = -1;	/* any key stops a birdie scan */
 		return true;
 	}
+
+	if (send_stop(rx))	/* a message or the SWR scan */
+		return true;
 
 	if (rx->lock)
 		return false;
@@ -2399,6 +2938,14 @@ static bool on_long_key(rx_t *rx, int key)
 	case X6100_KEY_AB:
 		vfo_equal(rx);
 		return true;
+	case X6100_KEY_MSG:	/* long: send the message selected in the panel, again every msgrepeat s */
+		rx->msedit = false;
+		g_send.repeat = msg_start(rx, rx->msedit_par + 1);
+		return true;
+	case X6100_KEY_APP:	/* long: SWR scan */
+		rx->apedit = false;
+		scan_start(rx);
+		return true;
 	case X6100_KEY_GEN:
 		rx->ginfo = !rx->ginfo;
 		rx->ginfo_since = now_ms();
@@ -2425,6 +2972,9 @@ static bool on_ptt(rx_t *rx, int value)
 	uint64_t t = now_ms();
 
 	if (value == 1) {
+		if (send_stop(rx))	/* the PTT key stops a message or the SWR scan */
+			return true;
+
 		if (rx->ptt_latch || rx->tuning) {
 			tx_drop(rx, NULL);
 			return true;
@@ -2519,6 +3069,17 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 			spar_set(rx, rx->sedit_par,
 				clampi(spar_get(rx, rx->sedit_par) + value * X6100_DIR_MFK * k->step, k->min, k->max));
 			rx->sedit_since = now_ms();
+			return true;
+		}
+
+		if (rx->msedit) {
+			rx->msedit_par = (rx->msedit_par + (value * X6100_DIR_MFK > 0 ? 1 : MSG_COUNT - 1)) % MSG_COUNT;
+			rx->msedit_since = now_ms();
+			return true;
+		}
+
+		if (rx->apedit) {
+			rx->apedit_since = now_ms();
 			return true;
 		}
 
@@ -4518,6 +5079,73 @@ static void draw_scope_panel(x6100_lcd_t *lcd, const rx_t *rx)
 }
 
 //
+// Message panel (MSG): five of M1-M8 around the selected one. Yellow. MFK turn:
+// select; push: send it; MSG long: send it again every msgrepeat s; MSG, another key
+// or 10 s idle closes. Messages are set from the console (msg) or in messages.conf.
+//
+
+static void draw_msg_panel(x6100_lcd_t *lcd, const rx_t *rx)
+{
+	const int vis = 5, px = LBL_W + 8, py = SPEC_Y + 14, pw = 500, ph = 30 + vis * 21;
+	const uint32_t bg = 0x1C1A08, yel = 0xF0D040, sel = 0x3A3410, dim = 0xA8A080, white = 0xF0F0F0;
+	int top = clampi(rx->msedit_par - 2, 0, MSG_COUNT - vis);
+
+	x6100_lcd_fill(lcd, px, py, pw, ph, bg);
+	x6100_lcd_fill(lcd, px, py, 3, ph, yel);
+	x6100_lcd_hline(lcd, px, px + pw - 1, py, 0x4A4420);
+	x6100_lcd_hline(lcd, px, px + pw - 1, py + ph - 1, 0x4A4420);
+	x6100_lcd_vline(lcd, px + pw - 1, py, py + ph - 1, 0x4A4420);
+	x6100_lcd_text(lcd, px + 14, py + 7, 2, "MSG", yel);
+	x6100_lcd_text(lcd, px + 110, py + 11, 1, "MFK: SELECT  PUSH: SEND  MSG LONG: REPEAT", dim);
+
+	for (int i = top; i < top + vis; i++) {
+		const msg_t *m = &g_msg[i + 1];
+		int y = py + 30 + (i - top) * 21;
+		char s[48];
+
+		if (i == rx->msedit_par)
+			x6100_lcd_fill(lcd, px + 6, y - 3, pw - 12, 19, sel);
+
+		snprintf(s, sizeof(s), "M%d %s %.30s", i + 1, m->type == MSG_CW ? "CW   " : m->type == MSG_VOICE ? "VOICE"
+			: "-", m->text);
+
+		for (char *c = s; *c != '\0'; c++)	/* the panel font is upper case */
+			*c = (char) toupper((unsigned char) *c);
+
+		x6100_lcd_text(lcd, px + 14, y, 2, s, i == rx->msedit_par ? white : dim);
+	}
+}
+
+//
+// App panel (APP): the apps; MFK push starts the selected one; APP long starts the
+// SWR scan; APP, another key or 10 s idle closes. Green.
+//
+
+static void draw_app_panel(x6100_lcd_t *lcd, const rx_t *rx)
+{
+	const int px = LBL_W + 8, py = SPEC_Y + 14, pw = 500, ph = 30 + 2 * 21;
+	const uint32_t bg = 0x0A1C0E, grn = 0x50D070, sel = 0x163A20, dim = 0x80A088, white = 0xF0F0F0;
+	char v[40];
+
+	x6100_lcd_fill(lcd, px, py, pw, ph, bg);
+	x6100_lcd_fill(lcd, px, py, 3, ph, grn);
+	x6100_lcd_hline(lcd, px, px + pw - 1, py, 0x204A2A);
+	x6100_lcd_hline(lcd, px, px + pw - 1, py + ph - 1, 0x204A2A);
+	x6100_lcd_vline(lcd, px + pw - 1, py, py + ph - 1, 0x204A2A);
+	x6100_lcd_text(lcd, px + 14, py + 7, 2, "APP", grn);
+	x6100_lcd_text(lcd, px + 110, py + 11, 1, "PUSH: START  ANY KEY: STOP", dim);
+
+	int y = py + 30;
+
+	x6100_lcd_fill(lcd, px + 6, y - 3, pw - 12, 19, sel);
+	x6100_lcd_text(lcd, px + 14, y, 2, "SWR SCAN", white);
+	snprintf(v, sizeof(v), "%d.%d W NFM, %d POINTS", SCAN_PWR / 10, SCAN_PWR % 10, SCAN_STEPS);
+	x6100_lcd_text(lcd, px + pw - 12 - x6100_lcd_text_width(v, 2), y, 2, v, dim);
+	x6100_lcd_text(lcd, px + 14, y + 21, 1, "THE BAND SEGMENT THE VFO IS IN; THE CURVE STAYS UNTIL A KEY", dim);
+	(void) rx;
+}
+
+//
 // Memory panel (V/M short): five channels around the selected one. Cyan. MFK turn:
 // channel (a used one is tuned at once); MFK long: write the VFO into it; MFK push
 // twice: clear it; V/M, another key or 10 s idle closes.
@@ -5654,6 +6282,12 @@ overlays:
 	if (rx->sedit)
 		draw_scope_panel(lcd, rx);
 
+	if (rx->msedit)
+		draw_msg_panel(lcd, rx);
+
+	if (rx->apedit)
+		draw_app_panel(lcd, rx);
+
 	if (rx->gedit)
 		draw_gen_panel(lcd, rx);
 
@@ -5662,6 +6296,77 @@ overlays:
 
 	if (rx->tuning || (rx->tune_done && now_ms() - rx->tune_done < TUNE_SHOW_MS))
 		draw_tune_panel(lcd, rx, scr);
+
+	//
+	// SWR scan curve over the RF scope (APP): SWR 1 at the bottom, 4 at the top, grid
+	// at 1.5, 2 and 3; the lowest point marked; until a key is pressed
+	//
+	if (g_scan.shown) {
+		const int x0 = LBL_W + 4, x1 = SW - 6, y0 = SPEC_Y + 4, y1 = SPEC_Y + SPEC_H - 4;
+		int best = -1, prev_x = -1, prev_y = -1;
+		char m[64];
+
+		x6100_lcd_fill(lcd, 0, SPEC_Y, SW, SPEC_H, 0x05080C);
+
+		for (int g = 0; g < 3; g++) {
+			static const float gs[3] = { 1.5f, 2.0f, 3.0f };
+			int gy = y1 - (int) ((gs[g] - 1.0f) / 3.0f * (float) (y1 - y0));
+
+			snprintf(m, sizeof(m), "%.1f", gs[g]);
+			x6100_lcd_hline(lcd, x0, x1, gy, 0x1A2430);
+			x6100_lcd_text(lcd, x1 - x6100_lcd_text_width(m, 1) - 2, gy - 9, 1, m, SCR_DIM);
+		}
+
+		for (int i = 0; i < SCAN_STEPS; i++) {
+			float s = g_scan.swr[i];
+
+			if (s < 1.0f)
+				continue;
+
+			int x = x0 + (x1 - x0) * i / (SCAN_STEPS - 1);
+			int y = y1 - (int) ((s > 4.0f ? 3.0f : s - 1.0f) / 3.0f * (float) (y1 - y0));
+
+			if (prev_x >= 0)
+				for (int k = prev_x; k <= x; k++)
+					x6100_lcd_fill(lcd, k, prev_y + (y - prev_y) * (k - prev_x) / (x - prev_x > 0 ? x - prev_x : 1), 2, 2,
+						s > SWR_LIMIT ? SCR_WARN : 0x3CC83C);
+
+			prev_x = x;
+			prev_y = y;
+			best = best < 0 || s < g_scan.swr[best] ? i : best;
+		}
+
+		if (best >= 0) {
+			int bx = x0 + (x1 - x0) * best / (SCAN_STEPS - 1);
+
+			x6100_lcd_vline(lcd, bx, y0, y1, SCR_ACCENT);
+			snprintf(m, sizeof(m), "SWR %.1f AT %.3f", g_scan.swr[best], scan_hz(best) / 1000.0);
+			x6100_lcd_text(lcd, x0 + 40, y0 + 2, 2, m, SCR_ACCENT);
+		}
+
+		snprintf(m, sizeof(m), "%.0f - %.0f KHZ%s", g_scan.lo / 1000.0, g_scan.hi / 1000.0,
+			rx->send == SEND_SCAN ? "  SCANNING" : "");
+		x6100_lcd_text(lcd, x1 - x6100_lcd_text_width(m, 2), y1 - 18, 2, m, SCR_FG);
+	}
+
+	//
+	// Sending a message: its number (and the repeat countdown)
+	//
+	if (rx->send == SEND_MSG || g_send.repeat) {
+		char m[32];
+		uint64_t t = now_ms();
+
+		if (rx->send == SEND_MSG)
+			snprintf(m, sizeof(m), "MSG %d", g_send.msg);
+		else
+			snprintf(m, sizeof(m), "MSG %d AGAIN IN %d S", g_send.msg,
+				(int) ((g_send.next_at > t ? g_send.next_at - t : 0) + 999) / 1000);
+
+		int tw = x6100_lcd_text_width(m, 2);
+
+		x6100_lcd_fill(lcd, LBL_W + 4, SPEC_Y + 46, tw + 8, 20, rx->send == SEND_MSG ? 0xC02020 : 0x000000);
+		x6100_lcd_text(lcd, LBL_W + 8, SPEC_Y + 49, 2, m, rx->send == SEND_MSG ? 0xFFFFFF : SCR_WARN);
+	}
 
 	//
 	// Last TX refusal or trip, until the next TX
@@ -6172,6 +6877,84 @@ static bool console_line(rx_t *rx, char *line)
 				changed = true;
 				continue;
 			}
+		}
+
+		// Messages (messages.conf): msg (list), msg <n> cw <text>, msg <n> voice <file.wav>,
+		// msg <n> clear, msgrepeat <s>, msgsend <n>, msgstop; swrscan
+		if (strcasecmp(t, "msg") == 0) {
+			const char *ns = strtok(NULL, " \t\r\n"), *ty = ns == NULL ? NULL : strtok(NULL, " \t\r\n");
+			const char *text = ty == NULL ? NULL : strtok(NULL, "\r\n");
+			int n = ns == NULL ? 0 : atoi(ns);
+
+			if (ns == NULL) {
+				for (int i = 1; i <= MSG_COUNT; i++)
+					printf("\nmsg %d %s %s", i, g_msg[i].type == MSG_CW ? "cw" : g_msg[i].type == MSG_VOICE ? "voice"
+						: "-", g_msg[i].text);
+
+				printf("\nmsgrepeat %d\n", g_msg_repeat);
+			} else if (n < 1 || n > MSG_COUNT || ty == NULL) {
+				fprintf(stderr, "\nmsg <1-%d> cw <text> | voice <file.wav> | clear\n", MSG_COUNT);
+			} else if (strcasecmp(ty, "clear") == 0) {
+				g_msg[n].type = MSG_EMPTY;
+				g_msg[n].text[0] = '\0';
+				msg_save();
+			} else if ((strcasecmp(ty, "cw") == 0 || strcasecmp(ty, "voice") == 0) && text != NULL) {
+				while (*text == ' ' || *text == '\t')
+					text++;
+
+				g_msg[n].type = strcasecmp(ty, "cw") == 0 ? MSG_CW : MSG_VOICE;
+				snprintf(g_msg[n].text, sizeof(g_msg[n].text), "%s", text);
+
+				if (g_msg[n].type == MSG_VOICE && strchr(text, '/') != NULL)
+					g_msg[n].type = MSG_EMPTY;	/* a file name in VOICE_DIR, no path */
+
+				if (g_msg[n].type == MSG_EMPTY)
+					fprintf(stderr, "\nmsg: voice files live in %s, give the name only\n", VOICE_DIR);
+
+				msg_save();
+			} else {
+				fprintf(stderr, "\nmsg <1-%d> cw <text> | voice <file.wav> | clear\n", MSG_COUNT);
+			}
+
+			continue;
+		}
+
+		if (strcasecmp(t, "msgrepeat") == 0) {
+			const char *v = strtok(NULL, " \t\r\n");
+			int s = v == NULL ? 0 : atoi(v);
+
+			if (s >= 1 && s <= 600) {
+				g_msg_repeat = s;
+				msg_save();
+			} else {
+				fprintf(stderr, "\nmsgrepeat: 1 to 600 s\n");
+			}
+
+			continue;
+		}
+
+		if (strcasecmp(t, "msgsend") == 0) {
+			const char *v = strtok(NULL, " \t\r\n");
+
+			if (!g_conf_loading && v != NULL)
+				msg_start(rx, atoi(v));
+
+			changed = true;
+			continue;
+		}
+
+		if (strcasecmp(t, "msgstop") == 0) {
+			send_stop(rx);
+			changed = true;
+			continue;
+		}
+
+		if (strcasecmp(t, "swrscan") == 0) {
+			if (!g_conf_loading)
+				scan_start(rx);
+
+			changed = true;
+			continue;
 		}
 
 		// Birdies: birdie <Hz> <dB> (birdies.conf), birdies (list), birdiescan [all],
@@ -7990,6 +8773,8 @@ int main(int argc, char **argv)
 	spar_defaults();
 	rx.dup = DUP_AUTO;
 	rx.dup_khz = DUP_KHZ_DEF;
+	rx.tx_mode_ovr = -1;	/* no TX overrides: nothing being sent */
+	rx.tx_pwr_ovr = -1;
 	rx.edge = 1;
 	edge_defaults();
 
@@ -8002,6 +8787,7 @@ int main(int argc, char **argv)
 	conf_load(&rx, CONF_PATH, true);	/* first for oob / nolimit, so the state frequency fits */
 	conf_load(&rx, MEM_PATH, false);
 	conf_load(&rx, BIRDIE_PATH, false);
+	conf_load(&rx, MSG_PATH, false);
 	conf_load(&rx, STATE_PATH, false);
 	conf_load(&rx, CONF_PATH, false);
 
@@ -8377,6 +9163,17 @@ int main(int argc, char **argv)
 			dirty = true;
 		}
 
+		// Message and app panels after 10 s
+		if ((rx.msedit && t - rx.msedit_since >= 10000) || (rx.apedit && t - rx.apedit_since >= 10000)) {
+			rx.msedit = false;
+			rx.apedit = false;
+			dirty = true;
+		}
+
+		// Messages and the SWR scan: audio, end, repeat, scan steps
+		if (send_poll(&rx, t, scr.tx, scr.swr))
+			changed = true;
+
 		// Scope panel after 10 s
 		if (rx.sedit && t - rx.sedit_since >= 10000) {
 			rx.sedit = false;
@@ -8421,7 +9218,8 @@ int main(int argc, char **argv)
 		//
 		uint64_t tot_ms = (uint64_t) g_tot_min[rx.tot] * 60000u;
 
-		if (rx.ptt && tot_ms > 0 && t - rx.ptt_since >= tot_ms) {
+		if (((rx.ptt && t - rx.ptt_since >= tot_ms) || (rx.send != SEND_NONE && t - rx.send_since >= tot_ms)) && tot_ms > 0) {
+			g_send.repeat = false;
 			tx_drop(&rx, "TX TIMEOUT");
 			changed = true;
 		}
@@ -8431,7 +9229,8 @@ int main(int argc, char **argv)
 		else if (!rx.bb_tx)
 			rx.bb_tx_since = 0;
 
-		if (!rx.tot_cut && tot_ms > 0 && rx.bb_tx && !rx.ptt && !rx.tuning && t - rx.bb_tx_since >= tot_ms) {
+		if (!rx.tot_cut && tot_ms > 0 && rx.bb_tx && !rx.ptt && !rx.tuning && rx.send == SEND_NONE
+			&& t - rx.bb_tx_since >= tot_ms) {
 			rx.tot_cut = true;
 			rx.warn = "TX TIMEOUT";
 			fprintf(stderr, "\nTX timeout: baseband keyed from outside (hand mic, VOX), power to minimum\n");
@@ -8447,7 +9246,7 @@ int main(int argc, char **argv)
 		// and after a write error, and while the baseband stays in TX within 2 s of an
 		// un-key (10 s after an error), every 250 ms
 		//
-		bool keyed = rx.ptt || rx.tuning;
+		bool keyed = rx.ptt || rx.tuning || rx.send != SEND_NONE;
 
 		if (was_keyed && !keyed) {
 			force_refresh = true;
@@ -8588,7 +9387,7 @@ int main(int argc, char **argv)
 			//
 			// SWR trip on our own TX (not while tuning, where it sweeps)
 			//
-			if (tx && rx.ptt && swr > SWR_LIMIT) {
+			if (tx && (rx.ptt || rx.send == SEND_MSG) && swr > SWR_LIMIT) {
 				if (swr_since == 0) {
 					swr_since = t;
 				} else if (t - swr_since >= SWR_TRIP_MS) {

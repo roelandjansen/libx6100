@@ -1,0 +1,13 @@
+# x6100_trx messages (MSG key): M1-M8
+#
+#   msg <1-8> cw <text>        CW, in CW / CW-R mode: A-Z 0-9 / ? . , = + -, keyer speed
+#   msg <1-8> voice <file>     a WAV file in /etc/x6100/voice (48 kHz, 16 bit, mono or
+#                              stereo), in LSB / USB / AM / NFM
+#   msgrepeat <s>              MSG long: send again after this many seconds (1-600)
+#
+# Edit here or from the console (msg, msgrepeat); x6100_trx rewrites this file.
+
+msgrepeat 10
+msg 1 cw CQ CQ DE NOCALL NOCALL K
+msg 2 cw TU 5NN
+msg 3 cw 73 DE NOCALL SK
