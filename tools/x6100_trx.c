@@ -245,7 +245,8 @@ typedef struct
 	int moni_lvl;		/* monitor level */
 	int sql;		/* squelch threshold, 0 = open */
 	int tot;		/* TX timeout, index into g_tot_min (0 = off) */
-	bool tot_cut;		/* TX timeout on a TX we cannot drop (hand mic, VOX): power 0 */
+	bool tot_cut;		/* power cut: minimum power and TX enable off (TOT on hand mic / VOX, stuck TX) */
+	bool tot_lock;		/* TOT on hand mic / VOX: the cut stays until a key (the mic PTT is unseen) */
 	uint64_t bb_tx_since;	/* baseband in TX since (ms), 0 = in RX */
 	//
 	// Sending without the PTT key: a message (MSG) or the SWR scan (APP)
@@ -1000,6 +1001,14 @@ static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 		x6100_ctl_set(ctl, X6100_REG_VFOA_BAND, 1);
 		x6100_ctl_set(ctl, X6100_REG_VFOB_BAND, 1);
 	}
+
+	// Power cut (TOT on hand mic / VOX, stuck TX): TX enable off as well; the baseband
+	// keeps the TX power it keyed with (2026-10-27: 3 W stayed after the cut to 0.1 W)
+	if (rx->tot_cut || rx->tot_lock) {
+		x6100_ctl_set(ctl, X6100_REG_VFOA_BAND, 0);
+		x6100_ctl_set(ctl, X6100_REG_VFOB_BAND, 0);
+	}
+
 	x6100_set_mode(ctl, 0, mode);
 	x6100_set_mode(ctl, 1, mode);
 	x6100_ctl_set(ctl, X6100_REG_VFOA_AGC, rx->agc);
@@ -2515,6 +2524,13 @@ static bool on_key(rx_t *rx, int key)
 		return true;
 	}
 
+	// After a TX timeout on hand mic / VOX: a key ends the TX block, and does nothing else
+	if (rx->tot_lock) {
+		rx->tot_lock = false;
+		rx->warn = NULL;
+		return true;
+	}
+
 	// Any key stops a message (and its repeat) or the SWR scan, then clears the scan
 	// curve; it does nothing else
 	if (send_stop(rx))
@@ -2891,6 +2907,12 @@ static bool on_long_key(rx_t *rx, int key)
 		return true;
 	}
 
+	if (rx->tot_lock) {	/* TX timeout on hand mic / VOX: the key ends the TX block */
+		rx->tot_lock = false;
+		rx->warn = NULL;
+		return true;
+	}
+
 	if (send_stop(rx))	/* a message or the SWR scan */
 		return true;
 
@@ -3068,6 +3090,12 @@ static bool on_ptt(rx_t *rx, int value)
 	uint64_t t = now_ms();
 
 	if (value == 1) {
+		if (rx->tot_lock) {	/* the PTT key ends the TX block of a hand mic / VOX timeout */
+			rx->tot_lock = false;
+			rx->warn = NULL;
+			return true;
+		}
+
 		if (send_stop(rx))	/* the PTT key stops a message or the SWR scan */
 			return true;
 
@@ -9380,10 +9408,12 @@ int main(int argc, char **argv)
 		if (!rx.tot_cut && tot_ms > 0 && rx.bb_tx && !rx.ptt && !rx.tuning && rx.send == SEND_NONE
 			&& t - rx.bb_tx_since >= tot_ms) {
 			rx.tot_cut = true;
-			rx.warn = "TX TIMEOUT";
-			fprintf(stderr, "\nTX timeout: baseband keyed from outside (hand mic, VOX), power to minimum\n");
+			rx.tot_lock = true;	/* until a key: the mic PTT may still be held */
+			rx.warn = "TX TIMEOUT: ANY KEY";
+			fprintf(stderr, "\nTX timeout: baseband keyed from outside (hand mic, VOX): TX enable off, power to"
+				" minimum until a key\n");
 			changed = true;
-		} else if (rx.tot_cut && !rx.bb_tx) {
+		} else if (rx.tot_cut && !rx.bb_tx && !rx.tot_lock) {
 			rx.tot_cut = false;
 			changed = true;
 		}
