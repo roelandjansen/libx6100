@@ -314,7 +314,8 @@ stays. The SWR trip is off during the scan (it measures).
 - TX timeout (TX panel, `tot`: off, 1, 3, 5 min; 3 out of the box): our PTT (key, CAT) drops;
   a TX keyed outside Linux (hand mic, VOX) cannot be dropped: TX enable (registers 0 / 6)
   goes off and the power to the minimum, and TX stays blocked until a key is pressed
-  (`TX TIMEOUT: ANY KEY`; that key does nothing else). The power alone did not do it:
+  (`TX TIMEOUT: ANY KEY`; that key does nothing else; verified 2026-10-27). The power
+  alone did not do it:
   the baseband kept 3 W after the cut (2026-10-27)
 - a refusal or trip (OUT OF BAND, TX TIMEOUT, SWR HIGH, ...) shows on the scope for 10 s
   (or until the next TX); after a power cut (TOT on hand mic / VOX, stuck TX) 10 s from

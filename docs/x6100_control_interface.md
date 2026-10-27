@@ -98,6 +98,11 @@ Gaps 16, 18–19, 26, 30–32, 35–40, 52, 54: unknown.
 | `0x10000` | power off |
 | `0x40000` | PTT |
 
+Running TX (2026-10-27, hand mic PTT, x6100_trx TOT): a new TX power (register 15
+[15:8]) does not reach a transmission already keyed (3 W stayed after 0.1 W was
+written); clearing the TX enable bits (registers 0 / 6, "ham band") stops it at once, and
+it stays off while the mic PTT is held.
+
 ### SWR scan and voice record flags in R1CBU's x6100_gui (traced 2026-10-27)
 
 Read from x6100_gui (strijar/x6100_gui 3f009c4, LGPL-2.1, `radio.c`, `dialog_swrscan.c`,
