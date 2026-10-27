@@ -7025,6 +7025,21 @@ static bool console_line(rx_t *rx, char *line)
 			}
 		}
 
+		// TX meter on the dial (F4): meter po|swr|alc
+		if (strcasecmp(t, "meter") == 0) {
+			const char *v = strtok(NULL, " \t\r\n");
+			int m = v == NULL ? -1 : strcasecmp(v, "po") == 0 ? 0 : strcasecmp(v, "swr") == 0 ? 1
+				: strcasecmp(v, "alc") == 0 ? 2 : -1;
+
+			if (m >= 0)
+				rx->meter = m;
+			else
+				fprintf(stderr, "\nmeter: po, swr or alc\n");
+
+			changed = true;
+			continue;
+		}
+
 		// Messages (messages.conf): msg (list), msg <n> cw <text>, msg <n> voice <file.wav>,
 		// msg <n> clear, msgrepeat <s>, msgsend <n>, msgstop; swrscan
 		if (strcasecmp(t, "msg") == 0) {
@@ -7593,6 +7608,7 @@ static void state_save(const rx_t *rx)
 	fprintf(fp, "\n");
 	fprintf(fp, "%s span %d edge %d %s %s ref %d aref %d\n", scopes[rx->scope], rx->span, rx->edge,
 		rx->asplit ? "split" : rx->ascope ? "af" : "rf", rx->arange ? "af6" : "af3", rx->rref, rx->aref);
+	fprintf(fp, "meter %s\n", rx->meter == 1 ? "swr" : rx->meter == 2 ? "alc" : "po");	/* F4 */
 
 	// Fixed edges that differ from their default
 	for (int r = 0; r < EDGE_RANGES; r++) {
