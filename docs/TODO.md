@@ -113,10 +113,13 @@ under GEN until a better key turns up.
     rounds); our spans (±1.5-48 kHz: a CENTER window then always fits an edge); 27 1E
     kept; bands, modes and filters as ours (no VHF / UHF, no WFM / air).
   - Address: an unused CI-V address, so wfview does not take it for a real IC-705.
-    Taken in wfview `rigs/` (hex): 00, 17, 18, 34, 48, 4A, 50, 56, 58, 5C, 5E, 64, 66,
-    6E, 76, 7A, 7C, 84, 88, 8E, 94, 96, 98, A2, A4, AC, B2, B6 (plus the FT-710 / FTX-1
-    ids); also stay clear of Icom addresses wfview has no file for and of the Xiegu
-    default 70 (the IC-7000's). x6100_trx then answers on it (19 00) and on A4 as now.
+    Icom addresses are all even. Taken in wfview `rigs/` (hex): 34, 48, 4A, 50, 56, 58,
+    5C, 5E, 64, 66, 6E, 76, 7A, 7C, 84, 88, 8E, 94, 96, 98, A2, A4, AC, B2, B6 (17 / 18
+    are the Kenwood model ids, FT-710 / FTX-1 Yaesu ones, 00 the defaults). Stay clear of
+    even Icom addresses wfview has no file for, of 70 (Xiegu default, the IC-7000's) and
+    of E0 and up (controllers). An odd address can never meet a real Icom: check that
+    wfview and other clients (hamlib, logging programs) accept one. x6100_trx then
+    answers on it (19 00) and on A4 as now.
 - Icom LAN server (ports 50001-50003): faster scope, network audio; then RADE via
   network audio. Design: `x6100_netaudio_design.md`.
 
