@@ -111,9 +111,9 @@ static int g_run;
 
 static void check_to(x6100_civ_t *civ, uint8_t to, const char *req, const char *want)
 {
-	uint8_t in[128] = { 0xFE, 0xFE, to, 0xE0 }, out[128];
+	uint8_t in[X6100_CIV_FRAME_MAX] = { 0xFE, 0xFE, to, 0xE0 }, out[X6100_CIV_FRAME_MAX];
 	size_t n = 4;
-	char got[400] = "";
+	char got[600] = "";
 	unsigned b;
 	int pos;
 
@@ -347,19 +347,21 @@ int main(void)
 
 	// Memories (08-0B, 1A 00) and the transceive switch (1A 05 0131)
 	{
-		static const char calls_name[] = " 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20";
+		static const char calls[] = " 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20";
 		static const char name_blank[] = " 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20";
-		static const char rpt[] = "1A 00 00 00 07 00 00 00 66 29 00 05 01 00 10 00 00 08 85 00 08 85 00 00 23 00 00 10 00";
-		char want[400], req[400];
+		static const char ch5[] = " 00 40 07 14 00 01 01 00 00 00 00 08 85 00 08 85 00 00 23 00 00 00 00";
+		static const char rpt[] = " 00 00 66 29 00 05 01 00 10 00 00 08 85 00 08 85 00 00 23 00 00 10 00";
+		static const char spl_a[] = " 00 40 07 14 00 01 01 00 00 00 00 08 85 00 08 85 00 00 23 00 00 00 00";
+		static const char spl_b[] = " 00 40 17 14 00 01 02 00 00 00 00 08 85 00 08 85 00 00 23 00 00 00 00";
+		char want[600], req[600];
 
 		m.v[X6100_CIV_FREQ][0] = 14074000;
 		m.v[X6100_CIV_MODE][0] = X6100_MODE_USB;
 
 		check(&civ, "08 00 05", "FA");			/* empty: selected, not tuned */
 		check(&civ, "09", "FB");			/* VFO into channel 5 */
-		snprintf(want, sizeof(want), "1A 00 00 00 05 00 00 40 07 14 00 01 01 00 00 00 00 08 85 00 08 85 00 00 23 00 00 00 00%s%s",
-			calls_name, name_blank);
-		check(&civ, "1A 00 00 00 05", want);
+		snprintf(want, sizeof(want), "1A 00 00 00 05 00%s%s%s%s%s", ch5, calls, ch5, calls, name_blank);
+		check(&civ, "1A 00 00 00 05", want);		/* B side as A */
 		check(&civ, "0A", "FB");
 		check(&civ, "0B", "FB");
 		check(&civ, "1A 00 00 00 05", "1A 00 00 00 05 FF");
@@ -368,7 +370,8 @@ int main(void)
 		check(&civ, "09 01", "FA");
 
 		// 10 m repeater, NFM, DUP- 100 kHz, named: written, read back the same, tuned
-		snprintf(req, sizeof(req), "%s%s 31 30 4D 20 52 50 54 20 20 20 20 20 20 20 20 20", rpt, calls_name);
+		snprintf(req, sizeof(req), "1A 00 00 00 07 00%s%s%s%s 31 30 4D 20 52 50 54 20 20 20 20 20 20 20 20 20",
+			rpt, calls, rpt, calls);
 		check(&civ, req, "FB");
 		snprintf(want, sizeof(want), "%s", req);
 		check(&civ, "1A 00 00 00 07", want);
@@ -383,6 +386,20 @@ int main(void)
 		check(&civ, "03", "03 00 00 66 29 00");
 		check(&civ, "1A 00 00 00 07 FF", "FB");		/* clear */
 		check(&civ, "1A 00 00 00 07", "1A 00 00 00 07 FF");
+
+		// Split channel: RX 14.074 USB FIL1 (A), TX 14.174 USB FIL2 (B)
+		snprintf(req, sizeof(req), "1A 00 00 00 08 10%s%s%s%s%s", spl_a, calls, spl_b, calls, name_blank);
+		check(&civ, req, "FB");
+		g_run++;
+
+		if (!m.mem[8].split || m.mem[8].tx_hz != 14174000 || m.mem[8].tx_mode != X6100_MODE_USB || m.mem[8].tx_fil != 2) {
+			g_fail++;
+			printf("FAIL memory 8: split %d tx %u mode %d fil %d\n", m.mem[8].split, (unsigned) m.mem[8].tx_hz,
+				m.mem[8].tx_mode, m.mem[8].tx_fil);
+		}
+
+		check(&civ, "1A 00 00 00 08", req);
+		check(&civ, "1A 00 00 00 08 FF", "FB");
 
 		m.v[X6100_CIV_TRANSCEIVE][0] = 1;
 		check(&civ, "1A 05 01 31", "1A 05 01 31 01");

@@ -24,7 +24,7 @@
 #define X6100_CIV_ADDR_X6100	0x61	/* own identity: wfview rig file contrib/wfview/X6100.rig */
 #define X6100_CIV_ADDR_CTRL	0xE0
 #define X6100_CIV_ADDR_ALL	0x00
-#define X6100_CIV_FRAME_MAX	96	/* 1A 00 memory contents with name: 74 bytes */
+#define X6100_CIV_FRAME_MAX	128	/* 1A 00 memory contents, IC-705 layout: 121 bytes */
 
 //
 // Items the engine reads or writes through the callbacks. Values:
@@ -139,8 +139,8 @@ typedef enum
 } x6100_civ_item_t;
 
 //
-// One memory channel (1A 00). The IC-705 layout has no TX frequency for a split
-// channel, only the split flag.
+// One memory channel (1A 00). The IC-705 layout has an A and a B side: B is the TX
+// side of a split channel (tx_*), else the same as A.
 //
 
 typedef struct
@@ -150,6 +150,9 @@ typedef struct
 	int mode;		/* x6100_mode_t; data mode is the _DIG mode */
 	int fil;		/* 1-3 */
 	bool split;
+	uint32_t tx_hz;		/* split: B side, the TX frequency, mode and filter */
+	int tx_mode;
+	int tx_fil;
 	int dup;		/* 0 none, 1 DUP-, 2 DUP+ */
 	uint32_t dup_hz;	/* duplex offset */
 	char name[17];		/* up to 16 characters */

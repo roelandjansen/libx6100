@@ -4,9 +4,9 @@
 #
 # Usage: mkrig.sh <wfview>/rigs/IC-705.rig > X6100.rig
 #
-# Keeps the commands x6100_trx answers (the rest would only give NG rounds), sets the
-# X6100 identity (CI-V address 0x61, hamlib model 3087), our spans, bands, modes and
-# memory layout. See README.md next to this script.
+# Keeps every IC-705 command and poll (x6100_trx answers NG where it has no function,
+# as an Icom does), sets the X6100 identity (CI-V address 0x61, hamlib model 3087) and
+# its capabilities: spans, bands, modes, memories. See README.md next to this script.
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
@@ -33,25 +33,11 @@ G_SRC="${1}"
 
 awk -v CIV="${C_CIV_ADDR}" -v HAMLIB="${C_HAMLIB}" -f <(cat <<'EOF'
 BEGIN {
-	# Commands x6100_trx answers (wfview names, IC-705 file)
-	n = split("Freq (TRX)|Mode (TRX)|Freq Get|Mode Get|Freq Set|Mode Set|" \
-		"VFO Mode Select|VFO A Select|VFO B Select|VFO Equal AB|VFO Swap A/B|" \
-		"Memory Mode|Memory Write|Memory to VFO|Memory Clear|Split/Duplex|Tuning Step|" \
-		"Attenuator Status|AF Gain|RF Gain|Squelch|NR Level|CW Pitch|RF Power|Mic Gain|" \
-		"Key Speed|Compressor Level|Break-In Delay|NB Level|Monitor Gain|Vox Gain|" \
-		"Anti-Vox Gain|S Meter Sql Status|S Meter|Various Squelch|Overflow Status|" \
-		"Power Meter|SWR Meter|ALC Meter|Vd Meter|Preamp Status|AGC Time Constant|" \
-		"Noise Blanker|Noise Reduction|Compressor Status|Monitor Status|Vox Status|" \
-		"Manual Notch|Dial Lock Status|Transceiver ID|Memory Contents|Band Stacking Reg|" \
-		"Filter Width|Quick Split|CIV Transceive|Data Off Mod Input|DATA1 Mod Input|" \
-		"Data Mode Filter|Transceiver Status|Tuner/ATU Status|TX Freq|RIT Frequency|" \
-		"RIT Status|RIT TX Status|Selected Freq|Unselected Freq|Selected Mode|" \
-		"Unselected Mode|Scope Wave Data|Scope On/Off|Scope Data Output|Scope Main/Sub|" \
-		"Scope Single/Dual|Scope Mode|Scope Span|Scope Edge|Scope Hold|Scope Ref|" \
-		"Scope Speed|Scope VBW|Scope Fixed Edge Freq|Command Error FA|Command OK FB", a, "|")
-	for (i = 1; i <= n; i++)
-		want["Commands", a[i]] = 1
-	# Periodic polls: only for commands we keep (checked against want[] below)
+	# All IC-705 commands and polls are kept: x6100_trx answers NG where it has no
+	# function, as an Icom does (wfview is Icom centred). Bands, modes and the other
+	# capabilities are the X6100's.
+	all["Commands"] = 1
+	all["Periodic"] = 1
 	n = split("6m|10m|12m|15m|17m|20m|30m|40m|60m|80m|160m|Gen", a, "|")
 	for (i = 1; i <= n; i++)
 		want["Bands", a[i]] = 1
@@ -62,9 +48,6 @@ BEGIN {
 	want["Inputs", "USB"] = 1
 	want["Preamps", "0"] = 1
 	want["Preamps", "1"] = 1
-	n = split("ALC|Center|Power|S-Meter|SWR|Voltage", a, "|")
-	for (i = 1; i <= n; i++)
-		want["Meters", a[i]] = 1
 	# The record field that names it
 	keyf["Commands"] = "Type"
 	keyf["Periodic"] = "Command"
@@ -72,9 +55,6 @@ BEGIN {
 	keyf["Modes"] = "Name"
 	keyf["Inputs"] = "Name"
 	keyf["Preamps"] = "Num"
-	keyf["Meters"] = "Meter"
-	keyf["CTCSS"] = "-"		# no tone encoder: none kept
-	keyf["DTCS"] = "-"
 	keyf["Spans"] = "-"		# replaced by ours
 	# Field changes: section SUBSEP name SUBSEP field
 	set["Commands", "CIV Transceive", "String"] = "\\\\x1a\\\\x05\\\\x01\\\\x31"
@@ -94,9 +74,6 @@ BEGIN {
 	hdr["MemGroups"] = "0"
 	hdr["Memories"] = "99"
 	hdr["MemStart"] = "1"
-	# 1A 00 as x6100_trx sends it: the IC-705 A side only, the name right after R2
-	hdr["MemFormat"] = "%1.2a %3.2b %5.1d %6.5f %11.1g %12.1h %13.1i %14.1j %15.1m %16.3n " \
-		"%19.3o %22.1p %23.2q %25.1r %26.3s %29.8t %37.8u %45.8v %53.16z"
 }
 
 # Record line: Section\N\Field=value
@@ -130,10 +107,8 @@ FNR == 1 {
 		cnt[s] = 0
 		for (i = 1; i <= last[s]; i++) {
 			k = (s, i) in name ? name[s, i] : ""
-			if (!(s in keyf))
+			if (!(s in keyf) || (s in all))
 				ok = 1
-			else if (s == "Periodic")
-				ok = ("Commands", k) in want
 			else
 				ok = (s, k) in want
 			if (ok)

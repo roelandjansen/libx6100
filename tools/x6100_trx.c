@@ -7021,8 +7021,8 @@ static bool cat_set(void *ctx, x6100_civ_item_t item, int vfo, int32_t v)
 }
 
 //
-// Memory channels over CI-V (1A 00): the IC-705 layout carries the split flag but no
-// TX frequency, so a split channel keeps its TX side only when it had one already;
+// Memory channels over CI-V (1A 00), IC-705 layout: the B side is the TX side of a split
+// channel (frequency, mode; one filter for both here, the A one);
 // duplex 00 is AUTO here (simplex outside the 10 m repeater window). Data modes are
 // refused: memories.conf has no names for them.
 //
@@ -7038,6 +7038,9 @@ static bool cat_mem_get(void *ctx, int ch, x6100_civ_mem_t *m)
 	m->mode = c->mode;
 	m->fil = c->fil + 1;
 	m->split = c->split;
+	m->tx_hz = c->split ? c->tx_hz : c->hz;
+	m->tx_mode = c->split ? c->tx_mode : c->mode;
+	m->tx_fil = m->fil;
 	m->dup = c->dup == DUP_MINUS ? 1 : c->dup == DUP_PLUS ? 2 : 0;
 	m->dup_hz = m->dup ? (uint32_t) c->dup_khz * 1000u : 0;
 	snprintf(m->name, sizeof(m->name), "%s", c->name);
@@ -7063,7 +7066,10 @@ static bool cat_mem_set(void *ctx, int ch, const x6100_civ_mem_t *m)
 	n.hz = m->hz;
 	n.mode = (x6100_mode_t) m->mode;
 	n.fil = clampi(m->fil - 1, 0, 2);
-	n.split = m->split && g_mem[ch].used && g_mem[ch].split;
+	n.split = m->split && m->tx_hz >= FREQ_MIN && m->tx_hz <= FREQ_MAX
+		&& m->tx_mode != X6100_MODE_LSB_DIG && m->tx_mode != X6100_MODE_USB_DIG;
+	n.tx_hz = n.split ? m->tx_hz : 0;
+	n.tx_mode = n.split ? (x6100_mode_t) m->tx_mode : n.mode;
 	n.dup = m->dup == 1 ? DUP_MINUS : m->dup == 2 ? DUP_PLUS : DUP_AUTO;
 	n.dup_khz = clampi((int) ((m->dup_hz + 500u) / 1000u), 10, DUP_KHZ_MAX);
 	snprintf(n.name, sizeof(n.name), "%.15s", m->name);	/* CI-V gives 16, a memory name holds 15 */

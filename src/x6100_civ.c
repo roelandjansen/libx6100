@@ -743,16 +743,46 @@ static size_t cmd_mem_action(req_t *r, x6100_civ_item_t item)
 	return reply_ok(r, r->n == 0 && get(r, X6100_CIV_MEM_CH, 0, &ch) && set(r, item, 0, ch));
 }
 
-// 1A 00: memory contents, IC-705 layout. After 1A 00 gg cc cc: split / select, frequency
-// (5), mode, filter, data, duplex / tone, digital squelch, repeater tone (3), TSQL tone
-// (3), DTCS (3), DV CSQL, duplex offset (3, 100 Hz units), UR / R1 / R2 (24), name (16).
-// An empty channel reads FF; writing FF clears it.
+// 1A 00: memory contents, IC-705 layout. After 1A 00 gg cc cc: split / select, then the
+// A side: frequency (5), mode, filter, data, duplex / tone, digital squelch, repeater
+// tone (3), TSQL tone (3), DTCS (3), DV CSQL, duplex offset (3, 100 Hz units), UR / R1 /
+// R2 (24); the B side in the same 47 bytes (the TX side of a split channel, else as A);
+// name (16). 111 bytes. An empty channel reads FF; writing FF clears it.
+#define MEM_SIDE	47
+#define MEM_B		(1 + MEM_SIDE)
+#define MEM_NAME	(1 + 2 * MEM_SIDE)
+#define MEM_LEN		(MEM_NAME + 16)
+
+// One side: frequency .. call signs
+static void out_mem_side(out_t *o, uint32_t hz, uint8_t civ_mode, int fil, bool data, int dup, unsigned ofs)
+{
+	// Repeater / TSQL tone 88.5 Hz, DTCS 023, DV CSQL 00 (not used by the X6100)
+	static const uint8_t tones[] = { 0x00, 0x08, 0x85, 0x00, 0x08, 0x85, 0x00, 0x00, 0x23, 0x00 };
+
+	out_freq(o, hz);
+	out_byte(o, civ_mode);
+	out_byte(o, (uint8_t) (fil >= 1 && fil <= 3 ? fil : 1));
+	out_byte(o, data ? 0x01 : 0x00);
+	out_byte(o, (uint8_t) ((dup >= 1 && dup <= 2 ? dup : 0) << 4));	/* duplex, no tone */
+	out_byte(o, 0x00);						/* digital squelch off */
+
+	for (size_t i = 0; i < sizeof(tones); i++)
+		out_byte(o, tones[i]);
+
+	out_byte(o, bcd_byte(ofs % 100));				/* duplex offset, 100 Hz units */
+	out_byte(o, bcd_byte(ofs / 100 % 100));
+	out_byte(o, bcd_byte(ofs / 10000 % 100));
+
+	for (int i = 0; i < 24; i++)					/* UR / R1 / R2 call signs */
+		out_byte(o, ' ');
+}
+
 static size_t cmd_mem_content(req_t *r)
 {
 	const x6100_civ_ops_t *ops = &r->civ->ops;
 	x6100_civ_mem_t m;
-	uint8_t civ_mode;
-	bool data;
+	uint8_t civ_mode, tx_civ;
+	bool data, tx_data;
 
 	if (r->n < 4 || r->d[1] != 0x00 || !ops->mem_get || !ops->mem_set)
 		return reply_ng(r);
@@ -762,7 +792,7 @@ static size_t cmd_mem_content(req_t *r)
 	if (ch < 0)
 		return reply_ng(r);
 
-	// Write: clear, or the content as far as it goes (offset and name optional)
+	// Write: clear, or the content as far as it goes (offset, B side and name optional)
 	if (r->n > 4) {
 		const uint8_t *c = r->d + 4;
 		size_t cn = r->n - 4;
@@ -779,6 +809,9 @@ static size_t cmd_mem_content(req_t *r)
 		m.fil = c[7] >= 1 && c[7] <= 3 ? c[7] : 1;
 		m.split = (c[0] >> 4) == 1;
 		m.dup = (c[9] >> 4) <= 2 ? c[9] >> 4 : 0;
+		m.tx_hz = m.hz;
+		m.tx_mode = m.mode;
+		m.tx_fil = m.fil;
 
 		if (cn >= 24) {
 			int a = bcd_val(c[21]), b = bcd_val(c[22]), d = bcd_val(c[23]);
@@ -787,8 +820,19 @@ static size_t cmd_mem_content(req_t *r)
 				m.dup_hz = (uint32_t) (a + b * 100 + d * 10000) * 100u;
 		}
 
-		if (cn >= 64) {
-			memcpy(m.name, c + 48, 16);
+		if (cn >= MEM_B + 8) {
+			const uint8_t *b = c + MEM_B;
+			int mode = mode_from_civ(b[5], b[7] != 0);
+
+			if (!get_freq_bcd(b, &m.tx_hz) || mode < 0)
+				return reply_ng(r);
+
+			m.tx_mode = mode;
+			m.tx_fil = b[6] >= 1 && b[6] <= 3 ? b[6] : 1;
+		}
+
+		if (cn >= MEM_LEN) {
+			memcpy(m.name, c + MEM_NAME, 16);
 
 			for (int i = 15; i >= 0 && (m.name[i] == ' ' || m.name[i] == '\0'); i--)
 				m.name[i] = '\0';
@@ -812,6 +856,11 @@ static size_t cmd_mem_content(req_t *r)
 		return out_end(r->o);
 	}
 
+	if (!m.split || !mode_to_civ(m.tx_mode, &tx_civ, &tx_data)) {
+		tx_civ = civ_mode;
+		tx_data = data;
+	}
+
 	unsigned ofs = m.dup_hz / 100u;
 	size_t len = 0;
 
@@ -819,25 +868,8 @@ static size_t cmd_mem_content(req_t *r)
 		len++;
 
 	out_byte(r->o, m.split ? 0x10 : 0x00);			/* split, not selected */
-	out_freq(r->o, m.hz);
-	out_byte(r->o, civ_mode);
-	out_byte(r->o, (uint8_t) (m.fil >= 1 && m.fil <= 3 ? m.fil : 1));
-	out_byte(r->o, data ? 0x01 : 0x00);
-	out_byte(r->o, (uint8_t) ((m.dup >= 1 && m.dup <= 2 ? m.dup : 0) << 4));	/* duplex, no tone */
-	out_byte(r->o, 0x00);					/* digital squelch off */
-
-	// Repeater / TSQL tone 88.5 Hz, DTCS 023, DV CSQL 00 (not used by the X6100)
-	static const uint8_t tones[] = { 0x00, 0x08, 0x85, 0x00, 0x08, 0x85, 0x00, 0x00, 0x23, 0x00 };
-
-	for (size_t i = 0; i < sizeof(tones); i++)
-		out_byte(r->o, tones[i]);
-
-	out_byte(r->o, bcd_byte(ofs % 100));			/* duplex offset, 100 Hz units */
-	out_byte(r->o, bcd_byte(ofs / 100 % 100));
-	out_byte(r->o, bcd_byte(ofs / 10000 % 100));
-
-	for (int i = 0; i < 24; i++)				/* UR / R1 / R2 call signs */
-		out_byte(r->o, ' ');
+	out_mem_side(r->o, m.hz, civ_mode, m.fil, data, m.dup, ofs);
+	out_mem_side(r->o, m.split ? m.tx_hz : m.hz, tx_civ, m.split ? m.tx_fil : m.fil, tx_data, m.dup, ofs);
 
 	for (size_t i = 0; i < 16; i++)
 		out_byte(r->o, (uint8_t) (i < len ? m.name[i] : ' '));

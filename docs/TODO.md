@@ -112,18 +112,16 @@ under GEN until a better key turns up.
 - wfview rig file for the X6100: built 2026-10-27, `contrib/wfview/X6100.rig` (made by
   `mkrig.sh` from the IC-705 file; README there). Address 61 (odd: never a real Icom;
   Icom addresses are all even), `civaddr 61` in x6100_trx.conf, 19 00 also answered to
-  a broadcast (wfview auto detect). 84 commands (only what we answer), transceive 0131,
-  our spans, HF + 6 m, our memory layout. To do:
-  - try it: wfview loads it and connects (address 61 and auto), polls without NG in the
-    log, scope, fixed edges, memories (read, write, name), transceive
+  a broadcast (wfview auto detect). The Icom way (wfview is Icom centred): all IC-705
+  commands and polls kept, NG where we have no function; transceive 0131; our spans,
+  bands, modes. 1A 00 now the full IC-705 layout (A + B side, name at 100; B = split
+  TX side), so the IC-705 file reads names too. To do:
+  - try it: wfview loads it and connects (address 61 and auto), the NG answers do not
+    upset it, scope, fixed edges, memories (read, write, name, split TX side), transceive
+  - the same memory window with the IC-705 file (A4)
   - hamlib, logging programs with address 61 (hamlib X6100 model 3087 has its own
     default address: check what it needs)
   - offer it to wfview upstream (with the IC-705 1A 05 0112 / 0131 question)
-- IC-705 identity (A4) and memories: wfview's IC-705 file reads 1A 00 with an A and a
-  B side (name at byte 100); we send the A side only (name at 53), so wfview's memory
-  window with the IC-705 file gets no names and a wrong B side. Check the IC-705 CI-V
-  reference; send the full layout (frame max 96 then too small) or leave A4 as is now
-  that 61 exists.
 - Icom LAN server (ports 50001-50003): faster scope, network audio; then RADE via
   network audio. Design: `x6100_netaudio_design.md`.
 

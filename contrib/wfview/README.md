@@ -19,23 +19,25 @@ With `civaddr a4` (the default) x6100_trx stays an IC-705 and wfview uses its IC
 
 ## What differs from the IC-705 file
 
+The X6100 works the Icom way: every IC-705 command and poll stays in the file, and
+x6100_trx answers NG (FA) where it has no function, as an Icom does for an item it lacks.
+The commands, the 1A 00 memory layout (A and B side, name at byte 100) and the scope
+data are the IC-705's. Only the identity and what the radio can do differ:
+
 | Item | IC-705 file | X6100.rig |
 |---|---|---|
 | Model, CI-V address | IC-705, A4 | X6100, 61 (odd: never a real Icom; the Xiegu ID 1D 19 is 61 00) |
 | rigctld model | 3085 | 3087 (hamlib `RIG_MODEL_X6100`) |
 | LAN, WiFi | yes | no (network: wfserver on the radio over `cat pty`) |
-| Commands | 124 | 84: only what x6100_trx answers (no NG rounds), plus Notch Filter (14 0D) |
-| CI-V transceive | 1A 05 0112 | 1A 05 0131 (the IC-705 item; 0112 is the IC-7610's) |
-| Periodic polls | 37 | 28 (tones, dash ratio, break-in, PBT left out) |
-| Scope spans | ±2.5-500 kHz | ±1.5, 3, 6, 12, 24, 48 kHz (the 96 kHz IQ) |
+| Commands | 124 | the same 124, plus Notch Filter (14 0D, notch position) |
+| CI-V transceive | 1A 05 0112 | 1A 05 0131 (the IC-705 item, as hamlib has it; 0112 is the IC-7610's) |
+| Tuning step | codes 0-8 | 0-13 (as the IC-705's step list in the same file) |
+| Scope spans | ±2.5-500 kHz | ±1.5, 3, 6, 12, 24, 48 kHz (the 96 kHz IQ); Scope Span max 5 |
 | Bands | HF, 6 m, 2 m, 70 cm, air, WFM, LF | HF, 60 m, 6 m; Gen 0.5-54 MHz |
 | Modes | 10 | LSB, USB, AM, CW, FM, CW-R; AM filter up to 6 kHz |
-| Preamp | off, 1, 2 | off, on |
+| Preamp | off, 1, 2 | off, on (Preamp Status max 1) |
 | Inputs | MIC, USB, M/U, WLAN | MIC, USB |
-| CTCSS / DTCS | lists | none (no tone encoder) |
-| Meters | incl. COMP, Id | without COMP, Id |
-| Tuning step | codes 0-8 | 0-13 |
-| Memories | 100 groups, IC-705 A + B layout | group 00 only, channels 1-99; `MemFormat` as x6100_trx sends 1A 00 (A side, name at 53) |
+| Memories | 100 groups | group 00 only, channels 1-99 |
 
 Fixed edges (27 16 / 27 1E) are kept: wfview counts the band `Range` thresholds to get
 the IC-705 range code, which gives the same 12 HF ranges as x6100_trx.
@@ -46,11 +48,10 @@ the IC-705 range code, which gives the same 12 HF ranges as x6100_trx.
 bash mkrig.sh <wfview>/rigs/IC-705.rig > X6100.rig
 ```
 
-The command list, bands, modes and changes are at the top of the awk program in
-`mkrig.sh`. A command added to the engine (`src/x6100_civ.c`) goes into that list.
+The bands, modes and changes are at the top of the awk program in `mkrig.sh`.
 
 ## Status
 
 Built 2026-10-27, not tried with wfview yet. To check: wfview loads it and connects
-(auto and 61), scope and fixed edges, memory window (read, write, name), polls without
-NG in the log.
+(auto and 61), scope and fixed edges, memory window (read, write, name, split TX side),
+and that the NG answers on the items we lack do not upset it.

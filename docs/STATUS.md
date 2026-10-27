@@ -65,7 +65,9 @@ Built, not yet tried on the radio (2026-10-25):
   state, console `edge` / `fixedge`, CI-V 27 16 / 27 1E (host tests pass)
 - wfview rig file for the X6100 (2026-10-27): `contrib/wfview/X6100.rig` from the IC-705
   one by `mkrig.sh`; `civaddr 61` in the settings file makes x6100_trx an X6100 on
-  address 61 (default stays A4 / IC-705); 19 00 answered to a broadcast (host tests pass)
+  address 61 (default stays A4 / IC-705); 19 00 answered to a broadcast. The Icom way:
+  all IC-705 commands and polls in the file, NG where we lack the function; 1A 00 in
+  the full IC-705 layout (A + B side, B = split TX side, name at 100) (host tests pass)
 - CI-V memories (08 select / tune, 09 write, 0A to VFO, 0B clear, 1A 00 contents in the
   IC-705 layout) and the transceive switch 1A 05 0131; host tests and a pty test pass
 
@@ -95,7 +97,8 @@ Built, not yet tried on the radio (2026-10-25):
     the band edge markers on 40 / 20 m, edges after a restart; wfview fixed edge window
     (27 1E set / read), a 200 kHz edge from wfview is cut to 96 kHz.
 11. wfview with X6100.rig: `civaddr 61`, the rig file in wfview, connect on 61 and on
-    auto; no NG rounds in its log; scope, fixed edges, memories with names, transceive.
+    auto; NG answers do not upset it; scope, fixed edges, memories with names and a
+    split TX side (also with the IC-705 file on A4), transceive.
 
 ## Next steps (suggested order)
 
