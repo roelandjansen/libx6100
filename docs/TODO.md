@@ -96,12 +96,27 @@ under GEN until a better key turns up.
 
 - ATT / preamp from wfview: compare a socat trace with IU1WXY (see `x6100_civ.md` §7).
 - PTT in USB-D with the C-Media sound card (CAT PTT, rear USB audio).
-- wfview IC-705 rig file (`rigs/IC-705.rig`): check whether it holds the fixed edge
-  ranges and / or the maximum edge width; match ours (12 ranges, 96 kHz) to it.
-- Own wfview rig file for the X6100, based on the IC-705 one: CI-V transceive, the
-  commands we answer (and NG for the rest), our spans and edge width, and an unused
-  CI-V address for the X6100 (not A4, free in the wfview rig list) so wfview does not
-  take it for a real IC-705; x6100_trx then answers on that address too.
+- wfview IC-705 rig file, checked 2026-10-27 (wfview `v3-initial`, 00c62ce, `rigs/IC-705.rig`):
+  - Fixed edge ranges: no table; each `Bands\N\Range` is a threshold in MHz and wfview
+    counts the thresholds at or below the window's lower edge, plus 1 (icomcommander.cpp,
+    spectrumBounds). For HF this gives exactly our 12 ranges (14 MHz -> 06 = 11-15).
+  - Maximum edge width: not in the rig file. wfview sends 27 1E with the window it shows
+    (ReceiverController::toFixedEdge), then 27 16 and 27 14 01; with the IC-705 spans
+    (up to ±500 kHz) that can be 1 MHz: our 96 kHz cut applies. It never reads 27 1E
+    back (the reply is ignored), so our read is for other clients only.
+  - CI-V transceive: the rig file has 1A 05 0112 (on the IC-7610 0112 is transceive; on
+    the IC-705 0131, as we answer). Looks like a copy from the IC-7610: check against
+    the IC-705 CI-V reference, then fix it in wfview (and in our X6100 rig file).
+    Over a pty (VSP) wfview answers 1A 05 transceive itself and does not forward it.
+- Own wfview rig file for the X6100 (`rigs/X6100.rig`), from the IC-705 one:
+  - CI-V transceive 1A 05 0131; the commands we answer, the rest left out (no NG
+    rounds); our spans (±1.5-48 kHz: a CENTER window then always fits an edge); 27 1E
+    kept; bands, modes and filters as ours (no VHF / UHF, no WFM / air).
+  - Address: an unused CI-V address, so wfview does not take it for a real IC-705.
+    Taken in wfview `rigs/` (hex): 00, 17, 18, 34, 48, 4A, 50, 56, 58, 5C, 5E, 64, 66,
+    6E, 76, 7A, 7C, 84, 88, 8E, 94, 96, 98, A2, A4, AC, B2, B6 (plus the FT-710 / FTX-1
+    ids); also stay clear of Icom addresses wfview has no file for and of the Xiegu
+    default 70 (the IC-7000's). x6100_trx then answers on it (19 00) and on A4 as now.
 - Icom LAN server (ports 50001-50003): faster scope, network audio; then RADE via
   network audio. Design: `x6100_netaudio_design.md`.
 
