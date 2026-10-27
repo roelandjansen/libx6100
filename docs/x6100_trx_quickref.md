@@ -82,7 +82,8 @@ Four edges per range, the IC-705 ranges (MHz): 01 below 1.6, 02 1.6-2, 03 2-6, 0
 ## Scope panel (F1 long, IC-7851 style)
 
 MFK turn: adjust; MFK push: next row; MFK hold: default; F1 long, another key or 10 s
-idle closes. Kept in the state file (three lines: trace, colours, waterfall and TX).
+idle closes. Kept in the state file (five lines: RF trace, RF colours, waterfall and TX, AF
+trace, AF colours).
 
 | Row | Values (default) | Console / state |
 |---|---|---|
@@ -100,9 +101,12 @@ idle closes. Kept in the state file (three lines: trace, colours, waterfall and 
 | WATERFALL SIZE | SMALL, MID, LARGE (MID): the scope above takes or gives the rows | `wfsize small\|mid\|large` |
 | WF PEAK LEVEL | 30-80 dB in steps of 10 (50): the range from the noise to the top colour | `wflevel 50` |
 | SCOPE DURING TX | ON, OFF (ON): off keeps the last RX picture while transmitting | `txscope on\|off`; CI-V 27 1B |
+| AF WAVEFORM TYPE, AF AVERAGING, AF MAX HOLD | as the RF rows, for the audio scope (F3) | `afwave`, `afavg`, `afhold` |
+| AF CURRENT / LINE / MAX HOLD RED / GREEN / BLUE | 0-255, for the audio scope | `affillr` .. `afholdb` |
 
-The defaults are the IC-7851 settings the scope was modelled on. The colours and the
-waveform type apply to the audio scope too.
+The defaults are the IC-7851 settings the scope was modelled on. The audio scope has its
+own waveform, averaging, max hold and colours (AF rows); on the first start with them they
+are copied from the RF rows. The waterfall rows apply to both scopes.
 
 ## Filter panel (F5 long, IC-705 style)
 

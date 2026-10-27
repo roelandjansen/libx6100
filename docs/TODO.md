@@ -63,10 +63,6 @@ Status: 2026-10-27 (v0.13.0). Summary and next steps: `STATUS.md`.
   over a restart; wfview fixed edge window (27 16 / 27 1E set and read), a 200 kHz edge
   from wfview cut to 96 kHz. Then: a panel to edit an edge on the radio (MFK lower /
   upper), and whether wfview sends 27 1E for a range we do not cover (above 60 MHz).
-- Audio scope settings of its own (scope panel, a group of AF rows): colours (current,
-  line, max hold), waveform type, averaging, max hold off / decay / 10 s / on as on the
-  RF scope (now the audio scope shares the RF settings and its max hold only decays).
-  Start as copies of the RF values; state file and console as the RF rows.
 - Register 35 LO offset for FIX mode: an edge off the IQ centre now shows only the part
   of the 96 kHz IQ it covers; moving the LO would fill the whole window.
 - liquid-dsp: built static (v1.8.3, `third_party/liquid-dsp`, `x6100_liquid` check), not

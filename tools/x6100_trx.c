@@ -1689,7 +1689,8 @@ static bool edge_store(rx_t *rx)
 
 enum { SP_MODE, SP_CTYPE, SP_VBW, SP_AVG, SP_WAVE, SP_HOLD, SP_FILL_R, SP_FILL_G, SP_FILL_B, SP_LINE_R,
 	SP_LINE_G, SP_LINE_B, SP_HOLD_R, SP_HOLD_G, SP_HOLD_B, SP_WF, SP_WF_SPEED, SP_WF_SIZE, SP_WF_LEVEL,
-	SP_TXSCOPE, SPARS };
+	SP_TXSCOPE, SP_AF_WAVE, SP_AF_AVG, SP_AF_HOLD, SP_AF_FILL_R, SP_AF_FILL_G, SP_AF_FILL_B, SP_AF_LINE_R,
+	SP_AF_LINE_G, SP_AF_LINE_B, SP_AF_HOLD_R, SP_AF_HOLD_G, SP_AF_HOLD_B, SPARS };
 
 enum { WAVE_FILL, WAVE_LINE, WAVE_FILL_LINE };
 enum { HOLD_OFF, HOLD_DECAY, HOLD_10S, HOLD_ON };
@@ -1715,10 +1716,23 @@ static const kpar_t g_spar[SPARS] = {
 	[SP_WF_SIZE] = { "WATERFALL SIZE", "wfsize", 0, 2, 1, 1 },
 	[SP_WF_LEVEL] = { "WF PEAK LEVEL", "wflevel", 30, 80, 10, 50 },
 	[SP_TXSCOPE] = { "SCOPE DURING TX", "txscope", 0, 1, 1, 1 },
+	[SP_AF_WAVE] = { "AF WAVEFORM TYPE", "afwave", 0, 2, 1, WAVE_FILL_LINE },
+	[SP_AF_AVG] = { "AF AVERAGING", "afavg", 1, 4, 1, 2 },
+	[SP_AF_HOLD] = { "AF MAX HOLD", "afhold", 0, 3, 1, HOLD_DECAY },
+	[SP_AF_FILL_R] = { "AF CURRENT RED", "affillr", 0, 255, 1, 255 },
+	[SP_AF_FILL_G] = { "AF CURRENT GREEN", "affillg", 0, 255, 1, 63 },
+	[SP_AF_FILL_B] = { "AF CURRENT BLUE", "affillb", 0, 255, 1, 127 },
+	[SP_AF_LINE_R] = { "AF LINE RED", "afliner", 0, 255, 1, 255 },
+	[SP_AF_LINE_G] = { "AF LINE GREEN", "aflineg", 0, 255, 1, 255 },
+	[SP_AF_LINE_B] = { "AF LINE BLUE", "aflineb", 0, 255, 1, 0 },
+	[SP_AF_HOLD_R] = { "AF MAX HOLD RED", "afholdr", 0, 255, 1, 0 },
+	[SP_AF_HOLD_G] = { "AF MAX HOLD GREEN", "afholdg", 0, 255, 1, 127 },
+	[SP_AF_HOLD_B] = { "AF MAX HOLD BLUE", "afholdb", 0, 255, 1, 127 },
 };
 
 static int g_sp[SPARS];
 static uint32_t g_iq_hz;	/* IQ centre of the last spectrum (max hold starts again when it moves) */
+static bool g_af_seen;		/* an AF scope row came from the state or settings file */
 
 //
 // The words of a row (console, state file, panel in upper case); NULL: a number
@@ -1734,6 +1748,8 @@ static const char *const g_sp_words[SPARS][4] = {
 	[SP_WF_SPEED] = { "slow", "mid", "fast" },
 	[SP_WF_SIZE] = { "small", "mid", "large" },
 	[SP_TXSCOPE] = { "off", "on" },
+	[SP_AF_WAVE] = { "fill", "line", "fill+line" },
+	[SP_AF_HOLD] = { "off", "decay", "10s", "on" },
 };
 
 static bool spar_onoff(int i)
@@ -1743,7 +1759,15 @@ static bool spar_onoff(int i)
 
 static bool spar_colour(int i)
 {
-	return i >= SP_FILL_R && i <= SP_HOLD_B;
+	return (i >= SP_FILL_R && i <= SP_HOLD_B) || (i >= SP_AF_FILL_R && i <= SP_AF_HOLD_B);
+}
+
+// The red row of the colour that row i belongs to
+static int spar_colour_base(int i)
+{
+	int first = i >= SP_AF_FILL_R ? SP_AF_FILL_R : SP_FILL_R;
+
+	return first + (i - first) / 3 * 3;
 }
 
 // Trace colours as 0xRRGGBB from the R, G, B rows
@@ -1779,7 +1803,7 @@ static void spar_token(const rx_t *rx, int i, char *s, size_t n)
 
 	if (g_sp_words[i][0] != NULL)
 		snprintf(s, n, "%s", g_sp_words[i][v]);
-	else if (i == SP_AVG)
+	else if (i == SP_AVG || i == SP_AF_AVG)
 		snprintf(s, n, "%s%.0d", v == 1 ? "off" : "", v == 1 ? 0 : v);
 	else
 		snprintf(s, n, "%d", v);
@@ -1796,7 +1820,7 @@ static int spar_parse(int i, const char *vs)
 	if (g_sp_words[i][0] != NULL) {
 		for (int k = 0; k < 4 && g_sp_words[i][k] != NULL; k++)
 			v = strcasecmp(vs, g_sp_words[i][k]) == 0 ? k : v;
-	} else if (i == SP_AVG && strcasecmp(vs, "off") == 0) {
+	} else if ((i == SP_AVG || i == SP_AF_AVG) && strcasecmp(vs, "off") == 0) {
 		v = 1;
 	} else if (isdigit((unsigned char) vs[0])) {
 		v = atoi(vs);
@@ -1821,6 +1845,17 @@ static void spar_defaults(void)
 {
 	for (int i = 1; i < SPARS; i++)
 		g_sp[i] = g_spar[i].def;
+}
+
+// Audio scope rows from the RF ones (a state file from before the AF rows existed)
+static void spar_af_from_rf(void)
+{
+	g_sp[SP_AF_WAVE] = g_sp[SP_WAVE];
+	g_sp[SP_AF_AVG] = g_sp[SP_AVG];
+	g_sp[SP_AF_HOLD] = g_sp[SP_HOLD];
+
+	for (int i = 0; i < 9; i++)
+		g_sp[SP_AF_FILL_R + i] = g_sp[SP_FILL_R + i];
 }
 
 //
@@ -5134,7 +5169,7 @@ static void draw_scope_panel(x6100_lcd_t *lcd, const rx_t *rx)
 
 		if (spar_colour(i))
 			x6100_lcd_fill(lcd, px + pw - 12 - x6100_lcd_text_width("255", 2) - 44, y - 1, 34, 15,
-				spar_rgb(SP_FILL_R + (i - SP_FILL_R) / 3 * 3));
+				spar_rgb(spar_colour_base(i)));
 	}
 }
 
@@ -5503,16 +5538,33 @@ static void audio_feed(screen_t *scr, const int16_t *buf, unsigned frames, unsig
 
 		fft(v, AS_N);
 
+		// Scope panel AF rows: averaging; max hold as on the RF scope (10 S and ON start
+		// again when the setting changes, 10 S every 10 s)
+		const float avg = 1.0f / (float) g_sp[SP_AF_AVG];
+		static uint64_t hold_t;
+		static int hold_mode = -1;
+		uint64_t now = now_ms();
+		bool restart = !scr->aspec_valid || g_sp[SP_AF_HOLD] != hold_mode
+			|| (g_sp[SP_AF_HOLD] == HOLD_10S && now - hold_t >= 10000);
+
+		if (restart) {
+			hold_t = now;
+			hold_mode = g_sp[SP_AF_HOLD];
+		}
+
 		for (int k = 0; k < AS_N / 2; k++) {
 			// dBFS: a full-scale sine (Hann, coherent gain 0.5) reads 0 dB
 			float p = (v[k][0] * v[k][0] + v[k][1] * v[k][1]) * 16.0f / ((float) AS_N * (float) AS_N);
 			float db = p > 1e-20f ? 10.0f * log10f(p) : -200.0f;
 
-			const float avg = 1.0f / (float) g_sp[SP_AVG];	/* scope panel averaging */
-
 			scr->aspec[k] = scr->aspec_valid ? scr->aspec[k] * (1.0f - avg) + db * avg : db;
-			scr->apeak[k] = scr->aspec_valid && scr->apeak[k] - PEAK_DECAY_DB > scr->aspec[k]
-				? scr->apeak[k] - PEAK_DECAY_DB : scr->aspec[k];
+
+			if (restart)
+				scr->apeak[k] = scr->aspec[k];
+			else if (g_sp[SP_AF_HOLD] == HOLD_DECAY)
+				scr->apeak[k] = scr->apeak[k] - PEAK_DECAY_DB > scr->aspec[k] ? scr->apeak[k] - PEAK_DECAY_DB : scr->aspec[k];
+			else
+				scr->apeak[k] = scr->apeak[k] > scr->aspec[k] ? scr->apeak[k] : scr->aspec[k];
 		}
 
 		// Floor: 20th percentile of the bins inside the receive passband (outside it the
@@ -5569,20 +5621,23 @@ static int audio_y(float db)
 }
 
 //
-// One trace column at x (RF and audio scope), as the scope panel sets it: fill under
-// the trace (CURRENT colour), the max hold dot at py, the line from the last column
+// One trace column at x, as the scope panel sets it for the RF or the audio (af)
+// scope: fill under the trace (CURRENT colour), the max hold dot at py, the line from
+// the last column
 //
 
-static void trace_col(x6100_lcd_t *lcd, int x, int y, int py, int prev_y)
+static void trace_col(x6100_lcd_t *lcd, int x, int y, int py, int prev_y, bool af)
 {
-	if (g_sp[SP_WAVE] != WAVE_LINE)
-		x6100_lcd_vline(lcd, x, y, SPEC_Y + SPEC_H - 1, spar_rgb(SP_FILL_R));
+	int wave = g_sp[af ? SP_AF_WAVE : SP_WAVE];
 
-	if (g_sp[SP_HOLD] != HOLD_OFF)
-		x6100_lcd_fill(lcd, x, py, 1, 1, spar_rgb(SP_HOLD_R));
+	if (wave != WAVE_LINE)
+		x6100_lcd_vline(lcd, x, y, SPEC_Y + SPEC_H - 1, spar_rgb(af ? SP_AF_FILL_R : SP_FILL_R));
 
-	if (g_sp[SP_WAVE] != WAVE_FILL)
-		x6100_lcd_vline(lcd, x, prev_y < 0 ? y : prev_y, y, spar_rgb(SP_LINE_R));
+	if (g_sp[af ? SP_AF_HOLD : SP_HOLD] != HOLD_OFF)
+		x6100_lcd_fill(lcd, x, py, 1, 1, spar_rgb(af ? SP_AF_HOLD_R : SP_HOLD_R));
+
+	if (wave != WAVE_FILL)
+		x6100_lcd_vline(lcd, x, prev_y < 0 ? y : prev_y, y, spar_rgb(af ? SP_AF_LINE_R : SP_LINE_R));
 }
 
 //
@@ -5638,7 +5693,7 @@ static void draw_audio_spec(screen_t *scr, const rx_t *rx, int x0, int w)
 			int y = audio_y(audio_db_at(scr->aspec, x, w, range));
 			int py = audio_y(audio_db_at(scr->apeak, x, w, range));
 
-			trace_col(lcd, x0 + x, y, py, prev_y);
+			trace_col(lcd, x0 + x, y, py, prev_y, true);
 			prev_y = y;
 		}
 	} else {
@@ -6100,7 +6155,7 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 
 		y = spec_y(spec_at(scr, &v, x));
 		py = spec_y(peak_at(scr, &v, x));
-		trace_col(lcd, x, y, py, prev_y);
+		trace_col(lcd, x, y, py, prev_y, false);
 		prev_y = y;
 	}
 
@@ -6934,6 +6989,8 @@ static bool console_line(rx_t *rx, char *line)
 				else
 					spar_set(rx, k, v);
 
+				g_af_seen |= v >= 0 && k >= SP_AF_WAVE;
+
 				changed = true;
 				continue;
 			}
@@ -7478,12 +7535,13 @@ static void state_save(const rx_t *rx)
 		fprintf(fp, "%s %s%s", g_xpar[i].token, v, i == XPARS - 1 ? "\n" : " ");
 	}
 
-	// Scope panel: trace settings, the trace colours, the waterfall (one line each)
+	// Scope panel, one line each: RF trace, RF colours, waterfall and TX, AF trace, AF colours
 	for (int i = 1; i < SPARS; i++) {
+		bool eol = i == SP_HOLD || i == SP_HOLD_B || i == SP_TXSCOPE || i == SP_AF_HOLD || i == SPARS - 1;
 		char v[16];
 
 		spar_token(rx, i, v, sizeof(v));
-		fprintf(fp, "%s %s%s", g_spar[i].token, v, i == SP_HOLD || i == SP_HOLD_B || i == SPARS - 1 ? "\n" : " ");
+		fprintf(fp, "%s %s%s", g_spar[i].token, v, eol ? "\n" : " ");
 	}
 
 	fprintf(fp, "%s %s\n", g_bmarks ? "birdiemarks" : "nobirdiemarks", g_bnotch ? "birdienotch" : "nobirdienotch");
@@ -8860,6 +8918,9 @@ int main(int argc, char **argv)
 	conf_load(&rx, MSG_PATH, false);
 	conf_load(&rx, STATE_PATH, false);
 	conf_load(&rx, CONF_PATH, false);
+
+	if (!g_af_seen)
+		spar_af_from_rf();	/* first start with the AF rows: as the RF scope looked */
 
 	for (int i = 1; i < argc; i++) {
 		if (strcmp(argv[i], "--no-limit") == 0) {

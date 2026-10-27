@@ -73,7 +73,8 @@ Built, not yet tried on the radio (2026-10-25):
   averaging, waveform type, max hold, colours of fill / line / max hold (R, G, B), waterfall
   on / off, speed, size and peak level, max hold off / decay / 10 s / on, center type
   (filter / carrier), scope during TX, as the IC-7851 scope set menu; state file,
-  console, CI-V 27 1B / 1C / 1D
+  console, CI-V 27 1B / 1C / 1D; the audio scope with AF rows of its own (waveform,
+  averaging, max hold, colours; copied from the RF rows on the first start)
 - messages (MSG, 2026-10-27): M1-M8 in messages.conf, CW (USB tone, carrier on the dial)
   or voice (WAV), sent with codec TX, also from CI-V 17; MSG long repeats; SWR scan (APP):
   the swrscan flag (AM, 5 W, as x6100_gui)
@@ -120,7 +121,7 @@ Built, not yet tried on the radio (2026-10-25):
     mic (power to 0.1 W, back after RX); TOT row in the TX panel and the state file.
 13. Scope panel: each row on the radio (VBW, averaging, waveform, colours, max hold,
     waterfall off / speed / size / peak level, center type, scope during TX off), the
-    audio scope colours, values back after a restart.
+    audio scope AF rows (own colours etc.), values back after a restart.
 14. Messages: a CW message in CW mode (heard on another receiver on the dial, keying,
     ALC at -10 dBFS), a voice WAV in USB and LSB, repeat, stop by key / PTT / TOT.
 15. SWR scan: on a dummy load (flat 1.0-1.2) and on an antenna, against the stock UI's
