@@ -9394,7 +9394,12 @@ int main(int argc, char **argv)
 		//
 		uint64_t tot_ms = (uint64_t) g_tot_min[rx.tot] * 60000u;
 
-		if (((rx.ptt && t - rx.ptt_since >= tot_ms) || (rx.send != SEND_NONE && t - rx.send_since >= tot_ms)) && tot_ms > 0) {
+		// A start can be a ms after t (a repeated message starts in send_poll): only
+		// a start before t counts, so t - since cannot wrap
+		bool tot_ptt = rx.ptt && t > rx.ptt_since && t - rx.ptt_since >= tot_ms;
+		bool tot_send = rx.send != SEND_NONE && t > rx.send_since && t - rx.send_since >= tot_ms;
+
+		if ((tot_ptt || tot_send) && tot_ms > 0) {
 			g_send.repeat = false;
 			tx_drop(&rx, "TX TIMEOUT");
 			changed = true;
