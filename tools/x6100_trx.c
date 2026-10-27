@@ -1697,10 +1697,10 @@ static bool edge_store(rx_t *rx)
 // the state file; the mode row is rx->scope (kept on the scope line).
 //
 
-enum { SP_MODE, SP_CTYPE, SP_VBW, SP_AVG, SP_WAVE, SP_HOLD, SP_FILL_R, SP_FILL_G, SP_FILL_B, SP_LINE_R,
-	SP_LINE_G, SP_LINE_B, SP_HOLD_R, SP_HOLD_G, SP_HOLD_B, SP_WF, SP_WF_SPEED, SP_WF_SIZE, SP_WF_LEVEL,
-	SP_TXSCOPE, SP_AF_WAVE, SP_AF_AVG, SP_AF_HOLD, SP_AF_FILL_R, SP_AF_FILL_G, SP_AF_FILL_B, SP_AF_LINE_R,
-	SP_AF_LINE_G, SP_AF_LINE_B, SP_AF_HOLD_R, SP_AF_HOLD_G, SP_AF_HOLD_B, SPARS };
+enum { SP_MODE, SP_CTYPE, SP_REF, SP_VBW, SP_AVG, SP_WAVE, SP_HOLD, SP_FILL_R, SP_FILL_G, SP_FILL_B,
+	SP_LINE_R, SP_LINE_G, SP_LINE_B, SP_HOLD_R, SP_HOLD_G, SP_HOLD_B, SP_WF, SP_WF_SPEED, SP_WF_SIZE,
+	SP_WF_LEVEL, SP_TXSCOPE, SP_AF_REF, SP_AF_WAVE, SP_AF_AVG, SP_AF_HOLD, SP_AF_FILL_R, SP_AF_FILL_G,
+	SP_AF_FILL_B, SP_AF_LINE_R, SP_AF_LINE_G, SP_AF_LINE_B, SP_AF_HOLD_R, SP_AF_HOLD_G, SP_AF_HOLD_B, SPARS };
 
 enum { WAVE_FILL, WAVE_LINE, WAVE_FILL_LINE };
 enum { HOLD_OFF, HOLD_DECAY, HOLD_10S, HOLD_ON };
@@ -1708,6 +1708,7 @@ enum { HOLD_OFF, HOLD_DECAY, HOLD_10S, HOLD_ON };
 static const kpar_t g_spar[SPARS] = {
 	[SP_MODE] = { "MODE", "", 0, 3, 1, 0 },
 	[SP_CTYPE] = { "CENTER TYPE", "ctype", 0, 1, 1, 1 },
+	[SP_REF] = { "REF LEVEL", "", -30, 30, 1, 0 },		/* rx->rref: ref on the scope line */
 	[SP_VBW] = { "VBW", "vbw", 0, 1, 1, 0 },
 	[SP_AVG] = { "AVERAGING", "scavg", 1, 4, 1, 2 },
 	[SP_WAVE] = { "WAVEFORM TYPE", "wave", 0, 2, 1, WAVE_FILL_LINE },
@@ -1726,6 +1727,7 @@ static const kpar_t g_spar[SPARS] = {
 	[SP_WF_SIZE] = { "WATERFALL SIZE", "wfsize", 0, 2, 1, 1 },
 	[SP_WF_LEVEL] = { "WF PEAK LEVEL", "wflevel", 30, 80, 10, 50 },
 	[SP_TXSCOPE] = { "SCOPE DURING TX", "txscope", 0, 1, 1, 1 },
+	[SP_AF_REF] = { "AF REF LEVEL", "", -30, 30, 1, 0 },	/* rx->aref: aref on the scope line */
 	[SP_AF_WAVE] = { "AF WAVEFORM TYPE", "afwave", 0, 2, 1, WAVE_FILL_LINE },
 	[SP_AF_AVG] = { "AF AVERAGING", "afavg", 1, 4, 1, 2 },
 	[SP_AF_HOLD] = { "AF MAX HOLD", "afhold", 0, 3, 1, HOLD_DECAY },
@@ -1788,11 +1790,16 @@ static uint32_t spar_rgb(int r)
 
 static int spar_get(const rx_t *rx, int i)
 {
-	return i == SP_MODE ? (int) rx->scope : g_sp[i];
+	return i == SP_MODE ? (int) rx->scope : i == SP_REF ? rx->rref : i == SP_AF_REF ? rx->aref : g_sp[i];
 }
 
 static void spar_set(rx_t *rx, int i, int v)
 {
+	if (i == SP_REF || i == SP_AF_REF) {
+		*(i == SP_REF ? &rx->rref : &rx->aref) = v;	/* as F2 long and ref / aref */
+		return;
+	}
+
 	if (i != SP_MODE) {
 		g_sp[i] = v;
 		return;
@@ -1813,6 +1820,8 @@ static void spar_token(const rx_t *rx, int i, char *s, size_t n)
 
 	if (g_sp_words[i][0] != NULL)
 		snprintf(s, n, "%s", g_sp_words[i][v]);
+	else if (i == SP_REF || i == SP_AF_REF)
+		snprintf(s, n, "%+d", v);
 	else if (i == SP_AVG || i == SP_AF_AVG)
 		snprintf(s, n, "%s%.0d", v == 1 ? "off" : "", v == 1 ? 0 : v);
 	else
@@ -5190,7 +5199,7 @@ static void draw_scope_panel(x6100_lcd_t *lcd, const rx_t *rx)
 		for (char *p = v; *p != '\0'; p++)	/* the panel font is upper case */
 			*p = (char) toupper((unsigned char) *p);
 
-		if (i == SP_WF_LEVEL)
+		if (i == SP_WF_LEVEL || i == SP_REF || i == SP_AF_REF)
 			snprintf(v + strlen(v), sizeof(v) - strlen(v), " DB");
 
 		vw = x6100_lcd_text_width(v, 2);
@@ -7583,6 +7592,9 @@ static void state_save(const rx_t *rx)
 	for (int i = 1; i < SPARS; i++) {
 		bool eol = i == SP_HOLD || i == SP_HOLD_B || i == SP_TXSCOPE || i == SP_AF_HOLD || i == SPARS - 1;
 		char v[16];
+
+		if (g_spar[i].token[0] == '\0')
+			continue;	/* REF rows: ref / aref on the scope line */
 
 		spar_token(rx, i, v, sizeof(v));
 		fprintf(fp, "%s %s%s", g_spar[i].token, v, eol ? "\n" : " ");

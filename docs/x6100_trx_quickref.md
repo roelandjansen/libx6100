@@ -89,6 +89,7 @@ trace, AF colours).
 |---|---|---|
 | MODE | CENTER, SCROLL-C, FIX, SCROLL-F (CENTER) | on the scope line |
 | CENTER TYPE | FILTER, CARRIER (CARRIER): CENTER / SCROLL-C centred on the carrier or on the middle of the receive filter | `ctype filter\|carrier`; CI-V 27 1C |
+| REF LEVEL | -30 to +30 dB (0): the RF scope reference level, in every scope mode (also F2 long in CENTER / SCROLL-C) | `ref`; CI-V 27 19 |
 | VBW | NARROW, WIDE (NARROW): narrow smooths over neighbouring bins | `vbw narrow\|wide`; CI-V 27 1D |
 | AVERAGING | OFF, 2, 3, 4 (2): over frames | `scavg off\|2\|3\|4` |
 | WAVEFORM TYPE | FILL, LINE, FILL+LINE (FILL+LINE) | `wave fill\|line\|fill+line` |
@@ -101,6 +102,7 @@ trace, AF colours).
 | WATERFALL SIZE | SMALL, MID, LARGE (MID): the scope above takes or gives the rows | `wfsize small\|mid\|large` |
 | WF PEAK LEVEL | 30-80 dB in steps of 10 (50): the range from the noise to the top colour | `wflevel 50` |
 | SCOPE DURING TX | ON, OFF (ON): off keeps the last RX picture while transmitting | `txscope on\|off`; CI-V 27 1B |
+| AF REF LEVEL | -30 to +30 dB (0): the audio scope reference level | `aref` |
 | AF WAVEFORM TYPE, AF AVERAGING, AF MAX HOLD | as the RF rows, for the audio scope (F3) | `afwave`, `afavg`, `afhold` |
 | AF CURRENT / LINE / MAX HOLD RED / GREEN / BLUE | 0-255, for the audio scope | `affillr` .. `afholdb` |
 
