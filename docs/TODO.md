@@ -96,6 +96,12 @@ under GEN until a better key turns up.
 
 - ATT / preamp from wfview: compare a socat trace with IU1WXY (see `x6100_civ.md` §7).
 - PTT in USB-D with the C-Media sound card (CAT PTT, rear USB audio).
+- wfview IC-705 rig file (`rigs/IC-705.rig`): check whether it holds the fixed edge
+  ranges and / or the maximum edge width; match ours (12 ranges, 96 kHz) to it.
+- Own wfview rig file for the X6100, based on the IC-705 one: CI-V transceive, the
+  commands we answer (and NG for the rest), our spans and edge width, and an unused
+  CI-V address for the X6100 (not A4, free in the wfview rig list) so wfview does not
+  take it for a real IC-705; x6100_trx then answers on that address too.
 - Icom LAN server (ports 50001-50003): faster scope, network audio; then RADE via
   network audio. Design: `x6100_netaudio_design.md`.
 
