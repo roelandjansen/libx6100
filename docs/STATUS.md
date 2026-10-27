@@ -125,8 +125,9 @@ Built, not yet tried on the radio (2026-10-25):
 13. Scope panel: each row on the radio (VBW, averaging, waveform, colours, max hold,
     waterfall off / speed / size / peak level, center type, scope during TX off), the
     audio scope AF rows (own colours etc.), values back after a restart.
-14. Messages: a CW message in CW mode (heard on another receiver on the dial, keying,
-    ALC at -10 dBFS), a voice WAV in USB and LSB, repeat, stop by key / PTT / TOT.
+14. Messages. Verified 2026-10-27: CW message in CW mode at zero beat on the IC-7851,
+    clean keying, ALC fine at -10 dBFS. Still: repeat (MSG long), stop by key / PTT,
+    CI-V 17 from a logger, a voice WAV in USB, LSB, AM and NFM.
 15. SWR scan: on a dummy load (flat 1.0-1.2) and on an antenna, against the stock UI's
     SWR scan; the carrier (AM, 5 W, swrscan flag) and the curve.
 
