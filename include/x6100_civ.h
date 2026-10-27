@@ -21,6 +21,7 @@
 #include <stdint.h>
 
 #define X6100_CIV_ADDR_IC705	0xA4
+#define X6100_CIV_ADDR_X6100	0x61	/* own identity: wfview rig file contrib/wfview/X6100.rig */
 #define X6100_CIV_ADDR_CTRL	0xE0
 #define X6100_CIV_ADDR_ALL	0x00
 #define X6100_CIV_FRAME_MAX	96	/* 1A 00 memory contents with name: 74 bytes */

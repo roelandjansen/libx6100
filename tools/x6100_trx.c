@@ -398,6 +398,7 @@ static bool g_ext;
 static int g_cat_baud;		/* CI-V baud, 0 = no CAT, CAT_PTY: conf token cat, or --cat */
 
 #define CAT_PTY		(-1)		/* g_cat_baud: CI-V on a pseudo-terminal instead, at any speed */
+static int g_civ_addr = X6100_CIV_ADDR_IC705;	/* conf token civaddr: a4 (IC-705) or 61 (X6100 rig file) */
 static char g_ntp_server[64];	/* conf token ntp <server> | off; empty = ntp.conf or pool.ntp.org */
 static int g_bright;		/* backlight level, % (10-100); 0 = leave as the OS set it */
 static unsigned g_conf_set;	/* GEN rows that x6100_trx.conf fixes (bit = row): shown CONF, locked */
@@ -480,6 +481,12 @@ static const char *mode_name(x6100_mode_t mode)
 	static const char *names[] = { "LSB", "LSB-D", "USB", "USB-D", "CW", "CWR", "AM", "NFM" };
 
 	return (unsigned) mode < 8 ? names[mode] : "?";
+}
+
+// What the CAT address makes us: the IC-705 (wfview IC-705 rig) or ourselves (X6100.rig)
+static const char *civ_ident(void)
+{
+	return g_civ_addr == X6100_CIV_ADDR_IC705 ? "IC-705" : g_civ_addr == X6100_CIV_ADDR_X6100 ? "X6100" : "CI-V";
 }
 
 static const char *agc_name(x6100_agc_t agc)
@@ -4141,9 +4148,9 @@ static void draw_gen_info(x6100_lcd_t *lcd, const screen_t *scr)
 		snprintf(lines[n++], sizeof(lines[0]), "BATTERY %.1f V %d %%", scr->vbat, scr->batcap);
 
 	if (g_cat_baud > 0)
-		snprintf(lines[n++], sizeof(lines[0]), "CAT     %d BAUD, IC-705, ADDRESS A4", g_cat_baud);
+		snprintf(lines[n++], sizeof(lines[0]), "CAT     %d BAUD, %s, ADDRESS %02X", g_cat_baud, civ_ident(), g_civ_addr);
 	else if (g_cat_baud == CAT_PTY)
-		snprintf(lines[n++], sizeof(lines[0]), "CAT     PTY /TMP/X6100-CIV, IC-705, ADDRESS A4");	/* CAT_PTY_LINK */
+		snprintf(lines[n++], sizeof(lines[0]), "CAT     PTY /TMP/X6100-CIV, %s, ADDRESS %02X", civ_ident(), g_civ_addr);	/* CAT_PTY_LINK */
 	else
 		snprintf(lines[n++], sizeof(lines[0]), "CAT     OFF");
 
@@ -5721,6 +5728,22 @@ static bool console_line(rx_t *rx, char *line)
 			continue;
 		}
 
+		// civaddr a4 | 61 (hex) | ic705 | x6100: CI-V address; 61 needs the wfview rig file
+		// contrib/wfview/X6100.rig (read at start only)
+		if (strcasecmp(t, "civaddr") == 0) {
+			const char *v = strtok(NULL, " \t\r\n");
+			char *end = NULL;
+			long a = v == NULL ? -1 : strcasecmp(v, "ic705") == 0 ? X6100_CIV_ADDR_IC705
+				: strcasecmp(v, "x6100") == 0 ? X6100_CIV_ADDR_X6100 : strtol(v, &end, 16);
+
+			if (a > 0x00 && a < X6100_CIV_ADDR_CTRL && (end == NULL || *end == '\0'))
+				g_civ_addr = (int) a;
+			else
+				fprintf(stderr, "\ncivaddr: a4 (IC-705), 61 (X6100) or 01-DF hex\n");
+
+			continue;
+		}
+
 		// ntp <server> | ntp off: the one sync at start (read at start only)
 		if (strcasecmp(t, "ntp") == 0) {
 			const char *v = strtok(NULL, " \t\r\n");
@@ -7172,6 +7195,7 @@ static int cat_open(cat_t *cat, rx_t *rx, const screen_t *scr, int baud)
 	cat->scr = scr;
 	cat->ann_mode = -1;
 	x6100_civ_init(&cat->civ, &ops);
+	cat->civ.addr = (uint8_t) g_civ_addr;
 	x6100_civ_framer_reset(&cat->framer);
 	cat->pty_slave = -1;
 
@@ -7741,10 +7765,10 @@ int main(int argc, char **argv)
 			fprintf(stderr, "warning: CAT %s: %s\n", g_cat_baud == CAT_PTY ? "pty" : CAT_DEV, strerror(-rc));
 		} else {
 			if (g_cat_baud == CAT_PTY)
-				printf("CAT: CI-V on %s -> %s (pseudo-terminal, any speed), address %02X (IC-705)\n", CAT_PTY_LINK,
-					cat.pty_name, cat.civ.addr);
+				printf("CAT: CI-V on %s -> %s (pseudo-terminal, any speed), address %02X (%s)\n", CAT_PTY_LINK,
+					cat.pty_name, cat.civ.addr, civ_ident());
 			else
-				printf("CAT: CI-V on %s, %d baud, address %02X (IC-705)\n", CAT_DEV, g_cat_baud, cat.civ.addr);
+				printf("CAT: CI-V on %s, %d baud, address %02X (%s)\n", CAT_DEV, g_cat_baud, cat.civ.addr, civ_ident());
 
 			pfd[npfd].fd = cat.fd;
 			pfd[npfd].events = POLLIN;

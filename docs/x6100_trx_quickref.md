@@ -227,6 +227,7 @@ The status line starts with the VFO in use (A / B); with split, RIT or XIT it ad
 | `atumem 7120000 L C S` | a tuner memory (state file; `atunet 40m L C S` from older ones still loads) |
 | `mute nomute` | audio mute |
 | `cat 19200`, `cat pty`, `cat off` | CI-V at start (settings file; `--cat` overrides) |
+| `civaddr a4`, `civaddr 61` | CI-V address (settings file): a4 IC-705 (default), 61 X6100 with `contrib/wfview/X6100.rig` |
 | `ntp <server>`, `ntp on`, `ntp off` | NTP sync at start (settings file) |
 | `bright 5-100` | display brightness in % |
 | `ab`, `a=b` | VFO A <-> B, A=B |

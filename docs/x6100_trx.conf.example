@@ -50,3 +50,7 @@
 # (wfserver, rigctld, socat to TCP) use cat pty instead: no speed limit.
 # --cat=baud or --cat=pty overrides.
 cat 19200
+
+# CI-V address: a4 = IC-705 (out of the box; wfview IC-705 rig file), 61 = X6100 (needs
+# contrib/wfview/X6100.rig in wfview: only the commands x6100_trx answers, our spans).
+# civaddr 61

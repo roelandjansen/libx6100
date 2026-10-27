@@ -1409,8 +1409,9 @@ size_t x6100_civ_process(x6100_civ_t *civ, const uint8_t *frame, size_t len, uin
 		break;
 	}
 
-	// Broadcasts (to 00) are acted on but never answered
-	return to == X6100_CIV_ADDR_ALL ? 0 : n;
+	// Broadcasts (to 00) are acted on but never answered, except 19 00: clients find the
+	// radio that way (wfview with its address on auto), as on an Icom
+	return to == X6100_CIV_ADDR_ALL && !(r.cmd == 0x19 && r.n == 1 && r.d[0] == 0x00) ? 0 : n;
 }
 
 size_t x6100_civ_announce_freq(const x6100_civ_t *civ, uint32_t hz, uint8_t *out, size_t max)

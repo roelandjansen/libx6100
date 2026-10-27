@@ -108,18 +108,21 @@ under GEN until a better key turns up.
     the IC-705 0131, as we answer). Looks like a copy from the IC-7610: check against
     the IC-705 CI-V reference, then fix it in wfview (and in our X6100 rig file).
     Over a pty (VSP) wfview answers 1A 05 transceive itself and does not forward it.
-- Own wfview rig file for the X6100 (`rigs/X6100.rig`), from the IC-705 one:
-  - CI-V transceive 1A 05 0131; the commands we answer, the rest left out (no NG
-    rounds); our spans (±1.5-48 kHz: a CENTER window then always fits an edge); 27 1E
-    kept; bands, modes and filters as ours (no VHF / UHF, no WFM / air).
-  - Address: an unused CI-V address, so wfview does not take it for a real IC-705.
-    Icom addresses are all even. Taken in wfview `rigs/` (hex): 34, 48, 4A, 50, 56, 58,
-    5C, 5E, 64, 66, 6E, 76, 7A, 7C, 84, 88, 8E, 94, 96, 98, A2, A4, AC, B2, B6 (17 / 18
-    are the Kenwood model ids, FT-710 / FTX-1 Yaesu ones, 00 the defaults). Stay clear of
-    even Icom addresses wfview has no file for, of 70 (Xiegu default, the IC-7000's) and
-    of E0 and up (controllers). An odd address can never meet a real Icom: check that
-    wfview and other clients (hamlib, logging programs) accept one. x6100_trx then
-    answers on it (19 00) and on A4 as now.
+- wfview rig file for the X6100: built 2026-10-27, `contrib/wfview/X6100.rig` (made by
+  `mkrig.sh` from the IC-705 file; README there). Address 61 (odd: never a real Icom;
+  Icom addresses are all even), `civaddr 61` in x6100_trx.conf, 19 00 also answered to
+  a broadcast (wfview auto detect). 84 commands (only what we answer), transceive 0131,
+  our spans, HF + 6 m, our memory layout. To do:
+  - try it: wfview loads it and connects (address 61 and auto), polls without NG in the
+    log, scope, fixed edges, memories (read, write, name), transceive
+  - hamlib, logging programs with address 61 (hamlib X6100 model 3087 has its own
+    default address: check what it needs)
+  - offer it to wfview upstream (with the IC-705 1A 05 0112 / 0131 question)
+- IC-705 identity (A4) and memories: wfview's IC-705 file reads 1A 00 with an A and a
+  B side (name at byte 100); we send the A side only (name at 53), so wfview's memory
+  window with the IC-705 file gets no names and a wrong B side. Check the IC-705 CI-V
+  reference; send the full layout (frame max 96 then too small) or leave A4 as is now
+  that 61 exists.
 - Icom LAN server (ports 50001-50003): faster scope, network audio; then RADE via
   network audio. Design: `x6100_netaudio_design.md`.
 

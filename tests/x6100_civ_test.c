@@ -106,12 +106,12 @@ static int g_fail;
 static int g_run;
 
 //
-// Send a request (hex string without FE FE / FD), compare the reply
+// Send a request (hex string without FE FE / FD) to an address, compare the reply
 //
 
-static void check(x6100_civ_t *civ, const char *req, const char *want)
+static void check_to(x6100_civ_t *civ, uint8_t to, const char *req, const char *want)
 {
-	uint8_t in[128] = { 0xFE, 0xFE, 0xA4, 0xE0 }, out[128];
+	uint8_t in[128] = { 0xFE, 0xFE, to, 0xE0 }, out[128];
 	size_t n = 4;
 	char got[400] = "";
 	unsigned b;
@@ -124,11 +124,11 @@ static void check(x6100_civ_t *civ, const char *req, const char *want)
 
 	size_t r = x6100_civ_process(civ, in, n, out, sizeof(out));
 
-	// Reply without FE FE E0 A4 ... FD
+	// Reply without FE FE E0 <us> ... FD
 	for (size_t i = 4; r > 5 && i < r - 1; i++)
 		snprintf(got + strlen(got), sizeof(got) - strlen(got), "%s%02X", i > 4 ? " " : "", out[i]);
 
-	if (r > 0 && (out[2] != 0xE0 || out[3] != 0xA4 || out[r - 1] != 0xFD))
+	if (r > 0 && (out[2] != 0xE0 || out[3] != civ->addr || out[r - 1] != 0xFD))
 		snprintf(got, sizeof(got), "bad header");
 
 	g_run++;
@@ -137,6 +137,15 @@ static void check(x6100_civ_t *civ, const char *req, const char *want)
 		g_fail++;
 		printf("FAIL %-22s want [%s] got [%s]\n", req, want, got);
 	}
+}
+
+//
+// The same, to our own address
+//
+
+static void check(x6100_civ_t *civ, const char *req, const char *want)
+{
+	check_to(civ, civ->addr, req, want);
 }
 
 int main(void)
@@ -230,6 +239,14 @@ int main(void)
 
 	// ID, lock, IF width, TX, ATU, RIT
 	check(&civ, "19 00", "19 00 A4");
+	check_to(&civ, X6100_CIV_ADDR_ALL, "19 00", "19 00 A4");	/* broadcast: answered (auto detect) */
+	check_to(&civ, X6100_CIV_ADDR_ALL, "03", "");		/* other broadcasts: not */
+	check_to(&civ, X6100_CIV_ADDR_X6100, "03", "");		/* not our address */
+	civ.addr = X6100_CIV_ADDR_X6100;
+	check_to(&civ, X6100_CIV_ADDR_ALL, "19 00", "19 00 61");
+	check(&civ, "1D 19", "1D 19 61 00");
+	check_to(&civ, X6100_CIV_ADDR_IC705, "03", "");
+	civ.addr = X6100_CIV_ADDR_IC705;
 	check(&civ, "1D 19", "1D 19 61 00");
 	check(&civ, "1A 05 00 62 01", "FA");		/* IC-705 menu: not supported */
 	check(&civ, "1A 03", "FA");			/* NFM: no IF width */
