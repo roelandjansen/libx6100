@@ -1,6 +1,6 @@
 # libx6100 / x6100_trx — to do
 
-Status: 2026-10-26 (after v0.12.0). Summary and next steps: `STATUS.md`.
+Status: 2026-10-27 (after v0.12.0). Summary and next steps: `STATUS.md`.
 
 ## Display
 
@@ -49,7 +49,13 @@ Status: 2026-10-26 (after v0.12.0). Summary and next steps: `STATUS.md`.
 - S-meter calibration (signal generator): SMETER_CAL_DB is provisional (-21: -15 from
   an IC-7851 comparison, then 6 dB lower); also the overload point with PRE / ATT.
 - Codec level vs ALC test (x6100_tx codec at -40 / -30 / -20 dBFS).
-- Register 35 LO offset for FIX mode; span edges in FIX mode.
+- Fixed scope edges (IC-705 style, built 2026-10-27, not tried on the radio): F2 / F2
+  long in FIX and SCROLL-F, the scope label, a band change moves the window, edges kept
+  over a restart; wfview fixed edge window (27 16 / 27 1E set and read), a 200 kHz edge
+  from wfview cut to 96 kHz. Then: a panel to edit an edge on the radio (MFK lower /
+  upper), and whether wfview sends 27 1E for a range we do not cover (above 60 MHz).
+- Register 35 LO offset for FIX mode: an edge off the IQ centre now shows only the part
+  of the 96 kHz IQ it covers; moving the LO would fill the whole window.
 - liquid-dsp: built static (v1.8.3, `third_party/liquid-dsp`, `x6100_liquid` check), not
   linked into x6100_trx yet. Use per function where audio passes through Linux anyway:
   RADE / network audio (resampling, TX audio shaping), recordings (image lowpass),
@@ -89,7 +95,6 @@ under GEN until a better key turns up.
 ## CAT / network
 
 - ATT / preamp from wfview: compare a socat trace with IU1WXY (see `x6100_civ.md` §7).
-- 1A 05 0131 CI-V transceive on / off.
 - PTT in USB-D with the C-Media sound card (CAT PTT, rear USB audio).
 - Icom LAN server (ports 50001-50003): faster scope, network audio; then RADE via
   network audio. Design: `x6100_netaudio_design.md`.
