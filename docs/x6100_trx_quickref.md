@@ -40,7 +40,7 @@ Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
 | DFL | notch on / off | DSP panel (NR, NB, notch levels) |
 | AGC | off / slow / fast / auto, per mode group | RIT / XIT panel |
 | V/M | memory panel (channels 1-99) | split on / off: RX on the VFO in use, TX on the other |
-| F1 | scroll on / off: CENTER <-> SCROLL-C, FIX <-> SCROLL-F | CENTER family <-> FIX family |
+| F1 | scroll on / off: CENTER <-> SCROLL-C, FIX <-> SCROLL-F | scope panel: mode, VBW, averaging, waveform, colours, waterfall (see Scope panel) |
 | F2 | span ±48 / 24 / 12 / 6 / 3 / 1.5 kHz; FIX / SCROLL-F: next fixed edge 1-4; audio scope: 0-3 / 0-6 kHz | FIX / SCROLL-F: store the edge in use (see Fixed edges); else reference level: MFK turn = ±1 dB (±30), MFK push = RF <-> AF scope; F2 long, other key or 10 s idle closes |
 | F3 | audio scope on / off (RF <-> AF) | RF scope left (5/8) + audio scope right (3/8), on / off |
 | F4 | TX meter: PO / SWR / ALC | TX panel: mic, compressor, VOX, monitor, squelch, TX timeout |
@@ -77,6 +77,27 @@ Four edges per range, the IC-705 ranges (MHz): 01 below 1.6, 02 1.6-2, 03 2-6, 0
   its top, each kept inside the band (20 m: 14000-14096, 14096-14192, 14192-14288,
   14254-14350); a range without a band uses the range itself.
 - CI-V 27 16 (edge in use) and 27 1E (edge frequencies) set and read them, as wfview does.
+
+## Scope panel (F1 long, IC-7851 style)
+
+MFK turn: adjust; MFK push: next row; MFK hold: default; F1 long, another key or 10 s
+idle closes. Kept in the state file (three lines: trace, colours, waterfall).
+
+| Row | Values (default) | Console / state |
+|---|---|---|
+| MODE | CENTER, SCROLL-C, FIX, SCROLL-F (CENTER) | on the scope line |
+| VBW | NARROW, WIDE (NARROW): narrow smooths over neighbouring bins | `vbw narrow\|wide`; CI-V 27 1D |
+| AVERAGING | OFF, 2, 3, 4 (2): over frames | `scavg off\|2\|3\|4` |
+| WAVEFORM TYPE | FILL, LINE, FILL+LINE (FILL+LINE) | `wave fill\|line\|fill+line` |
+| MAX HOLD | ON, OFF (ON): the peak dots, falling slowly | `maxhold on\|off` |
+| CURRENT RED / GREEN / BLUE | 0-255 (255, 63, 127): the fill | `fillr`, `fillg`, `fillb` |
+| LINE RED / GREEN / BLUE | 0-255 (255, 255, 0) | `liner`, `lineg`, `lineb` |
+| MAX HOLD RED / GREEN / BLUE | 0-255 (0, 127, 127) | `holdr`, `holdg`, `holdb` |
+| WATERFALL | ON, OFF (ON) | `wf on\|off` |
+| WATERFALL SPEED | SLOW, MID, FAST (FAST): a line every 4th / 2nd / frame | `wfspeed slow\|mid\|fast` |
+
+The defaults are the IC-7851 settings the scope was modelled on. The colours and the
+waveform type apply to the audio scope too.
 
 ## Filter panel (F5 long, IC-705 style)
 

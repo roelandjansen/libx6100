@@ -67,6 +67,9 @@ Built, not yet tried on the radio (2026-10-25):
 - lost I2C writes (2026-10-27): a failed write resent at once (3 tries, the rest of the
   block still goes out), the whole register block after every un-key and write error,
   stuck-TX watch after an un-key; TX timeout off / 1 / 3 / 5 min in the TX panel (`tot`)
+- scope panel (F1 long, 2026-10-27; the CENTER / FIX family switch is its MODE row): VBW,
+  averaging, waveform type, max hold, colours of fill / line / max hold (R, G, B), waterfall
+  on / off and speed, as the IC-7851 scope set menu; state file, console, CI-V 27 1D
 - wfview rig file for the X6100 (2026-10-27): `contrib/wfview/X6100.rig` from the IC-705
   one by `mkrig.sh`; `civaddr 61` in the settings file makes x6100_trx an X6100 on
   address 61 (default stays A4 / IC-705); 19 00 answered to a broadcast. The Icom way:
@@ -106,6 +109,8 @@ Built, not yet tried on the radio (2026-10-25):
 12. Lost I2C writes and TX timeout: console lines on a NAK (band change), no stuck-TX
     line on normal un-keys; TOT 1 min with the PTT key, CAT PTT (drops) and the hand
     mic (power to 0.1 W, back after RX); TOT row in the TX panel and the state file.
+13. Scope panel: each row on the radio (VBW, averaging, waveform, colours, max hold,
+    waterfall off / speed), the audio scope colours, values back after a restart.
 
 ## Next steps (suggested order)
 

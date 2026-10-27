@@ -244,6 +244,9 @@ typedef struct
 	int tot;		/* TX timeout, index into g_tot_min (0 = off) */
 	bool tot_cut;		/* TX timeout on a TX we cannot drop (hand mic, VOX): power 0 */
 	uint64_t bb_tx_since;	/* baseband in TX since (ms), 0 = in RX */
+	bool sedit;		/* scope panel (F1 long) */
+	int sedit_par;
+	uint64_t sedit_since;
 	bool xedit;
 	int xedit_par;
 	uint64_t xedit_since;
@@ -1646,6 +1649,135 @@ static bool edge_store(rx_t *rx)
 }
 
 //
+// Scope settings (F1 long: scope panel), as the IC-7851 scope set menu: mode, VBW,
+// averaging, waveform type, max hold, the colours of the trace (current = fill, line,
+// max hold) and the waterfall. Defaults as set on the IC-7851. One table for the panel,
+// the console and the state file; the mode row is rx->scope (kept on the scope line).
+//
+
+enum { SP_MODE, SP_VBW, SP_AVG, SP_WAVE, SP_HOLD, SP_FILL_R, SP_FILL_G, SP_FILL_B, SP_LINE_R, SP_LINE_G,
+	SP_LINE_B, SP_HOLD_R, SP_HOLD_G, SP_HOLD_B, SP_WF, SP_WF_SPEED, SPARS };
+
+enum { WAVE_FILL, WAVE_LINE, WAVE_FILL_LINE };
+
+static const kpar_t g_spar[SPARS] = {
+	[SP_MODE] = { "MODE", "", 0, 3, 1, 0 },
+	[SP_VBW] = { "VBW", "vbw", 0, 1, 1, 0 },
+	[SP_AVG] = { "AVERAGING", "scavg", 1, 4, 1, 2 },
+	[SP_WAVE] = { "WAVEFORM TYPE", "wave", 0, 2, 1, WAVE_FILL_LINE },
+	[SP_HOLD] = { "MAX HOLD", "maxhold", 0, 1, 1, 1 },
+	[SP_FILL_R] = { "CURRENT RED", "fillr", 0, 255, 1, 255 },
+	[SP_FILL_G] = { "CURRENT GREEN", "fillg", 0, 255, 1, 63 },
+	[SP_FILL_B] = { "CURRENT BLUE", "fillb", 0, 255, 1, 127 },
+	[SP_LINE_R] = { "LINE RED", "liner", 0, 255, 1, 255 },
+	[SP_LINE_G] = { "LINE GREEN", "lineg", 0, 255, 1, 255 },
+	[SP_LINE_B] = { "LINE BLUE", "lineb", 0, 255, 1, 0 },
+	[SP_HOLD_R] = { "MAX HOLD RED", "holdr", 0, 255, 1, 0 },
+	[SP_HOLD_G] = { "MAX HOLD GREEN", "holdg", 0, 255, 1, 127 },
+	[SP_HOLD_B] = { "MAX HOLD BLUE", "holdb", 0, 255, 1, 127 },
+	[SP_WF] = { "WATERFALL", "wf", 0, 1, 1, 1 },
+	[SP_WF_SPEED] = { "WATERFALL SPEED", "wfspeed", 0, 2, 1, 2 },
+};
+
+static int g_sp[SPARS];
+
+static const char *g_vbw_tok[2] = { "narrow", "wide" };
+static const char *g_wave_tok[3] = { "fill", "line", "fill+line" };
+static const char *g_wfspeed_tok[3] = { "slow", "mid", "fast" };
+static const char *g_scmode_tok[4] = { "center", "scroll-c", "fix", "scroll-f" };
+
+static bool spar_onoff(int i)
+{
+	return i == SP_HOLD || i == SP_WF;
+}
+
+static bool spar_colour(int i)
+{
+	return i >= SP_FILL_R && i <= SP_HOLD_B;
+}
+
+// Trace colours as 0xRRGGBB from the R, G, B rows
+static uint32_t spar_rgb(int r)
+{
+	return (uint32_t) g_sp[r] << 16 | (uint32_t) g_sp[r + 1] << 8 | (uint32_t) g_sp[r + 2];
+}
+
+static int spar_get(const rx_t *rx, int i)
+{
+	return i == SP_MODE ? (int) rx->scope : g_sp[i];
+}
+
+static void spar_set(rx_t *rx, int i, int v)
+{
+	if (i != SP_MODE) {
+		g_sp[i] = v;
+		return;
+	}
+
+	bool was_fix = scope_fixed(rx);
+
+	rx->scope = (scope_mode_t) v;
+
+	if (!was_fix && scope_fixed(rx))
+		scope_fix_start(rx);
+}
+
+// Value as the console and the state file write it
+static void spar_token(const rx_t *rx, int i, char *s, size_t n)
+{
+	int v = spar_get(rx, i);
+
+	if (i == SP_MODE)
+		snprintf(s, n, "%s", g_scmode_tok[v]);
+	else if (i == SP_VBW)
+		snprintf(s, n, "%s", g_vbw_tok[v]);
+	else if (i == SP_AVG)
+		snprintf(s, n, "%s%.0d", v == 1 ? "off" : "", v == 1 ? 0 : v);
+	else if (i == SP_WAVE)
+		snprintf(s, n, "%s", g_wave_tok[v]);
+	else if (i == SP_WF_SPEED)
+		snprintf(s, n, "%s", g_wfspeed_tok[v]);
+	else if (spar_onoff(i))
+		snprintf(s, n, "%s", v ? "on" : "off");
+	else
+		snprintf(s, n, "%d", v);
+}
+
+// Console / state value for row i; -1 when it does not parse or is out of range
+static int spar_parse(int i, const char *vs)
+{
+	int v = -1;
+
+	if (vs == NULL)
+		return -1;
+
+	if (i == SP_VBW) {
+		for (int k = 0; k < 2; k++)
+			v = strcasecmp(vs, g_vbw_tok[k]) == 0 ? k : v;
+	} else if (i == SP_WAVE) {
+		for (int k = 0; k < 3; k++)
+			v = strcasecmp(vs, g_wave_tok[k]) == 0 ? k : v;
+	} else if (i == SP_WF_SPEED) {
+		for (int k = 0; k < 3; k++)
+			v = strcasecmp(vs, g_wfspeed_tok[k]) == 0 ? k : v;
+	} else if (i == SP_AVG && strcasecmp(vs, "off") == 0) {
+		v = 1;
+	} else if (spar_onoff(i)) {
+		v = strcasecmp(vs, "on") == 0 ? 1 : strcasecmp(vs, "off") == 0 ? 0 : -1;
+	} else if (isdigit((unsigned char) vs[0])) {
+		v = atoi(vs);
+	}
+
+	return v >= g_spar[i].min && v <= g_spar[i].max ? v : -1;
+}
+
+static void spar_defaults(void)
+{
+	for (int i = 1; i < SPARS; i++)
+		g_sp[i] = g_spar[i].def;
+}
+
+//
 // Span (F2 in CENTER / SCROLL-C): full IQ width down to 3 kHz; FIX / SCROLL-F use the edges
 //
 
@@ -1843,6 +1975,21 @@ static bool on_key(rx_t *rx, int key)
 		}
 
 		rx->kedit = false;
+	}
+
+	//
+	// Scope panel open: MFK push selects the next value; any other key closes it and
+	// does its normal job (F1 long closes it too)
+	//
+	if (rx->sedit) {
+		rx->sedit_since = now_ms();
+
+		if (key == X6100_KEY_MFK_PUSH) {
+			rx->sedit_par = (rx->sedit_par + 1) % SPARS;
+			return true;
+		}
+
+		rx->sedit = false;
 	}
 
 	//
@@ -2105,14 +2252,9 @@ static bool on_long_key(rx_t *rx, int key)
 		rx->att = !rx->att;
 		return true;
 	case X6100_KEY_F1:
-		// Long: CENTER family <-> FIX family
-		if (rx->scope == SCOPE_FIX || rx->scope == SCOPE_FIX_S) {
-			rx->scope = SCOPE_CENTER;
-		} else {
-			scope_fix_start(rx);
-			rx->scope = SCOPE_FIX;
-		}
-
+		// Long: scope panel (mode, VBW, averaging, waveform, colours, waterfall)
+		rx->sedit = !rx->sedit;
+		rx->sedit_since = now_ms();
 		return true;
 	case X6100_KEY_F5:
 		rx->fedit = !rx->fedit;
@@ -2134,6 +2276,12 @@ static bool on_long_key(rx_t *rx, int key)
 		if (rx->xedit) {
 			*xpar_value(rx, rx->xedit_par) = g_xpar[rx->xedit_par].def;
 			rx->xedit_since = now_ms();
+			return true;
+		}
+
+		if (rx->sedit) {
+			spar_set(rx, rx->sedit_par, g_spar[rx->sedit_par].def);
+			rx->sedit_since = now_ms();
 			return true;
 		}
 
@@ -2350,6 +2498,15 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 			return true;
 		}
 
+		if (rx->sedit) {
+			const kpar_t *k = &g_spar[rx->sedit_par];
+
+			spar_set(rx, rx->sedit_par,
+				clampi(spar_get(rx, rx->sedit_par) + value * X6100_DIR_MFK * k->step, k->min, k->max));
+			rx->sedit_since = now_ms();
+			return true;
+		}
+
 		if (rx->medit) {
 			rx->medit_ch = (rx->medit_ch - 1 + (value * X6100_DIR_MFK > 0 ? 1 : MEM_COUNT - 1)) % MEM_COUNT + 1;
 			mem_recall(rx, rx->medit_ch);	/* listen while scrolling; empty channels leave the VFO */
@@ -2441,12 +2598,8 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 #define BAND_OUT	0xD03030	/* scope: outside the TX allocations, band edges */
 
 //
-// Scope colours, as set on the IC-7851 (Waveform Fill+Line, averaging 2)
+// Scope: max hold decay and waterfall scale (colours, averaging: scope panel)
 //
-#define SCOPE_FILL	0xFF3F7F
-#define SCOPE_LINE	0xFFFF00
-#define SCOPE_PEAK	0x007F7F
-#define SCOPE_AVG	0.5f
 #define PEAK_DECAY_DB	0.3f
 #define WF_RANGE_DB	50.0f
 #define WF_BELOW_DB	3.0f
@@ -2643,14 +2796,29 @@ static void spectrum_update(screen_t *scr, const x6100_flow_frame_t *f)
 
 	fft(buf, n);
 
+	static float dbs[X6100_FLOW_SAMPLES];
+
 	for (int i = 0; i < n; i++) {
 		int k = (i + n / 2) % n;
 		float p = buf[k][0] * buf[k][0] + buf[k][1] * buf[k][1];
-		float db = p > 1e-20f ? 10.0f * log10f(p / (float) n) : -200.0f;
 
+		dbs[i] = p > 1e-20f ? 10.0f * log10f(p / (float) n) : -200.0f;
 		scr->pow[i] = p / (float) n;
+	}
 
-		scr->spec[i] = scr->spec_valid ? scr->spec[i] * (1.0f - SCOPE_AVG) + db * SCOPE_AVG : db;
+	//
+	// Scope panel: VBW narrow smooths over neighbouring bins (1-2-1), averaging over
+	// frames (OFF = 1: none, 2-4: each frame weighs 1/n)
+	//
+	const float avg = 1.0f / (float) g_sp[SP_AVG];
+
+	for (int i = 0; i < n; i++) {
+		float db = dbs[i];
+
+		if (g_sp[SP_VBW] == 0 && i > 0 && i < n - 1)
+			db = (dbs[i - 1] + 2.0f * dbs[i] + dbs[i + 1]) / 4.0f;
+
+		scr->spec[i] = scr->spec_valid ? scr->spec[i] * (1.0f - avg) + db * avg : db;
 		scr->peak[i] = scr->spec_valid && scr->peak[i] - PEAK_DECAY_DB > scr->spec[i]
 			? scr->peak[i] - PEAK_DECAY_DB : scr->spec[i];
 	}
@@ -4254,6 +4422,54 @@ static void draw_tx_panel(x6100_lcd_t *lcd, const rx_t *rx)
 }
 
 //
+// Scope panel (F1 long): five of the scope settings around the selected one. Blue.
+// MFK turn: adjust; push: next value; hold: default; F1 long, another key or 10 s idle
+// closes. On / off rows are green when on; a colour row shows the colour it sets.
+//
+
+static void draw_scope_panel(x6100_lcd_t *lcd, const rx_t *rx)
+{
+	const int vis = 5, px = LBL_W + 8, py = SPEC_Y + 14, pw = 500, ph = 30 + vis * 21;
+	const uint32_t bg = 0x0A1220, blue = 0x50A0FF, sel = 0x1A2A44, dim = 0x8090A8, white = 0xF0F0F0;
+	const uint32_t on = 0x3CC83C, off = 0x5A6464;
+	int top = clampi(rx->sedit_par - 2, 0, SPARS - vis);
+	char pos[24];
+
+	x6100_lcd_fill(lcd, px, py, pw, ph, bg);
+	x6100_lcd_fill(lcd, px, py, 3, ph, blue);
+	x6100_lcd_hline(lcd, px, px + pw - 1, py, 0x203A5A);
+	x6100_lcd_hline(lcd, px, px + pw - 1, py + ph - 1, 0x203A5A);
+	x6100_lcd_vline(lcd, px + pw - 1, py, py + ph - 1, 0x203A5A);
+	x6100_lcd_text(lcd, px + 14, py + 7, 2, "SCOPE", blue);
+	x6100_lcd_text(lcd, px + 110, py + 11, 1, "MFK: ADJUST  PUSH: NEXT  HOLD: DEFAULT", dim);
+	snprintf(pos, sizeof(pos), "%d/%d", rx->sedit_par + 1, SPARS);
+	x6100_lcd_text(lcd, px + pw - 12 - x6100_lcd_text_width(pos, 1), py + 11, 1, pos, blue);
+
+	for (int i = top; i < top + vis; i++) {
+		int y = py + 30 + (i - top) * 21;
+		uint32_t c = !spar_onoff(i) ? white : spar_get(rx, i) ? on : off;
+		char v[24];
+		int vw;
+
+		if (i == rx->sedit_par)
+			x6100_lcd_fill(lcd, px + 6, y - 3, pw - 12, 19, sel);
+
+		x6100_lcd_text(lcd, px + 14, y, 2, g_spar[i].name, i == rx->sedit_par ? white : dim);
+		spar_token(rx, i, v, sizeof(v));
+
+		for (char *p = v; *p != '\0'; p++)	/* the panel font is upper case */
+			*p = (char) toupper((unsigned char) *p);
+
+		vw = x6100_lcd_text_width(v, 2);
+		x6100_lcd_text(lcd, px + pw - 12 - vw, y, 2, v, c);
+
+		if (spar_colour(i))
+			x6100_lcd_fill(lcd, px + pw - 12 - x6100_lcd_text_width("255", 2) - 44, y - 1, 34, 15,
+				spar_rgb(SP_FILL_R + (i - SP_FILL_R) / 3 * 3));
+	}
+}
+
+//
 // Memory panel (V/M short): five channels around the selected one. Cyan. MFK turn:
 // channel (a used one is tuned at once); MFK long: write the VFO into it; MFK push
 // twice: clear it; V/M, another key or 10 s idle closes.
@@ -4556,7 +4772,9 @@ static void audio_feed(screen_t *scr, const int16_t *buf, unsigned frames, unsig
 			float p = (v[k][0] * v[k][0] + v[k][1] * v[k][1]) * 16.0f / ((float) AS_N * (float) AS_N);
 			float db = p > 1e-20f ? 10.0f * log10f(p) : -200.0f;
 
-			scr->aspec[k] = scr->aspec_valid ? scr->aspec[k] * (1.0f - SCOPE_AVG) + db * SCOPE_AVG : db;
+			const float avg = 1.0f / (float) g_sp[SP_AVG];	/* scope panel averaging */
+
+			scr->aspec[k] = scr->aspec_valid ? scr->aspec[k] * (1.0f - avg) + db * avg : db;
 			scr->apeak[k] = scr->aspec_valid && scr->apeak[k] - PEAK_DECAY_DB > scr->aspec[k]
 				? scr->apeak[k] - PEAK_DECAY_DB : scr->aspec[k];
 		}
@@ -4615,6 +4833,23 @@ static int audio_y(float db)
 }
 
 //
+// One trace column at x (RF and audio scope), as the scope panel sets it: fill under
+// the trace (CURRENT colour), the max hold dot at py, the line from the last column
+//
+
+static void trace_col(x6100_lcd_t *lcd, int x, int y, int py, int prev_y)
+{
+	if (g_sp[SP_WAVE] != WAVE_LINE)
+		x6100_lcd_vline(lcd, x, y, SPEC_Y + SPEC_H - 1, spar_rgb(SP_FILL_R));
+
+	if (g_sp[SP_HOLD])
+		x6100_lcd_fill(lcd, x, py, 1, 1, spar_rgb(SP_HOLD_R));
+
+	if (g_sp[SP_WAVE] != WAVE_FILL)
+		x6100_lcd_vline(lcd, x, prev_y < 0 ? y : prev_y, y, spar_rgb(SP_LINE_R));
+}
+
+//
 // Audio scope picture in columns x0 .. x0 + w - 1: 0-3 or 0-6 kHz (F2), the
 // receive passband shaded, the notch marked when on. Full width (F3) or the
 // right half next to the RF scope (F3 long).
@@ -4667,9 +4902,7 @@ static void draw_audio_spec(screen_t *scr, const rx_t *rx, int x0, int w)
 			int y = audio_y(audio_db_at(scr->aspec, x, w, range));
 			int py = audio_y(audio_db_at(scr->apeak, x, w, range));
 
-			x6100_lcd_vline(lcd, x0 + x, y, SPEC_Y + SPEC_H - 1, SCOPE_FILL);
-			x6100_lcd_fill(lcd, x0 + x, py, 1, 1, SCOPE_PEAK);
-			x6100_lcd_vline(lcd, x0 + x, prev_y < 0 ? y : prev_y, y, SCOPE_LINE);
+			trace_col(lcd, x0 + x, y, py, prev_y);
 			prev_y = y;
 		}
 	} else {
@@ -4752,6 +4985,25 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 	x6100_lcd_t *lcd = &scr->lcd;
 	int W = lcd->w;
 	char s[64];
+
+	//
+	// Scope panel: waterfall off (cleared once, no new lines) or slower (a line on
+	// every 4th / 2nd new frame: SLOW / MID)
+	//
+	static const int wf_every[3] = { 4, 2, 1 };
+	static unsigned wf_frames;
+	static bool wf_shown = true;
+
+	if (!g_sp[SP_WF]) {
+		if (wf_shown)
+			x6100_lcd_fill(lcd, 0, WF_Y, W, WF_H(lcd), 0x000000);
+
+		new_line = false;
+	} else if (new_line) {
+		new_line = wf_frames++ % (unsigned) wf_every[g_sp[SP_WF_SPEED]] == 0;
+	}
+
+	wf_shown = g_sp[SP_WF] != 0;
 
 	//
 	// Status line, TX indicator, indicators right (TUNE while the tuner searches)
@@ -5103,9 +5355,7 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 
 		y = spec_y(spec_at(scr, &v, x));
 		py = spec_y(peak_at(scr, &v, x));
-		x6100_lcd_vline(lcd, x, y, SPEC_Y + SPEC_H - 1, SCOPE_FILL);
-		x6100_lcd_fill(lcd, x, py, 1, 1, SCOPE_PEAK);
-		x6100_lcd_vline(lcd, x, prev_y < 0 ? y : prev_y, y, SCOPE_LINE);
+		trace_col(lcd, x, y, py, prev_y);
 		prev_y = y;
 	}
 
@@ -5343,6 +5593,9 @@ overlays:
 
 	if (rx->xedit)
 		draw_tx_panel(lcd, rx);
+
+	if (rx->sedit)
+		draw_scope_panel(lcd, rx);
 
 	if (rx->gedit)
 		draw_gen_panel(lcd, rx);
@@ -5833,6 +6086,37 @@ static bool console_line(rx_t *rx, char *line)
 			}
 		}
 
+		// Scope panel: vbw narrow|wide, scavg off|2|3|4, wave fill|line|fill+line,
+		// maxhold on|off, fillr .. holdb 0-255, wf on|off, wfspeed slow|mid|fast
+		{
+			int k = -1;
+
+			for (int i = 1; i < SPARS; i++)
+				k = strcasecmp(t, g_spar[i].token) == 0 ? i : k;
+
+			if (k >= 0) {
+				int v = spar_parse(k, strtok(NULL, " \t\r\n"));
+
+				if (v < 0 && k == SP_VBW)
+					fprintf(stderr, "\nvbw: narrow or wide\n");
+				else if (v < 0 && k == SP_AVG)
+					fprintf(stderr, "\nscavg: off, 2, 3 or 4\n");
+				else if (v < 0 && k == SP_WAVE)
+					fprintf(stderr, "\nwave: fill, line or fill+line\n");
+				else if (v < 0 && k == SP_WF_SPEED)
+					fprintf(stderr, "\nwfspeed: slow, mid or fast\n");
+				else if (v < 0 && spar_onoff(k))
+					fprintf(stderr, "\n%s: on or off\n", t);
+				else if (v < 0)
+					fprintf(stderr, "\n%s: %d to %d\n", t, g_spar[k].min, g_spar[k].max);
+				else
+					spar_set(rx, k, v);
+
+				changed = true;
+				continue;
+			}
+		}
+
 		// Birdies: birdie <Hz> <dB> (birdies.conf), birdies (list), birdiescan [all],
 		// birdiestop, birdieclear (all stored ones)
 		if (strcasecmp(t, "birdie") == 0) {
@@ -6294,6 +6578,14 @@ static void state_save(const rx_t *rx)
 		fprintf(fp, "%s %s%s", g_xpar[i].token, v, i == XPARS - 1 ? "\n" : " ");
 	}
 
+	// Scope panel: trace settings, the trace colours, the waterfall (one line each)
+	for (int i = 1; i < SPARS; i++) {
+		char v[16];
+
+		spar_token(rx, i, v, sizeof(v));
+		fprintf(fp, "%s %s%s", g_spar[i].token, v, i == SP_HOLD || i == SP_HOLD_B || i == SPARS - 1 ? "\n" : " ");
+	}
+
 	fprintf(fp, "%s %s\n", g_bmarks ? "birdiemarks" : "nobirdiemarks", g_bnotch ? "birdienotch" : "nobirdienotch");
 	fprintf(fp, "%s %s %s\n", rx->att ? "att" : "noatt", rx->pre ? "pre" : "nopre", rx->atu_on ? "atu" : "noatu");
 	fprintf(fp, "%s %s %s\n", rx->nr ? "nr" : "nonr", rx->nb ? "nb" : "nonb", rx->dnf ? "notch" : "nonotch");
@@ -6451,7 +6743,6 @@ typedef struct
 	bool scope_on;
 	bool scope_out;
 	bool scope_hold;
-	bool scope_vbw;
 	uint32_t fedge_lo;	/* 27 1E: LO arrives first, HI stores the pair */
 	int scope_ref;		/* 0.1 dB */
 	int scope_speed;	/* 0 fast, 1 mid, 2 slow */
@@ -6633,7 +6924,7 @@ static bool cat_get(void *ctx, x6100_civ_item_t item, int vfo, int32_t *v)
 		*v = cat->scope_speed;
 		return true;
 	case X6100_CIV_SCOPE_VBW:
-		*v = cat->scope_vbw;
+		*v = g_sp[SP_VBW];	/* 0 narrow, 1 wide: as the scope panel */
 		return true;
 	case X6100_CIV_BAND_FREQ:
 	case X6100_CIV_BAND_MODE:
@@ -6943,7 +7234,7 @@ static bool cat_set(void *ctx, x6100_civ_item_t item, int vfo, int32_t v)
 		cat->scope_speed = v;
 		break;
 	case X6100_CIV_SCOPE_VBW:
-		cat->scope_vbw = v != 0;
+		g_sp[SP_VBW] = v != 0;
 		break;
 	case X6100_CIV_BAND_FREQ: {
 		int b = civ_band(vfo);
@@ -7624,6 +7915,7 @@ int main(int argc, char **argv)
 
 	kpar_defaults(&rx);
 	xpar_defaults(&rx);
+	spar_defaults();
 	rx.dup = DUP_AUTO;
 	rx.dup_khz = DUP_KHZ_DEF;
 	rx.edge = 1;
@@ -8010,6 +8302,12 @@ int main(int argc, char **argv)
 		// Keyer panel after 10 s
 		if (rx.kedit && t - rx.kedit_since >= 10000) {
 			rx.kedit = false;
+			dirty = true;
+		}
+
+		// Scope panel after 10 s
+		if (rx.sedit && t - rx.sedit_since >= 10000) {
+			rx.sedit = false;
 			dirty = true;
 		}
 
