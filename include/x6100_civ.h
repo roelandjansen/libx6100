@@ -166,7 +166,8 @@ typedef struct
 //
 // Callbacks. get: false = not supported (reply NG), else *value set. set: false =
 // refused or not supported (reply NG). mem_get / mem_set (optional): channel 1-99;
-// mem_set with used false clears the channel.
+// mem_set with used false clears the channel. send_cw (optional): 17, text to send as CW
+// (up to 30 characters, ^ joins two letters into one sign); NULL stops sending.
 //
 
 typedef struct
@@ -176,6 +177,7 @@ typedef struct
 	bool (*set)(void *ctx, x6100_civ_item_t item, int vfo, int32_t value);
 	bool (*mem_get)(void *ctx, int ch, x6100_civ_mem_t *m);
 	bool (*mem_set)(void *ctx, int ch, const x6100_civ_mem_t *m);
+	bool (*send_cw)(void *ctx, const char *text);
 } x6100_civ_ops_t;
 
 typedef struct

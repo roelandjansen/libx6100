@@ -6,6 +6,7 @@
 
 #include "x6100_civ.h"
 
+#include <ctype.h>
 #include <string.h>
 
 #include "x6100_regs.h"
@@ -877,6 +878,34 @@ static size_t cmd_mem_content(req_t *r)
 	return out_end(r->o);
 }
 
+// 17: send CW, up to 30 characters (IC-705: 0-9 A-Z a-z space / ? . - , : ' ( ) = + " @,
+// ^ before two letters sends them as one sign); 17 FF stops
+static size_t cmd_send_cw(req_t *r)
+{
+	static const char ok[] = " /?.-,:'()=+\"@^";
+	const x6100_civ_ops_t *ops = &r->civ->ops;
+	char text[31];
+
+	if (ops->send_cw == NULL || r->n < 1 || r->n > 30)
+		return reply_ng(r);
+
+	if (r->n == 1 && r->d[0] == 0xFF)
+		return reply_ok(r, ops->send_cw(ops->ctx, NULL));
+
+	for (size_t i = 0; i < r->n; i++) {
+		char c = (char) r->d[i];
+
+		if (!isalnum((unsigned char) c) && strchr(ok, c) == NULL)
+			return reply_ng(r);
+
+		text[i] = c;
+	}
+
+	text[r->n] = '\0';
+
+	return reply_ok(r, ops->send_cw(ops->ctx, text));
+}
+
 // IF filter width index -> Hz (Table 1A 03); -1 = invalid for the mode
 static int32_t width_hz(int mode, int i)
 {
@@ -1431,6 +1460,9 @@ size_t x6100_civ_process(x6100_civ_t *civ, const uint8_t *frame, size_t len, uin
 		break;
 	case 0x26:
 		n = cmd_vfo_mode(&r);
+		break;
+	case 0x17:
+		n = cmd_send_cw(&r);
 		break;
 	case 0x18:
 		n = cmd_power(&r);

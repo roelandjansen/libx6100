@@ -1843,7 +1843,7 @@ typedef struct
 	char text[64];		/* CW text, or the WAV file name in VOICE_DIR */
 } msg_t;
 
-static msg_t g_msg[MSG_COUNT + 1];	/* index = message number; 0 unused */
+static msg_t g_msg[MSG_COUNT + 1];	/* index = message number; 0: the CI-V 17 text */
 static int g_msg_repeat = 10;		/* s between repeats (MSG long) */
 
 typedef struct
@@ -1906,7 +1906,8 @@ static const char *morse(char c)
 		"---..", "----." };
 	static const struct { char c; const char *m; } punct[] = {
 		{ '/', "-..-." }, { '?', "..--.." }, { '.', ".-.-.-" }, { ',', "--..--" }, { '=', "-...-" },
-		{ '+', ".-.-." }, { '-', "-....-" },
+		{ '+', ".-.-." }, { '-', "-....-" }, { ':', "---..." }, { '\'', ".----." }, { '(', "-.--." },
+		{ ')', "-.--.-" }, { '"', ".-..-." }, { '@', ".--.-." },
 	};
 
 	c = (char) toupper((unsigned char) c);
@@ -1924,13 +1925,19 @@ static const char *morse(char c)
 	return NULL;
 }
 
-// CW text into key units (1 = key down): dot 1, dash 3, gap 1, letter 3, word 7
+// CW text into key units (1 = key down): dot 1, dash 3, gap 1, letter 3, word 7; ^ joins
+// the next two letters into one sign (^AR, ^SK)
 static int cw_units(const char *text, uint8_t *u, int max)
 {
-	int n = 0;
+	int n = 0, join = 0;
 
 	for (const char *p = text; *p != '\0'; p++) {
 		const char *m = morse(*p);
+
+		if (*p == '^') {
+			join = 2;	/* the letter after this one follows without the letter gap */
+			continue;
+		}
 
 		if (*p == ' ') {
 			for (int k = 0; k < 4 && n < max; k++)	/* 3 after the letter + 4 = 7 */
@@ -1945,9 +1952,11 @@ static int cw_units(const char *text, uint8_t *u, int max)
 			for (int k = 0; k < (*e == '-' ? 3 : 1) && n < max; k++)
 				u[n++] = 1;
 
-			for (int k = 0; k < (e[1] != '\0' ? 1 : 3) && n < max; k++)
+			for (int k = 0; k < (e[1] != '\0' || join == 2 ? 1 : 3) && n < max; k++)
 				u[n++] = 0;
 		}
+
+		join = join > 0 ? join - 1 : 0;
 	}
 
 	return n;
@@ -2015,7 +2024,7 @@ static void send_close(sender_t *s)
 static bool msg_start(rx_t *rx, int n)
 {
 	sender_t *s = &g_send;
-	const msg_t *m = n >= 1 && n <= MSG_COUNT ? &g_msg[n] : NULL;
+	const msg_t *m = n >= 0 && n <= MSG_COUNT ? &g_msg[n] : NULL;	/* 0: CI-V 17 text */
 	bool cw_mode = rx->mode == X6100_MODE_CW || rx->mode == X6100_MODE_CWR;
 	int rc;
 
@@ -2074,6 +2083,49 @@ static bool msg_start(rx_t *rx, int n)
 	rx->warn = NULL;
 
 	return true;
+}
+
+static bool send_stop(rx_t *rx);
+
+//
+// CI-V 17 (send CW): the text goes out as message 0, as a CW message. Text that comes
+// while it is still sending is added to it, as an Icom does with its CW buffer; NULL
+// (17 FF) stops it. False (NG): not in CW mode, cannot transmit here, buffer full.
+//
+
+static bool cw_send_text(rx_t *rx, const char *text)
+{
+	sender_t *s = &g_send;
+
+	if (text == NULL) {
+		if (rx->send == SEND_MSG && s->msg == 0)
+			send_stop(rx);
+
+		return true;
+	}
+
+	if (rx->send == SEND_MSG && s->msg == 0) {
+		// Key units already gone by stay gone: the new text starts at the unit in play
+		int u_now = s->written > SEND_PREROLL ? (int) ((double) (s->written - SEND_PREROLL) / s->unit_frames) + 1 : 0;
+		int max = (int) sizeof(s->units);
+
+		while (s->nunits < u_now && s->nunits < max)
+			s->units[s->nunits++] = 0;
+
+		int add = cw_units(text, s->units + s->nunits, max - s->nunits);
+
+		if (add == 0 || s->nunits + add >= max)
+			return false;
+
+		s->nunits += add;
+		s->done = false;
+		return true;
+	}
+
+	g_msg[0].type = MSG_CW;
+	snprintf(g_msg[0].text, sizeof(g_msg[0].text), "%s", text);
+
+	return msg_start(rx, 0);
 }
 
 // One period of message audio (stereo); false when the message has ended
@@ -6357,7 +6409,7 @@ overlays:
 		uint64_t t = now_ms();
 
 		if (rx->send == SEND_MSG)
-			snprintf(m, sizeof(m), "MSG %d", g_send.msg);
+			snprintf(m, sizeof(m), "%s%.0d", g_send.msg == 0 ? "CAT CW" : "MSG ", g_send.msg);
 		else
 			snprintf(m, sizeof(m), "MSG %d AGAIN IN %d S", g_send.msg,
 				(int) ((g_send.next_at > t ? g_send.next_at - t : 0) + 999) / 1000);
@@ -8244,6 +8296,15 @@ static bool cat_mem_set(void *ctx, int ch, const x6100_civ_mem_t *m)
 	return true;
 }
 
+// CI-V 17: send CW (message 0), 17 FF stops
+static bool cat_send_cw(void *ctx, const char *text)
+{
+	cat_t *cat = ctx;
+
+	cat->changed = true;
+	return cw_send_text(cat->rx, text);
+}
+
 static speed_t cat_speed(int baud)
 {
 	switch (baud) {
@@ -8355,7 +8416,8 @@ static int cat_open_pty(cat_t *cat)
 static int cat_open(cat_t *cat, rx_t *rx, const screen_t *scr, int baud)
 {
 	struct termios tio;
-	x6100_civ_ops_t ops = { .ctx = cat, .get = cat_get, .set = cat_set, .mem_get = cat_mem_get, .mem_set = cat_mem_set };
+	x6100_civ_ops_t ops = { .ctx = cat, .get = cat_get, .set = cat_set, .mem_get = cat_mem_get, .mem_set = cat_mem_set,
+		.send_cw = cat_send_cw };
 
 	memset(cat, 0, sizeof(*cat));
 	cat->rx = rx;

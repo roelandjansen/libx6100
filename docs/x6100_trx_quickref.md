@@ -289,7 +289,9 @@ key stops a message; TX timeout, SWR trip and the band check apply as on PTT. Th
 shows `MSG n` while sending, `MSG n AGAIN IN s S` between repeats.
 
 Console: `msg` (list), `msg <n> cw <text>`, `msg <n> voice <file>`, `msg <n> clear`,
-`msgrepeat <s>`, `msgsend <n>`, `msgstop`. `build.sh backup` / `restore` keep the
+`msgrepeat <s>`, `msgsend <n>`, `msgstop`. CI-V 17 (send CW, from a logger or wfview) uses
+the same CW sender: its text is added while it sends, 17 FF stops; the scope shows
+`CAT CW`. `build.sh backup` / `restore` keep the
 messages and the WAV files.
 
 ## SWR scan (APP)

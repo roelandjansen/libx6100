@@ -23,6 +23,7 @@ typedef struct
 	int32_t v[X6100_CIV_ITEM_COUNT][2];
 	bool supported[X6100_CIV_ITEM_COUNT];
 	x6100_civ_mem_t mem[100];	/* channels 1-99 */
+	char cw[64];			/* last 17 text; "STOP" after 17 FF */
 } mock_t;
 
 static bool mock_get(void *ctx, x6100_civ_item_t item, int vfo, int32_t *value)
@@ -102,6 +103,12 @@ static bool mock_mem_set(void *ctx, int ch, const x6100_civ_mem_t *mem)
 	return true;
 }
 
+static bool mock_send_cw(void *ctx, const char *text)
+{
+	snprintf(((mock_t *) ctx)->cw, sizeof(((mock_t *) ctx)->cw), "%s", text != NULL ? text : "STOP");
+	return true;
+}
+
 static int g_fail;
 static int g_run;
 
@@ -151,7 +158,8 @@ static void check(x6100_civ_t *civ, const char *req, const char *want)
 int main(void)
 {
 	static mock_t m;
-	x6100_civ_ops_t ops = { .ctx = &m, .get = mock_get, .set = mock_set, .mem_get = mock_mem_get, .mem_set = mock_mem_set };
+	x6100_civ_ops_t ops = { .ctx = &m, .get = mock_get, .set = mock_set, .mem_get = mock_mem_get, .mem_set = mock_mem_set,
+		.send_cw = mock_send_cw };
 	x6100_civ_t civ;
 
 	for (int i = 0; i < X6100_CIV_ITEM_COUNT; i++)
@@ -344,6 +352,23 @@ int main(void)
 	check(&civ, "27 1E 00 01", "FA");					/* range 00 */
 	check(&civ, "27 16 00 03", "FB");
 	check(&civ, "27 16 00", "27 16 00 03");
+	check(&civ, "17 43 51 20 54 45 53 54", "FB");	/* send CW "CQ TEST" */
+	g_run++;
+
+	if (strcmp(m.cw, "CQ TEST") != 0) {
+		g_fail++;
+		printf("FAIL 17: text [%s]\n", m.cw);
+	}
+
+	check(&civ, "17 43 7E", "FA");		/* ~ is not a CW character */
+	check(&civ, "17 FF", "FB");			/* stop */
+	g_run++;
+
+	if (strcmp(m.cw, "STOP") != 0) {
+		g_fail++;
+		printf("FAIL 17: last [%s]\n", m.cw);
+	}
+
 	check(&civ, "27 1B 00", "FB");			/* scope during TX off: no selector */
 	check(&civ, "27 1B", "27 1B 00");
 	check(&civ, "27 1C 00 01", "FB");		/* center type: carrier point */
