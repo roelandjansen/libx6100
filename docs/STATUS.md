@@ -123,6 +123,8 @@ Built, not yet tried on the radio (2026-10-25):
     changes or the hand mic. TOT kept over a restart (state file). Still open: CAT PTT
     timeout (4.2).
 12a. TX meter choice (F4) kept over a restart: verified 2026-10-27 (ALC; fix 98584bb).
+12b. F1 short cycling the four scope modes and the GEN band (band keys, its own frequency
+    and mode): verified 2026-10-27 (e268691).
 13. Scope panel: each row on the radio (VBW, averaging, waveform, colours, max hold,
     waterfall off / speed / size / peak level, center type, scope during TX off), the
     audio scope AF rows (own colours etc.), values back after a restart.
