@@ -98,6 +98,15 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
   B = split TX side, name at 100) (host tests pass)
 - CI-V memories (08 select / tune, 09 write, 0A to VFO, 0B clear, 1A 00 contents) and the
   transceive switch 1A 05 0131; host tests and a pty test pass
+- GEN CI-V ADDRESS row (IC-705 A4 / X6100 61, at once, state)
+- TX audio input, Icom DATA OFF MOD / DATA MOD (GEN rows, `modin`, CI-V 1A 05 0118 /
+  0119): MIC or USB; on USB the PTT key and CAT PTT key with codec TX (the PTT bit stays
+  off), so audio played into ALSA card 0 is the modulation; the codec mixer is routed
+  once when either is USB. Default MIC / USB as an Icom (host tests pass)
+- wfserver for the R16: `contrib/wfserver/build.sh` cross-builds wfview's wfserver (Qt
+  5.15 from Ubuntu 24.04 armhf) into a self-contained bundle for /opt/wfserver (own
+  libraries and glibc loader, ALSA config, X6100.rig); starts under qemu-user, loads
+  the ini and all rig files. Setup in `contrib/wfserver/README.md`
 
 ## Open items to check on the radio
 
@@ -137,6 +146,10 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     (5.6, 5.7), a 44.1 kHz file refused (5.8).
 15. SWR scan: on a dummy load (flat 1.0-1.2) and on an antenna, against the stock UI's
     SWR scan; the carrier (AM, 5 W, swrscan flag) and the curve.
+16. GEN CI-V ADDRESS row: switch with wfview connected, kept after a restart.
+17. wfserver on the radio: install the bundle, `--setup`, wfview over LAN (control,
+    scope, RX audio, TX audio with DATA MOD USB in USB-D and DATA OFF MOD USB in USB);
+    CPU load, audio dropouts; the audio scope is blocked while wfserver holds the codec.
 
 ## Next steps (suggested order)
 
@@ -144,8 +157,9 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
    X6100.rig, TX safety, messages, SWR scan) is done up to 5.4: TX safety and the CW
    messages verified, the rest open (items 10, 11, 13-15).
 2. Network CAT and audio: wfview's wfserver on the radio over `cat pty` (decided
-   2026-10-27): build it for the R16 (Qt5, opus; buildroot package), run, measure.
-   Own Icom LAN server only as the fallback (`x6100_netaudio_design.md`).
+   2026-10-27): built 2026-10-28 (`contrib/wfserver`, self-contained bundle); run it
+   on the radio and measure (item 17). Own Icom LAN server only as the fallback
+   (`x6100_netaudio_design.md`).
 3. liquid-dsp in use: network audio / RADE (Icom LAN server design in
    `x6100_netaudio_design.md`), recordings, RX / TX equaliser.
 4. Measurements: S-meter calibration, codec level against ALC.

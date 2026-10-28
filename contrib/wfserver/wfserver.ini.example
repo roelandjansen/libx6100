@@ -1,0 +1,31 @@
+; wfserver settings for the X6100 (x6100_trx with `cat pty`), as /etc/x6100/wfserver.ini
+;
+; Users and passwords: run `/opt/wfserver/wfserver.sh -s /etc/x6100/wfserver.ini --setup`
+; once; the wizard stores them in wfserver's own encoding. Audio device names: the wizard
+; lists them (ALSA, card 0 is the X6100 codec).
+;
+; AudioSystem: 0 Qt (ALSA), 1 PortAudio, 2 RtAudio. RigCIVuInt: 97 = 0x61 (X6100.rig,
+; x6100_trx GEN row CI-V ADDRESS on X6100) or 164 = 0xA4 (IC-705). PTTType 0: PTT over CI-V
+; (the pty has no RTS line). Audio: the X6100 codec (card 0) for input and output.
+
+[General]
+AudioSystem=0
+Manufacturer=0
+
+[Radios]
+1\RigCIVuInt=97
+1\PTTType=0
+1\ForceRTSasPTT=false
+1\SerialPortRadio=/tmp/x6100-civ
+1\RigName=X6100
+1\SerialPortBaud=115200
+1\AudioInput=default
+1\AudioOutput=default
+1\WaterfallFormat=0
+size=1
+
+[Server]
+ServerEnabled=true
+ServerControlPort=50001
+ServerCivPort=50002
+ServerAudioPort=50003

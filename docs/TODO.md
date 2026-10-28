@@ -147,8 +147,11 @@ under GEN until a better key turns up.
 ## Image and distribution
 
 - Now: the IU1WXY image (OS, kernel 6.1.82, stock baseband BASE 1.1.9) is the base;
-  x6100_trx and its tools run on it (`build.sh deploy`). A wfserver build for the R16
-  starts from the IU1WXY buildroot tree (in its GPL sources).
+  x6100_trx and its tools run on it (`build.sh deploy`). wfserver for the R16 is built
+  as a self-contained bundle (`contrib/wfserver`, Ubuntu 24.04 armhf Qt, own glibc
+  loader; 2026-10-28), so it does not need the IU1WXY buildroot tree. To do: run it on
+  the radio (STATUS item 17), an autostart (x6100_ui.sh or an init script), `build.sh
+  deploy` for the bundle; report the no-audio-device crash to wfview (findInput -1).
 - Later: our own buildroot, self-contained, no longer depending on the IU1WXY or other
   images. Two deliverables:
   - full image: a microSD image with OS, x6100_trx, wfserver and the tools;

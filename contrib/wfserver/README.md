@@ -1,0 +1,103 @@
+# wfserver on the X6100
+
+wfview's `wfserver` runs on the radio and serves it over the network the Icom LAN way
+(UDP 50001-50003). wfview on a PC then connects to the X6100 as it would to a networked
+IC-705: CI-V control, scope, RX audio and TX audio. x6100_trx stays the only owner of the
+baseband; wfserver is a CI-V client of it over `cat pty` and moves the audio through the
+R16 codec (ALSA card 0).
+
+```
+wfview (PC) --UDP 50001-50003--> wfserver (radio) --/tmp/x6100-civ--> x6100_trx --> baseband
+                                    |  ALSA card 0 capture  <-- RX audio
+                                    |  ALSA card 0 playback --> codec TX (mod input USB)
+```
+
+## Build
+
+`build.sh` cross-builds wfserver for the R16 (armhf, Cortex-A7 NEON) on an Ubuntu 24.04
+x86-64 host and bundles it with all its libraries and its own glibc loader, so it does
+not depend on anything in the radio's image (which has no Qt).
+
+```
+git clone https://gitlab.com/eliggett/wfview.git
+cd <empty work dir>
+build.sh <wfview source tree> [output dir]
+```
+
+- Runs as root (apt): it adds the armhf architecture with ports.ubuntu.com as its source,
+  installs the cross g++ and host Qt tools, and unpacks the armhf Qt 5.15 / Opus /
+  PortAudio / RtAudio packages into a sysroot under `wfserver-work/`.
+- Output: `wfserver-armhf/` and `wfserver-armhf.tar.gz` (about 33 MB, 68 MB unpacked).
+- The bundle contains `X6100.rig` from `contrib/wfview` next to wfview's own rig files.
+- A second run reuses the sysroot and the object files.
+
+Built and checked 2026-10-28 from wfview `v3-initial` (wfserver 2.11): the ARM binary
+starts under qemu-user with every library from the bundle, loads the settings and finds
+all rig files including X6100 (61). Not run on the radio yet.
+
+## Install on the radio
+
+```
+scp wfserver-armhf.tar.gz root@<radio>:/tmp/
+ssh root@<radio>
+mkdir -p /opt && tar -C /opt -xzf /tmp/wfserver-armhf.tar.gz && mv /opt/wfserver-armhf /opt/wfserver
+cp /opt/wfserver/wfserver.ini.example /etc/x6100/wfserver.ini
+```
+
+The bundle expects to live in `/opt/wfserver` (the rig files are looked up in
+`/opt/wfserver/share/wfview/rigs`). Start it with the launcher, never `bin/wfserver`
+directly: `wfserver.sh` runs it with the bundled loader and libraries and points Qt and
+ALSA at the bundled plugin and configuration.
+
+## Set up x6100_trx
+
+On the GEN panel:
+
+| Row | Value | Why |
+|---|---|---|
+| CAT CI-V | PTY | the CI-V engine on `/tmp/x6100-civ` (applies at the next start) |
+| CI-V ADDRESS | X6100 61 | matches `RigCIVuInt=97` in the ini; IC-705 A4 works too (then 164) |
+| DATA MOD | USB | TX audio in USB-D / LSB-D from the network (the default) |
+| DATA OFF MOD | USB for voice over the network, MIC for the radio's own microphone | |
+
+With the input on USB, a PTT from wfview (or the PTT key) keys with codec TX: the audio
+wfserver plays into ALSA card 0 is the modulation. The hand microphone's PTT always uses
+the microphone. x6100_trx sets up the codec mixer (capture and playback routing) as soon
+as either input is USB.
+
+## Set up wfserver
+
+```
+/opt/wfserver/wfserver.sh -s /etc/x6100/wfserver.ini --setup
+```
+
+The wizard edits the ini: users and passwords (stored in wfserver's own encoding), the
+radio's serial port (`/tmp/x6100-civ`), CI-V address (61, or `auto`: x6100_trx answers
+the 19 00 broadcast), PTT type `civ` (not `rts`: the pty has no RTS line) and the audio
+devices (it lists them; pick the X6100 codec, card 0, for both). CI-V transceive is on
+in x6100_trx by default (1A 05 0131). Then:
+
+```
+/opt/wfserver/wfserver.sh -s /etc/x6100/wfserver.ini -l /tmp/wfserver.log
+```
+
+Use an absolute path with `-s`: a bare file name is taken relative to wfserver's data
+directory (`~/.local/share/wfview`). `-d` adds debug logging, `-b` runs it in the
+background.
+
+In wfview on the PC: Settings, Radio access: LAN; the radio's IP address, control port
+50001, the user and password from the wizard.
+
+## Notes
+
+- The codec is one device. While wfserver has it open, the x6100_trx audio scope (F3)
+  and voice messages cannot open it (the scope says "codec capture not available").
+  The RF scope and CW messages are not affected.
+- Without any sound card wfserver crashes after "no default device found, aborting!":
+  `servermain` indexes the device list with -1 (wfview, `audiodevices.cpp` /
+  `servermain.cpp`). The radio has card 0, so this only shows on a host test.
+- The ini's `[General] AudioSystem=0` is Qt audio (ALSA plugin only; no PulseAudio on
+  the radio). PortAudio (1) and RtAudio (2) are in the bundle as well.
+- wfserver has its own 3-minute transmit limit; x6100_trx's TOT applies as well.
+- `build.sh` in the repository root backs up and restores `/etc/x6100/wfserver.ini`
+  with the other settings.
