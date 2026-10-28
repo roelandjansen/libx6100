@@ -1,6 +1,6 @@
 # libx6100 / x6100_trx — status
 
-Snapshot: 2026-10-27. Last tag: v0.13.0 (2026-10-27; band edges and IC-705 fixed edges
+Snapshot: 2026-10-28. Last tag: v0.13.0 (2026-10-27; band edges and IC-705 fixed edges
 on the scope, CI-V memories and transceive switch, CI-V the Icom way with the full
 IC-705 memory layout, wfview rig file X6100.rig on address 61, VOX register fixed).
 Before: v0.12.0 on 0fab380 (AM receive offset, wfview SCROLL-C fix, CAT over the LAN),
@@ -47,46 +47,57 @@ Verified on the radio:
   when the VFO crosses into another memory with the tuner in, none with it out
 - state saved right after every tune: the new atumem is on disk while x6100_trx runs
   (stored at the TX frequency, e.g. 29530000 for a tune on 29.630 with AUTO duplex)
+- radio test of 2026-10-27 evening (after v0.13.0):
+  - TX timeout: PTT key TX drops; hand mic TX: TX enable off stops it at once, stays off
+    with the mic PTT held, a key ends the block; TOT kept over a restart; the note on the
+    scope clears after 10 s
+  - lost I2C writes: no i2c lines on PTT / CAT / tune / split un-keys, band changes or
+    the hand mic (no false stuck-TX watch)
+  - TX meter choice (F4) kept over a restart
+  - F1 short cycles CENTER -> SCROLL-C -> FIX -> SCROLL-F; GEN band on the band keys
+    with its own frequency and mode
+  - messages: CW message in CW mode at zero beat on the IC-7851, clean keying, ALC fine
+    at -10 dBFS; MSG long repeats every 10 s with the countdown; any key and the PTT key
+    stop it
 
-Built, not yet tried on the radio (2026-10-25):
+Built, not yet tried on the radio (2026-10-25 .. 28):
 
 - TX panel (F4 long): mic select and gains, compressor, VOX, monitor, squelch; state,
   console, CI-V 14 03 / 0B / 0E / 15-17 and 16 44-46
 - birdies: scan (GEN BIRDIE SCAN / `birdiescan`), birdies.conf, yellow ticks on the
   scope, automatic notch in USB / LSB / AM (BIRDIE NOTCH, off for now); host simulation
   of 80 m finds the IU1WXY reference list within 3 Hz
-- AM receive offset: 500 Hz above the dial (AGC long row AM OFFSET, `am_offset`), filter opened by as much (MW test
-  with RIT: 20 Hz already better, 500 Hz clean); the RF scope now maps the IQ around
-  the real receive frequency (RIT and the AM offset no longer shift the trace)
+- AM receive offset: 500 Hz above the dial (AGC long row AM OFFSET, `am_offset`), filter
+  opened by as much (MW test with RIT: 20 Hz already better, 500 Hz clean); the RF scope
+  maps the IQ around the real receive frequency (RIT and the AM offset no longer shift it)
 - CI-V scope: SCROLL-C sends its edges (the wfview waterfall froze in SCROLL-C)
 - band edges on the RF scope from the region table (red bar outside the allocations,
   dashed line at each edge)
-- fixed edges, IC-705 style (2026-10-27): 4 per range on the 12 IC-705 ranges, at most
-  96 kHz; F2 in FIX / SCROLL-F picks one, F2 long stores the window round the VFO;
-  state, console `edge` / `fixedge`, CI-V 27 16 / 27 1E (host tests pass)
-- lost I2C writes (2026-10-27): a failed write resent at once (3 tries, the rest of the
-  block still goes out), the whole register block after every un-key and write error,
-  stuck-TX watch after an un-key; TX timeout off / 1 / 3 / 5 min in the TX panel (`tot`); later the
-  same day: power to the minimum on a TX stuck after a write error, no quit on I2C
-  failures (TX dropped and refused, still trying)
-- scope panel (F1 long, 2026-10-27; the CENTER / FIX family switch is its MODE row): VBW,
-  averaging, waveform type, max hold, colours of fill / line / max hold (R, G, B), waterfall
-  on / off, speed, size and peak level, max hold off / decay / 10 s / on, center type
-  (filter / carrier), scope during TX, as the IC-7851 scope set menu; state file,
-  console, CI-V 27 1B / 1C / 1D; the audio scope with AF rows of its own (waveform,
-  averaging, max hold, colours; copied from the RF rows on the first start)
-- messages (MSG, 2026-10-27): M1-M8 in messages.conf, CW (USB tone, carrier on the dial)
-  or voice (WAV), sent with codec TX, also from CI-V 17; MSG long repeats; SWR scan (APP):
-  the swrscan flag (AM, 5 W, as x6100_gui)
-  over the band segment, 41 points, curve on the scope; host tests of the Morse timing,
-  the WAV reader and the CW level
-- wfview rig file for the X6100 (2026-10-27): `contrib/wfview/X6100.rig` from the IC-705
-  one by `mkrig.sh`; `civaddr 61` in the settings file makes x6100_trx an X6100 on
-  address 61 (default stays A4 / IC-705); 19 00 answered to a broadcast. The Icom way:
-  all IC-705 commands and polls in the file, NG where we lack the function; 1A 00 in
-  the full IC-705 layout (A + B side, B = split TX side, name at 100) (host tests pass)
-- CI-V memories (08 select / tune, 09 write, 0A to VFO, 0B clear, 1A 00 contents in the
-  IC-705 layout) and the transceive switch 1A 05 0131; host tests and a pty test pass
+- fixed edges, IC-705 style: 4 per range on the 12 IC-705 ranges, at most 96 kHz; F2 in
+  FIX / SCROLL-F picks one, F2 long stores the window round the VFO; state, console
+  `edge` / `fixedge`, CI-V 27 16 / 27 1E (host tests pass)
+- lost I2C writes, the rest: power cut (TX enable off, minimum power) on a TX stuck after
+  a write error; after 2 s of I2C failures TX drops and is refused, x6100_trx keeps
+  trying instead of quitting
+- scope panel (F1 long), IC-7851 style: mode, center type, REF LEVEL, VBW, averaging,
+  waveform type, max hold off / decay / 10 s / on, colours of fill / line / max hold
+  (R, G, B), waterfall on / off, speed, size and peak level, scope during TX; the audio
+  scope with AF rows of its own (AF REF LEVEL, waveform, averaging, max hold, colours;
+  copied from the RF rows on the first start); state file, console, CI-V 27 1B / 1C / 1D
+- scope trace one FFT bin off (187.5 Hz): the mirrored bin is n - i (host simulation
+  with tones on exact bins); fixed 2026-10-27, to see on the radio (zero-beat carrier on
+  the VFO line)
+- messages, the rest: CI-V 17 (send CW from a logger, text added while sending, 17 FF
+  stops), voice WAV messages (48 kHz 16 bit, codec TX in the mode in use)
+- SWR scan (APP): the baseband's own scan carrier (register 12 swrscan 0x10, AM, 5 W, no
+  PTT, as R1CBU's x6100_gui), 41 points over the band segment, curve on the scope
+- wfview rig file for the X6100: `contrib/wfview/X6100.rig` from the IC-705 one by
+  `mkrig.sh`; `civaddr 61` makes x6100_trx an X6100 on address 61 (default stays A4 /
+  IC-705); 19 00 answered to a broadcast. The Icom way: all IC-705 commands and polls in
+  the file, NG where we lack the function; 1A 00 in the full IC-705 layout (A + B side,
+  B = split TX side, name at 100) (host tests pass)
+- CI-V memories (08 select / tune, 09 write, 0A to VFO, 0B clear, 1A 00 contents) and the
+  transceive switch 1A 05 0131; host tests and a pty test pass
 
 ## Open items to check on the radio
 
@@ -116,30 +127,21 @@ Built, not yet tried on the radio (2026-10-25):
 11. wfview with X6100.rig: `civaddr 61`, the rig file in wfview, connect on 61 and on
     auto; NG answers do not upset it; scope, fixed edges, memories with names and a
     split TX side (also with the IC-705 file on A4), transceive.
-12. Lost I2C writes and TX timeout. TOT verified 2026-10-27 (1 min): PTT key TX drops;
-    hand mic TX: TX enable off stops it at once, it stays off with the mic PTT held, a key
-    ends the block and the next mic PTT transmits (the mic PTT itself cannot, unseen by
-    Linux). 4.4 clean 2026-10-27: no i2c lines on PTT / CAT / tune / split un-keys, band
-    changes or the hand mic. TOT kept over a restart (state file). Still open: CAT PTT
-    timeout (4.2).
-12a. TX meter choice (F4) kept over a restart: verified 2026-10-27 (ALC; fix 98584bb).
-12b. F1 short cycling the four scope modes and the GEN band (band keys, its own frequency
-    and mode): verified 2026-10-27 (e268691).
-13. Scope panel: each row on the radio (VBW, averaging, waveform, colours, max hold,
-    waterfall off / speed / size / peak level, center type, scope during TX off), the
-    audio scope AF rows (own colours etc.), values back after a restart.
-14. Messages. Verified 2026-10-27: CW message in CW mode at zero beat on the IC-7851,
-    clean keying, ALC fine at -10 dBFS; repeat (MSG long) every 10 s with the countdown
-    (after the TOT wrap fix fbc9fbf); any key stops. Still: the PTT key stops, CI-V 17
-    from a logger, a voice WAV in USB, LSB, AM and NFM.
+12. TX timeout with CAT PTT (test 4.2).
+13. Scope panel: each row on the radio (REF LEVEL in FIX, VBW, averaging, waveform,
+    colours, max hold, waterfall off / speed / size / peak level, center type, scope
+    during TX off), the AF rows, values back after a restart; a zero-beat carrier on the
+    VFO line (bin fix).
+14. Messages, the rest: CI-V 17 from a logger (5.5), a voice WAV in USB, LSB, AM and NFM
+    (5.6, 5.7), a 44.1 kHz file refused (5.8).
 15. SWR scan: on a dummy load (flat 1.0-1.2) and on an antenna, against the stock UI's
     SWR scan; the carrier (AM, 5 W, swrscan flag) and the curve.
 
 ## Next steps (suggested order)
 
-1. Radio checks above: 10-15 planned for the evening of 2026-10-27 (checklist handed over
-   separately, order: scope panel, fixed edges, wfview X6100.rig, TX safety, messages,
-   SWR scan).
+1. Radio checks above; the 2026-10-27 evening checklist (scope panel, fixed edges, wfview
+   X6100.rig, TX safety, messages, SWR scan) is done up to 5.4: TX safety and the CW
+   messages verified, the rest open (items 10, 11, 13-15).
 2. Network CAT and audio: wfview's wfserver on the radio over `cat pty` (decided
    2026-10-27): build it for the R16 (Qt5, opus; buildroot package), run, measure.
    Own Icom LAN server only as the fallback (`x6100_netaudio_design.md`).
