@@ -72,7 +72,7 @@ Status: 2026-10-27 (v0.13.0). Summary and next steps: `STATUS.md`.
 
 ## From the stock UI, not yet in x6100_trx
 
-- GEN: more rows (see key plan); keyer settings (KEY), messages (MSG), apps (APP).
+- GEN: more rows (see key plan: region, LAN server); KEY, MSG, APP are done.
 - CI-V rate: 19200 is the limit of the DEV port (9600 / 19200 work, 38400 and up do
   not, with the divisor written and the PC side checked); faster CAT goes over the
   network: `cat pty` (CI-V on /tmp/x6100-civ, any speed) for wfserver on the radio, or
@@ -84,14 +84,15 @@ Status: 2026-10-27 (v0.13.0). Summary and next steps: `STATUS.md`.
 - Messages and SWR scan (built 2026-10-27, not tried on the radio): CW message keying
   and level against ALC (USB tone, -10 dBFS), voice WAV in LSB / AM / NFM (codec TX is
   verified in USB / USB-D only), the turnaround (100 ms silence first), repeat, stop by
-  key / PTT / TOT; SWR scan on a dummy load and an antenna, the step time (300 ms) and
+  key / PTT / TOT (CW keying, ALC, repeat and stop verified 2026-10-27); SWR scan on a
+  dummy load and an antenna, the step time (300 ms) and
   whether the swrscan flag keys at once (no TX flag needed); CI-V 17 from a logger. Then:
   recording a voice message on the radio: x6100_gui records the codec capture with
   register 12 `voice_rec` 0x8 on and both mic gains at 0, so the capture likely carries
   the microphone then (measure: capture with 0x8, speak into each mic). The `swrscan`
   flag: traced 2026-10-27 (x6100_control_interface.md), the scan now uses it.
 - RX / TX equaliser (baseband or liquid-dsp; GEN TX panel).
-- Digital modes on the radio (FT8, CW / RTTY decoder); CW / voice message memories.
+- Digital modes on the radio (FT8, CW / RTTY decoder) as APP entries; a recorder.
 
 ## Key plan (GEN / KEY / MSG / APP / DFN / DFL)
 
