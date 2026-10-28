@@ -231,6 +231,11 @@ wfs_loop() {
 wfs_start() {
 	L_WHY="$(wfs_why_not)"
 
+	# The wizard offers "auto": that looks for an Icom USB port and never opens the pty
+	if [ -z "${L_WHY}" ] && ! grep -q "^1\\\\SerialPortRadio=${C_CIV_LINK}\$" "${C_WFS_INI}"; then
+		printf 'wfserver: warning: %s has no 1\\SerialPortRadio=%s: no CI-V, audio only\n' "${C_WFS_INI}" "${C_CIV_LINK}" >&2
+	fi
+
 	if [ -n "${L_WHY}" ]; then
 		printf 'wfserver: %s\n' "${L_WHY}"
 	elif [ -n "$(wfs_pid)" ]; then

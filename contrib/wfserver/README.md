@@ -111,7 +111,8 @@ as either input is USB.
 ```
 
 The wizard edits the ini: users and passwords (stored in wfserver's own encoding), the
-radio's serial port (`/tmp/x6100-civ`), CI-V address (61, or `auto`: x6100_trx answers
+radio's serial port (type `/tmp/x6100-civ`; not `auto`: that looks for an Icom USB port, never
+opens the pty and leaves you with audio but no control), CI-V address (61, or `auto`: x6100_trx answers
 the 19 00 broadcast), PTT type `civ` (not `rts`: the pty has no RTS line) and the audio
 devices (it lists them; pick the X6100 codec, card 0, for both). CI-V transceive is on
 in x6100_trx by default (1A 05 0131). Then:
