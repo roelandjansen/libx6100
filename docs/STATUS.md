@@ -106,8 +106,9 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
 2. Battery low notes at 20 / 10 % (on battery only).
 3. GEN WiFi / Bluetooth rows: WiFi / Bluetooth on / off, pair a headset (may need a
    bluez agent; see S39btpairings), panel stutter from polling.
-4. wfview over CAT: VFO A / B, split, duplex, RIT / XIT, keyer levels;
-   ATT / PRE (socat trace against IU1WXY).
+4. wfview over CAT: split, duplex, RIT / XIT, keyer levels. VFO A / B and ATT / PRE work
+   (with the IC-705 file wfview offered two PRE values, PREAMP 1 / 2: check with
+   X6100.rig, which has off / on only, item 11).
 5. Repeater duplex, the rest: CAT PTT, mem 22 (AUTO) and a memory with dup- 100, state
    after a restart, split over duplex, MFK hold resets, panel layout. Scope TX line:
    only when in view (by design).
@@ -126,7 +127,7 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     (27 1E set / read), a 200 kHz edge from wfview is cut to 96 kHz.
 11. wfview with X6100.rig: `civaddr 61`, the rig file in wfview, connect on 61 and on
     auto; NG answers do not upset it; scope, fixed edges, memories with names and a
-    split TX side (also with the IC-705 file on A4), transceive.
+    split TX side (also with the IC-705 file on A4), transceive; PRE shows off / on only.
 12. TX timeout with CAT PTT (test 4.2).
 13. Scope panel: each row on the radio (REF LEVEL in FIX, VBW, averaging, waveform,
     colours, max hold, waterfall off / speed / size / peak level, center type, scope

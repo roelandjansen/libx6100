@@ -111,7 +111,8 @@ under GEN until a better key turns up.
 
 ## CAT / network
 
-- ATT / preamp from wfview: compare a socat trace with IU1WXY (see `x6100_civ.md` §7).
+- ATT / preamp from wfview: work (2026-10-27); with the IC-705 rig file wfview shows PRE
+  1 / 2, X6100.rig has off / on only: check there.
 - PTT in USB-D with the C-Media sound card (CAT PTT, rear USB audio).
 - wfview IC-705 rig file, checked 2026-10-27 (wfview `v3-initial`, 00c62ce, `rigs/IC-705.rig`):
   - Fixed edge ranges: no table; each `Bands\N\Range` is a threshold in MHz and wfview
