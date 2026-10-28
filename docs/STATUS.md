@@ -171,7 +171,9 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
 
 - Build: `bash build.sh` (pull, fingerprint, zig; liquid-dsp needs cmake and the
   submodule: `git submodule update --init --depth 1`). `bash build.sh deploy` to
-  `$X6100_HOST:/root`, seeds missing settings / memories from the examples.
+  `$X6100_HOST:/root`, seeds missing settings / memories from the examples, and installs
+  the wfserver bundle `out/wfserver-armhf.tar.gz` (contrib/wfserver/build.sh, run in
+  out/) as /opt/wfserver when it changed.
 - Settings on the radio live in `/etc/x6100`; a new SD image wipes them: `build.sh
   backup` before flashing, `build.sh restore` after.
 - Commits as Roeland Jansen, no attribution lines, branch master. Tags are made locally

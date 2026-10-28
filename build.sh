@@ -204,6 +204,55 @@ deploy() {
 	fi
 
 	settings_seed
+	deploy_wfserver
+}
+
+#
+# The wfserver bundle (contrib/wfserver/build.sh), when there: installed as /opt/wfserver,
+# only when it differs from the one on the radio (about 33 MB); after the settings, so a
+# backed-up wfserver.ini wins over the example
+#
+
+deploy_wfserver() {
+	local L_SUM
+	local L_HAVE
+
+	if [[ ! -f "${G_WFSERVER}" ]]; then
+		return 0
+	fi
+
+	L_SUM="$(sha256sum -- "${G_WFSERVER}" | cut -d ' ' -f 1)"
+	L_HAVE="$(ssh -- "${G_HOST}" "cat ${C_WFS_DIR}/.bundle 2>/dev/null" || true)"	# not installed: empty
+
+	if [[ "${L_SUM}" == "${L_HAVE}" ]]; then
+		printf '%s\n' "wfserver: ${C_WFS_DIR} up to date"
+		return 0
+	fi
+
+	scp -q -- "${G_WFSERVER}" "${G_HOST}:/tmp/wfserver-armhf.tar.gz"
+
+	# Unpack beside the old bundle, then swap: a running wfserver keeps its files until restarted
+	if ! ssh -- "${G_HOST}" "set -e
+		trap 'rm -f /tmp/wfserver-armhf.tar.gz' EXIT
+		rm -rf ${C_WFS_DIR}.new ${C_WFS_DIR}.old
+		mkdir -p ${C_WFS_DIR}.new
+		tar -C ${C_WFS_DIR}.new -xzf /tmp/wfserver-armhf.tar.gz
+		mv ${C_WFS_DIR}.new/wfserver-armhf/* ${C_WFS_DIR}.new/
+		rmdir ${C_WFS_DIR}.new/wfserver-armhf
+		printf '%s\n' ${L_SUM} > ${C_WFS_DIR}.new/.bundle
+		if [ -d ${C_WFS_DIR} ]; then mv ${C_WFS_DIR} ${C_WFS_DIR}.old; fi
+		mv ${C_WFS_DIR}.new ${C_WFS_DIR}
+		rm -rf ${C_WFS_DIR}.old
+		mkdir -p ${C_RADIO_SETTINGS}
+		if [ ! -f ${C_RADIO_SETTINGS}/wfserver.ini ]; then
+			cp ${C_WFS_DIR}/wfserver.ini.example ${C_RADIO_SETTINGS}/wfserver.ini
+			printf '%s\n' 'wfserver: installed wfserver.ini from the example (users: wfserver.sh --setup)'
+		fi"; then
+		printf '%s\n' "error: wfserver install on ${G_HOST} failed; ${C_WFS_DIR} left as it was" >&2
+		return 1
+	fi
+
+	printf 'deployed %s to %s:%s (restart a running wfserver)\n' "${G_WFSERVER}" "${G_HOST}" "${C_WFS_DIR}"
 }
 
 #
@@ -313,7 +362,9 @@ usage() {
 		'  deploy       the same, then scp x6100_trx, x6100_ui.sh, the quick reference and' \
 		'               x6100_liquid (when built)' \
 		'               to $X6100_HOST:/root (default root@x6100)' \
-		'               and settings missing on the radio from $X6100_CONFIG (or the example)' \
+		'               and settings missing on the radio from $X6100_CONFIG (or the example);' \
+		'               the wfserver bundle $X6100_WFSERVER (default out/wfserver-armhf.tar.gz,' \
+		'               from contrib/wfserver/build.sh) to /opt/wfserver when there and changed' \
 		'  backup       copy the radio settings (/etc/x6100) to $X6100_CONFIG' \
 		'               (default ~/.config/x6100); no build' \
 		'  restore      copy $X6100_CONFIG to the radio, overwriting; no build' \
@@ -327,9 +378,11 @@ readonly C_DEPLOY=("${C_OUT}/x6100_trx" scripts/x6100_ui.sh docs/x6100_trx_quick
 readonly C_RADIO_SETTINGS="/etc/x6100"
 readonly C_SETTINGS=(x6100_trx.conf x6100_trx.state filters.conf memories.conf birdies.conf messages.conf wfserver.ini)
 readonly C_NM_DIR="/etc/NetworkManager/system-connections"
+readonly C_WFS_DIR="/opt/wfserver"
 
 G_HOST="${X6100_HOST:-root@x6100}"
 G_CONFIG="${X6100_CONFIG:-${HOME}/.config/x6100}"
+G_WFSERVER="${X6100_WFSERVER:-${C_OUT}/wfserver-armhf.tar.gz}"
 G_SETTINGS=""
 G_FORCE=0
 G_PULL=1

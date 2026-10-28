@@ -37,6 +37,23 @@ all rig files including X6100 (61). Not run on the radio yet.
 
 ## Install on the radio
 
+With `build.sh deploy` (repository root): it installs the bundle when
+`out/wfserver-armhf.tar.gz` exists (or `$X6100_WFSERVER` names it), so build it there:
+
+```
+cd <libx6100>/out
+../contrib/wfserver/build.sh <wfview source tree>
+cd .. && bash build.sh deploy
+```
+
+deploy compares the bundle's sha256 with `/opt/wfserver/.bundle` on the radio and only
+copies it (about 33 MB) when it differs. It unpacks next to the old bundle and swaps the
+directories; a failed unpack leaves the old one in place. A running wfserver carries on
+with the old files until it is restarted. `/etc/x6100/wfserver.ini` is put in from the
+example only when the radio has none (a backed-up one is restored first).
+
+By hand:
+
 ```
 scp wfserver-armhf.tar.gz root@<radio>:/tmp/
 ssh root@<radio>
