@@ -1,7 +1,7 @@
 ; wfserver settings for the X6100 (x6100_trx with `cat pty`), as /etc/x6100/wfserver.ini
 ;
-; Users and passwords: run `/opt/wfserver/wfserver.sh -s /etc/x6100/wfserver.ini --setup`
-; once; the wizard stores them in wfserver's own encoding. Audio device names: the wizard
+; Users and passwords: run `/opt/wfserver/wfserver.sh --setup` (the launcher uses this file
+; unless -s is given) once; the wizard stores them in its own encoding. Audio devices: the wizard
 ; lists them (ALSA, card 0 is the X6100 codec).
 ;
 ; AudioSystem: 0 Qt (ALSA), 1 PortAudio, 2 RtAudio. RigCIVuInt: 97 = 0x61 (X6100.rig,

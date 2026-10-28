@@ -69,7 +69,8 @@ cd .. && bash build.sh deploy
 ```
 
 deploy compares the bundle's sha256 with `/opt/wfserver/.bundle` on the radio and only
-sends it when it differs: unpacked from gzip on the PC and streamed as tar over `ssh -C`
+sends it when it differs, with a progress line (`pv` when installed, else `dd`): unpacked
+from gzip on the PC and streamed as tar over `ssh -C`
 (the image's busybox tar has no gzip). It unpacks next to the old bundle and swaps the
 directories; a failed unpack leaves the old one in place. A running wfserver carries on
 with the old files until it is restarted. `/etc/x6100/wfserver.ini` is put in from the
@@ -106,7 +107,7 @@ as either input is USB.
 ## Set up wfserver
 
 ```
-/opt/wfserver/wfserver.sh -s /etc/x6100/wfserver.ini --setup
+/opt/wfserver/wfserver.sh --setup
 ```
 
 The wizard edits the ini: users and passwords (stored in wfserver's own encoding), the
@@ -116,7 +117,7 @@ devices (it lists them; pick the X6100 codec, card 0, for both). CI-V transceive
 in x6100_trx by default (1A 05 0131). Then:
 
 ```
-/opt/wfserver/wfserver.sh -s /etc/x6100/wfserver.ini -l /tmp/wfserver.log
+/opt/wfserver/wfserver.sh -l /tmp/wfserver.log
 ```
 
 Or automatically: `x6100_ui.sh stop` (handing the radio to x6100_trx) starts a detached
@@ -127,7 +128,9 @@ only when wfserver is installed and set up (a user in the ini). `x6100_ui.sh wfs
 off` switches the autostart off (`/etc/x6100/wfserver.off`) and stops it, `on` switches
 it on and starts it; `x6100_ui.sh status` shows it.
 
-Use an absolute path with `-s`: a bare file name is taken relative to wfserver's data
+The launcher adds `-s /etc/x6100/wfserver.ini` when no `-s` is given (wfserver's own default
+would be `~/.config/wfview/wfserver.conf`). For another file, use an absolute path with
+`-s`: a bare file name is taken relative to wfserver's data
 directory (`~/.local/share/wfview`). `-d` adds debug logging, `-b` runs it in the
 background.
 

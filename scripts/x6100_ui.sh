@@ -186,7 +186,7 @@ wfs_why_not() {
 	elif [ -f "${C_WFS_OFF}" ]; then
 		printf '%s\n' "off (${0##*/} wfserver on)"
 	elif ! grep -q 'Users\\1\\Username=.' "${C_WFS_INI}" 2>/dev/null; then
-		printf '%s\n' "no user in ${C_WFS_INI} (${C_WFS} -s ${C_WFS_INI} --setup)"
+		printf '%s\n' "no user in ${C_WFS_INI} (${C_WFS} --setup)"
 	fi
 }
 

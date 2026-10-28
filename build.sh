@@ -213,9 +213,22 @@ deploy() {
 # backed-up wfserver.ini wins over the example
 #
 
+#
+# Pass stdin to stdout with a progress line on stderr: pv when there, else dd
+#
+
+progress() {
+	if command -v pv > /dev/null 2>&1; then
+		pv -s "${1}"
+	else
+		dd bs=1M iflag=fullblock status=progress	# GNU dd: one line, redrawn
+	fi
+}
+
 deploy_wfserver() {
 	local L_SUM
 	local L_HAVE
+	local L_SIZE
 
 	if [[ ! -f "${G_WFSERVER}" ]]; then
 		return 0
@@ -232,7 +245,10 @@ deploy_wfserver() {
 	# The image's busybox tar has no gzip: unpack the gzip here and stream the tar, with
 	# ssh compression for the WiFi. Unpacked beside the old bundle, then swapped: a running
 	# wfserver keeps its files until restarted
-	if ! gzip -dc -- "${G_WFSERVER}" | ssh -C -- "${G_HOST}" "set -e
+	L_SIZE="$(gzip -l -- "${G_WFSERVER}" | awk 'NR == 2 { print $2 }')"
+	printf 'wfserver: sending the bundle to %s (%d MB as tar)\n' "${G_HOST}" "$((L_SIZE / 1048576))"
+
+	if ! gzip -dc -- "${G_WFSERVER}" | progress "${L_SIZE}" | ssh -C -- "${G_HOST}" "set -e
 		rm -rf ${C_WFS_DIR}.new ${C_WFS_DIR}.old
 		trap 'rm -rf ${C_WFS_DIR}.new' EXIT
 		mkdir -p ${C_WFS_DIR}.new
