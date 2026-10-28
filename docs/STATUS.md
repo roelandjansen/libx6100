@@ -107,9 +107,8 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
 3. GEN WiFi / Bluetooth rows: WiFi / Bluetooth on / off, pair a headset (may need a
    bluez agent; see S39btpairings), panel stutter from polling.
 4. wfview over CAT: keyer levels. VFO A / B, split, RIT / XIT, duplex DUP- / DUP+ and ATT /
-   PRE work
-   (with the IC-705 file wfview offered two PRE values, PREAMP 1 / 2: check with
-   X6100.rig, which has off / on only, item 11).
+   PRE work (with the IC-705 file wfview offered two PRE values, PREAMP 1 / 2: check
+   with X6100.rig, which has off / on only, item 11).
 5. Repeater duplex, the rest: CAT PTT, mem 22 (AUTO) and a memory with dup- 100, state
    after a restart, split over duplex, MFK hold resets, panel layout. Scope TX line:
    only when in view (by design).
