@@ -18,9 +18,31 @@ wfview (PC) --UDP 50001-50003--> wfserver (radio) --/tmp/x6100-civ--> x6100_trx 
 x86-64 host and bundles it with all its libraries and its own glibc loader, so it does
 not depend on anything in the radio's image (which has no Qt).
 
+Why not zig, as for the rest of libx6100: wfserver is C++ against the prebuilt Qt 5.15
+from Ubuntu's armhf packages, which is built with GCC's libstdc++; `zig c++` uses libc++
+and cannot link against it safely. So the build uses Ubuntu's cross g++.
+
+On any other host (openSUSE), run it in a container, as a normal user:
+
 ```
 git clone https://gitlab.com/eliggett/wfview.git
-cd <empty work dir>
+contrib/wfserver/container.sh <wfview source tree>
+```
+
+- Engine: podman (rootless, no daemon: `zypper install podman`), else docker (needs
+  access to the docker socket); `X6100_ENGINE=docker` picks one.
+- The first run starts from `ubuntu:24.04`, installs the cross tools and keeps that as a
+  local image `x6100-wfserver-build` (a few minutes plus the package downloads). Later
+  runs use the image; with nothing changed a run takes seconds.
+- Works in `<repo>/out`: sysroot and objects in `out/wfserver-work`, the bundle in
+  `out/wfserver-armhf.tar.gz`, where `build.sh deploy` picks it up. Files end up owned
+  by the caller (with docker they are handed back at the end, also after a failure).
+- Remove the image to start afresh: `podman rmi x6100-wfserver-build`.
+
+On an Ubuntu 24.04 host directly:
+
+```
+cd <empty work dir, e.g. <repo>/out>
 build.sh <wfview source tree> [output dir]
 ```
 

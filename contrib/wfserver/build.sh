@@ -59,7 +59,8 @@ host_setup() {
 	fi
 
 	apt-get update -q
-	apt-get install -y -q --no-install-recommends g++-${C_TRIPLET} qtbase5-dev-tools qt5-qmake qt5-qmake-bin libeigen3-dev
+	apt-get install -y -q --no-install-recommends g++-${C_TRIPLET} make qtbase5-dev-tools qt5-qmake qt5-qmake-bin \
+		libeigen3-dev
 }
 
 #
