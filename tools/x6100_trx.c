@@ -436,8 +436,8 @@ static char g_ntp_msg[64] = "not run";	/* last NTP result, for the status page *
 static char g_toast[24];		/* short confirmation over the scope (VFO A / B, A=B) */
 static uint64_t g_toast_until;	/* ms; shown while now_ms() is before this */
 
-enum { GEN_BRIGHT, GEN_CAT, GEN_NTP, GEN_WIFI, GEN_WNET, GEN_BT, GEN_BTPAIR, GEN_BTDEV, GEN_BSCAN, GEN_BMARK, GEN_BNOTCH,
-	GEN_ROWS };	/* GEN rows */
+enum { GEN_BRIGHT, GEN_CAT, GEN_CIVADDR, GEN_NTP, GEN_WIFI, GEN_WNET, GEN_BT, GEN_BTPAIR, GEN_BTDEV, GEN_BSCAN,
+	GEN_BMARK, GEN_BNOTCH, GEN_ROWS };	/* GEN rows */
 
 static void gen_adjust(int row, int dir, bool def);
 
@@ -4499,8 +4499,8 @@ static void draw_filter_panel(x6100_lcd_t *lcd, const rx_t *rx)
 //
 
 static const char *g_gen_name[GEN_ROWS] = {
-	"BRIGHTNESS", "CAT CI-V", "NTP SYNC", "WIFI", "WIFI NETWORK", "BLUETOOTH", "BT PAIRING", "BT DEVICE",
-	"BIRDIE SCAN", "BIRDIE MARKS", "BIRDIE NOTCH",
+	"BRIGHTNESS", "CAT CI-V", "CI-V ADDRESS", "NTP SYNC", "WIFI", "WIFI NETWORK", "BLUETOOTH", "BT PAIRING",
+	"BT DEVICE", "BIRDIE SCAN", "BIRDIE MARKS", "BIRDIE NOTCH",
 };
 static const int g_cat_rates[] = { 0, 4800, 9600, 19200, CAT_PTY };	/* the DEV port carries no more than 19200 */
 
@@ -4793,6 +4793,9 @@ static void gen_value(int row, char *s, size_t n)
 		else
 			snprintf(s, n, "OFF");
 		break;
+	case GEN_CIVADDR:
+		snprintf(s, n, "%s %02X", civ_ident(), g_civ_addr);
+		break;
 	case GEN_NTP:
 		snprintf(s, n, "%s", strcmp(g_ntp_server, "off") == 0 ? "OFF" : "AT START");
 		break;
@@ -4838,6 +4841,9 @@ static void gen_hint(int row, char *s, size_t n)
 	case GEN_CAT:
 	case GEN_NTP:
 		snprintf(s, n, "APPLIES AT NEXT START");
+		break;
+	case GEN_CIVADDR:
+		snprintf(s, n, "WFVIEW: %s RIG FILE", g_civ_addr == X6100_CIV_ADDR_X6100 ? "X6100" : "IC-705");
 		break;
 	case GEN_WIFI:
 		if (g_sys.ssid[0] != '\0')
@@ -4893,6 +4899,9 @@ static void gen_adjust(int row, int dir, bool def)
 		g_cat_baud = def ? 19200 : g_cat_rates[clampi(i + dir, 0, CAT_RATES - 1)];
 		break;
 	}
+	case GEN_CIVADDR:	/* IC-705 (A4) <-> X6100 (61); the main loop gives it to the engine at once */
+		g_civ_addr = def || g_civ_addr != X6100_CIV_ADDR_IC705 ? X6100_CIV_ADDR_IC705 : X6100_CIV_ADDR_X6100;
+		break;
 	case GEN_NTP:
 		snprintf(g_ntp_server, sizeof(g_ntp_server), "%s", def || strcmp(g_ntp_server, "off") == 0 ? "" : "off");
 		break;
@@ -6905,17 +6914,19 @@ static bool console_line(rx_t *rx, char *line)
 		}
 
 		// civaddr a4 | 61 (hex) | ic705 | x6100: CI-V address; 61 needs the wfview rig file
-		// contrib/wfview/X6100.rig (read at start only)
+		// contrib/wfview/X6100.rig (GEN row CI-V ADDRESS too; in the conf it fixes that row)
 		if (strcasecmp(t, "civaddr") == 0) {
 			const char *v = strtok(NULL, " \t\r\n");
 			char *end = NULL;
 			long a = v == NULL ? -1 : strcasecmp(v, "ic705") == 0 ? X6100_CIV_ADDR_IC705
 				: strcasecmp(v, "x6100") == 0 ? X6100_CIV_ADDR_X6100 : strtol(v, &end, 16);
 
-			if (a > 0x00 && a < X6100_CIV_ADDR_CTRL && (end == NULL || *end == '\0'))
+			if (a > 0x00 && a < X6100_CIV_ADDR_CTRL && (end == NULL || *end == '\0')) {
 				g_civ_addr = (int) a;
-			else
+				g_conf_set |= g_conf_reading ? 1u << GEN_CIVADDR : 0;	/* the conf fixes the GEN row */
+			} else {
 				fprintf(stderr, "\ncivaddr: a4 (IC-705), 61 (X6100) or 01-DF hex\n");
+			}
 
 			continue;
 		}
@@ -7630,6 +7641,7 @@ static void state_save(const rx_t *rx)
 	else
 		fprintf(fp, "cat off ");
 
+	fprintf(fp, "civaddr %02x ", g_civ_addr);
 	fprintf(fp, "ntp %s", strcmp(g_ntp_server, "off") == 0 ? "off" : "on");
 
 	if (g_bright > 0)
@@ -9386,6 +9398,12 @@ int main(int argc, char **argv)
 			rx.warn = NULL;
 			warn_seen = NULL;
 			dirty = true;
+		}
+
+		// CI-V address changed on the GEN panel: the engine answers on it from now on
+		if (cat.fd >= 0 && cat.civ.addr != (uint8_t) g_civ_addr) {
+			cat.civ.addr = (uint8_t) g_civ_addr;
+			printf("\nCAT: address %02X (%s)\n", cat.civ.addr, civ_ident());
 		}
 
 		// Message and app panels after 10 s

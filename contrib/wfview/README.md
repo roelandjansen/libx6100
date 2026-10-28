@@ -11,7 +11,8 @@ Made from: wfview `v3-initial`, commit 00c62ce (2026-06-02), `rigs/IC-705.rig`
 
 1. Copy `X6100.rig` into wfview's rig directory (next to `IC-705.rig`), or load it as a
    user rig file.
-2. On the radio, in `/etc/x6100/x6100_trx.conf`: `civaddr 61`, then restart x6100_trx.
+2. On the radio: GEN, row CI-V ADDRESS, turn to X6100 61 (at once, kept), or `civaddr 61` in
+   `/etc/x6100/x6100_trx.conf` (then the GEN row is fixed).
 3. In wfview: CI-V address 61 (hex, decimal 97), or auto: x6100_trx answers the 19 00
    broadcast with its address and wfview picks the rig file that has it.
 

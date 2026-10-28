@@ -180,6 +180,7 @@ Values are kept in the last state (see Settings); defaults NR 20, NB 10 / 10, no
 |---|---|---|
 | BRIGHTNESS | 5-100 % in steps of 5 (default 100) | at once |
 | CAT (CI-V) | OFF, 4800, 9600, 19200 (default 19200: the most the DEV port carries), PTY (/tmp/x6100-civ) | next start |
+| CI-V ADDRESS | IC-705 A4 (default) / X6100 61 (wfview with `contrib/wfview/X6100.rig`); `civaddr` in the conf fixes it | at once |
 | NTP SYNC | AT START / OFF | next start |
 | WIFI | ON / OFF (NetworkManager); shows network, IP and signal | at once |
 | WIFI NETWORK | turn: choose a saved network, hold MFK: connect. New networks: `nmtui` over ssh | at once |
@@ -264,7 +265,7 @@ The status line starts with the VFO in use (A / B); with split, RIT or XIT it ad
 | `mute nomute` | audio mute |
 | `meter po\|swr\|alc` | TX meter on the dial (F4; state) |
 | `cat 19200`, `cat pty`, `cat off` | CI-V at start (settings file; `--cat` overrides) |
-| `civaddr a4`, `civaddr 61` | CI-V address (settings file): a4 IC-705 (default), 61 X6100 with `contrib/wfview/X6100.rig` |
+| `civaddr a4`, `civaddr 61` | CI-V address: a4 IC-705 (default), 61 X6100 with `contrib/wfview/X6100.rig`; also the GEN row CI-V ADDRESS (state); in the settings file it fixes that row |
 | `ntp <server>`, `ntp on`, `ntp off` | NTP sync at start (settings file) |
 | `bright 5-100` | display brightness in % |
 | `ab`, `a=b` | VFO A <-> B, A=B |
