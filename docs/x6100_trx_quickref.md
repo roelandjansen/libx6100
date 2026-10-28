@@ -65,6 +65,8 @@ Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
 
 ## Fixed edges (FIX / SCROLL-F, IC-705 style)
 
+![fixed edge](images/x6100_trx_fixed_edge.png)
+
 Four edges per range, the IC-705 ranges (MHz): 01 below 1.6, 02 1.6-2, 03 2-6, 04 6-8,
 05 8-11, 06 11-15, 07 15-20, 08 20-22, 09 22-26, 10 26-30, 11 30-45, 12 45-60.
 
@@ -80,6 +82,8 @@ Four edges per range, the IC-705 ranges (MHz): 01 below 1.6, 02 1.6-2, 03 2-6, 0
 - CI-V 27 16 (edge in use) and 27 1E (edge frequencies) set and read them, as wfview does.
 
 ## Scope panel (F1 long, IC-7851 style)
+
+![scope panel](images/x6100_trx_scope_panel.png)
 
 MFK turn: adjust; MFK push: next row; MFK hold: default; F1 long, another key or 10 s
 idle closes. Kept in the state file (five lines: RF trace, RF colours, waterfall and TX, AF
@@ -280,6 +284,8 @@ The status line starts with the VFO in use (A / B); with split, RIT or XIT it ad
 
 ## Messages (MSG)
 
+![messages](images/x6100_trx_msg.png)
+
 M1-M8, kept in `/etc/x6100/messages.conf` (example: `docs/x6100_messages.conf.example`).
 Sent with the codec as TX audio (register 12 `0x4000`), not with the PTT:
 
@@ -302,6 +308,8 @@ the same CW sender: its text is added while it sends, 17 FF stops; the scope sho
 messages and the WAV files.
 
 ## SWR scan (APP)
+
+![SWR scan](images/x6100_trx_swrscan.png)
 
 APP long, or APP and MFK push (console: `swrscan`): the baseband's own scan carrier
 (register 12 `swrscan` 0x10 in AM at 5 W, no PTT and no microphone, as R1CBU's x6100_gui

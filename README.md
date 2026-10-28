@@ -64,6 +64,36 @@ the dial, the VFO line and the carrier stay on 918.000 (render, MW stations ever
 The AM offset on the AGC long panel (RIT / XIT / DUP, scrolled to row 6): 0-1000 Hz,
 hold MFK for 500.
 
+![x6100_trx scope panel](docs/images/x6100_trx_scope_panel.png)
+
+Scope panel (hold F1), IC-7851 style: mode, center type, reference level, VBW, averaging,
+waveform type, max hold, the colours of fill, line and max hold (R, G, B with a swatch),
+the waterfall (on, speed, size, peak level), scope during TX, and the same for the
+audio scope (AF rows). F1 short steps CENTER, SCROLL-C, FIX, SCROLL-F.
+
+![x6100_trx fixed edge](docs/images/x6100_trx_fixed_edge.png)
+
+FIX with the IC-705 fixed edges (four per range, F2 picks one, hold F2 stores the
+window around the VFO): edge 3 on 40 m, 7.192-7.288 MHz. The band edge markers come
+from the region table: a red bar over what is outside the allocation (region 1:
+7.000-7.200), a dashed line at the edge.
+
+![x6100_trx messages](docs/images/x6100_trx_msg.png)
+
+Message panel (MSG): M1-M8, CW text or a WAV file, sent with the codec as TX audio.
+A CW message is a keyed tone in USB with the carrier on the dial (verified at zero beat
+on an IC-7851); hold MSG to send it again every 10 s. CI-V 17 from a logger goes the
+same way.
+
+![x6100_trx SWR scan](docs/images/x6100_trx_swrscan.png)
+
+SWR scan (APP): the baseband's own scan carrier stepped over the band segment, the
+curve over the RF scope with the lowest point marked (render with a dip at 7.110 MHz).
+
+![x6100_trx RF and audio scope with own colours](docs/images/x6100_trx_af_colours.png)
+
+RF and audio scope (F3 long), the audio scope with colours of its own (AF rows).
+
 ## Status
 
 Verified on hardware (BASE 1.1.9), see `docs/x6100_control_interface.md` §9:
