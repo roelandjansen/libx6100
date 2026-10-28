@@ -149,5 +149,12 @@ In wfview on the PC: Settings, Radio access: LAN; the radio's IP address, contro
 - The ini's `[General] AudioSystem=0` is Qt audio (ALSA plugin only; no PulseAudio on
   the radio). PortAudio (1) and RtAudio (2) are in the bundle as well.
 - wfserver has its own 3-minute transmit limit; x6100_trx's TOT applies as well.
+- Scope: keep `1\WaterfallFormat=0` in the ini. With 1 (combined; the wizard may set it)
+  wfserver merges the 11 scope divisions itself and wfview shows no scope (seen
+  2026-10-28; why the merge fails is open). `ServerScopePort` (50004, from the wizard)
+  is not used for an Icom-type radio: the scope travels with CI-V on 50002.
+- `x6100_ui.sh wfserver off` waits until wfserver has let go of the codec, so `on`
+  right after it gets the sound device; before, the new wfserver could start while the
+  old one still held it (no audio until a reboot).
 - `build.sh` in the repository root backs up and restores `/etc/x6100/wfserver.ini`
   with the other settings.

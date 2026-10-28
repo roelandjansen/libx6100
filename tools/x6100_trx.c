@@ -4803,7 +4803,7 @@ static void gen_value(int row, char *s, size_t n)
 			snprintf(s, n, "OFF");
 		break;
 	case GEN_CIVADDR:
-		snprintf(s, n, "%s %02X", civ_ident(), g_civ_addr);
+		snprintf(s, n, "%s %02XH", civ_ident(), g_civ_addr);
 		break;
 	case GEN_MODOFF:
 	case GEN_MODDATA:
@@ -5093,9 +5093,9 @@ static void draw_gen_info(x6100_lcd_t *lcd, const screen_t *scr)
 		snprintf(lines[n++], sizeof(lines[0]), "BATTERY %.1f V %d %%", scr->vbat, scr->batcap);
 
 	if (g_cat_baud > 0)
-		snprintf(lines[n++], sizeof(lines[0]), "CAT     %d BAUD, %s, ADDRESS %02X", g_cat_baud, civ_ident(), g_civ_addr);
+		snprintf(lines[n++], sizeof(lines[0]), "CAT     %d BAUD, %s, ADDRESS %02XH", g_cat_baud, civ_ident(), g_civ_addr);
 	else if (g_cat_baud == CAT_PTY)
-		snprintf(lines[n++], sizeof(lines[0]), "CAT     PTY /TMP/X6100-CIV, %s, ADDRESS %02X", civ_ident(), g_civ_addr);	/* CAT_PTY_LINK */
+		snprintf(lines[n++], sizeof(lines[0]), "CAT     PTY /TMP/X6100-CIV, %s, ADDRESS %02XH", civ_ident(), g_civ_addr);	/* CAT_PTY_LINK */
 	else
 		snprintf(lines[n++], sizeof(lines[0]), "CAT     OFF");
 
@@ -9207,10 +9207,10 @@ int main(int argc, char **argv)
 			fprintf(stderr, "warning: CAT %s: %s\n", g_cat_baud == CAT_PTY ? "pty" : CAT_DEV, strerror(-rc));
 		} else {
 			if (g_cat_baud == CAT_PTY)
-				printf("CAT: CI-V on %s -> %s (pseudo-terminal, any speed), address %02X (%s)\n", CAT_PTY_LINK,
+				printf("CAT: CI-V on %s -> %s (pseudo-terminal, any speed), address 0x%02X (%s)\n", CAT_PTY_LINK,
 					cat.pty_name, cat.civ.addr, civ_ident());
 			else
-				printf("CAT: CI-V on %s, %d baud, address %02X (%s)\n", CAT_DEV, g_cat_baud, cat.civ.addr, civ_ident());
+				printf("CAT: CI-V on %s, %d baud, address 0x%02X (%s)\n", CAT_DEV, g_cat_baud, cat.civ.addr, civ_ident());
 
 			pfd[npfd].fd = cat.fd;
 			pfd[npfd].events = POLLIN;
@@ -9453,7 +9453,7 @@ int main(int argc, char **argv)
 		// CI-V address changed on the GEN panel: the engine answers on it from now on
 		if (cat.fd >= 0 && cat.civ.addr != (uint8_t) g_civ_addr) {
 			cat.civ.addr = (uint8_t) g_civ_addr;
-			printf("\nCAT: address %02X (%s)\n", cat.civ.addr, civ_ident());
+			printf("\nCAT: address 0x%02X (%s)\n", cat.civ.addr, civ_ident());
 		}
 
 		// A mod input on USB: route the codec once for a Linux audio program (wfserver):

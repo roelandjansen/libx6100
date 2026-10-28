@@ -197,10 +197,10 @@ wfs_why_not() {
 
 wfs_loop() {
 	L_WPID=""
-	trap 'if pid_alive "${L_WPID}"; then kill "${L_WPID}"; fi; rm -f "${C_WFS_PID}"; exit 0' TERM INT
+	trap 'pid_end "${L_WPID}"; rm -f "${C_WFS_PID}"; exit 0' TERM INT
 
 	while :; do
-		L_PTY="$(readlink "${C_CIV_LINK}" 2>/dev/null || true)"	# x6100_trx not on cat pty: wait
+		L_PTY="$(pty_key)"
 
 		if [ -z "${L_PTY}" ]; then
 			sleep 2
@@ -210,18 +210,53 @@ wfs_loop() {
 		"${C_WFS}" -s "${C_WFS_INI}" -l "${C_WFS_LOG}" </dev/null >/dev/null 2>&1 &
 		L_WPID=$!
 
-		while pid_alive "${L_WPID}" && [ "$(readlink "${C_CIV_LINK}" 2>/dev/null || true)" = "${L_PTY}" ]; do
+		while pid_alive "${L_WPID}" && [ "$(pty_key)" = "${L_PTY}" ]; do
 			sleep 2
 		done
 
-		if pid_alive "${L_WPID}"; then
-			kill "${L_WPID}"
-		fi
-
-		wait "${L_WPID}" 2>/dev/null || true	# its exit status does not matter: start again
+		pid_end "${L_WPID}"
 		L_WPID=""
 		sleep 2
 	done
+}
+
+#
+# The CI-V pty and the x6100_trx serving it: changes when x6100_trx restarts, also onto
+# the same pts number; empty while x6100_trx is not on cat pty
+#
+
+pty_key() {
+	L_LINK="$(readlink "${C_CIV_LINK}" 2>/dev/null || true)"	# no link: empty
+
+	if [ -n "${L_LINK}" ]; then
+		printf '%s %s\n' "${L_LINK}" "$(pidof x6100_trx 2>/dev/null || true)"
+	fi
+}
+
+#
+# End a process and wait until it is gone (TERM, KILL after 5 s): the next wfserver
+# must find the codec free
+#
+
+pid_end() {
+	L_N=0
+
+	if ! pid_alive "$1"; then
+		return 0
+	fi
+
+	kill "$1" 2>/dev/null || true	# gone meanwhile: fine
+
+	while pid_alive "$1" && [ "${L_N}" -lt 5 ]; do
+		sleep 1
+		L_N=$((L_N + 1))
+	done
+
+	if pid_alive "$1"; then
+		kill -KILL "$1" 2>/dev/null || true	# gone meanwhile: fine
+	fi
+
+	wait "$1" 2>/dev/null || true	# only our own child can be waited for
 }
 
 #
@@ -234,6 +269,11 @@ wfs_start() {
 	# The wizard offers "auto": that looks for an Icom USB port and never opens the pty
 	if [ -z "${L_WHY}" ] && ! grep -q "^1\\\\SerialPortRadio=${C_CIV_LINK}\$" "${C_WFS_INI}"; then
 		printf 'wfserver: warning: %s has no 1\\SerialPortRadio=%s: no CI-V, audio only\n' "${C_WFS_INI}" "${C_CIV_LINK}" >&2
+	fi
+
+	# Combined waterfall (the wizard may set it): wfserver's merge loses x6100_trx's scope
+	if [ -z "${L_WHY}" ] && grep -q '^1\\WaterfallFormat=1' "${C_WFS_INI}"; then
+		printf 'wfserver: warning: %s has 1\\WaterfallFormat=1: no scope in wfview, set it to 0\n' "${C_WFS_INI}" >&2
 	fi
 
 	if [ -n "${L_WHY}" ]; then
@@ -254,8 +294,21 @@ wfs_stop() {
 	L_PID="$(wfs_pid)"
 
 	if [ -n "${L_PID}" ]; then
+		# The watcher ends wfserver first: wait for both, so a start right after finds
+		# the codec free (the watcher may be in a 2 s sleep, then up to 5 s for wfserver; 10 s at most)
 		kill "${L_PID}"
-		printf '%s\n' 'wfserver: stopped'
+		L_N=0
+
+		while pid_alive "${L_PID}" && [ "${L_N}" -lt 10 ]; do
+			sleep 1
+			L_N=$((L_N + 1))
+		done
+
+		if pid_alive "${L_PID}"; then
+			printf '%s\n' 'wfserver: watcher still there after 10 s' >&2
+		else
+			printf '%s\n' 'wfserver: stopped'
+		fi
 	fi
 }
 

@@ -152,6 +152,11 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     CPU load, audio dropouts; the audio scope is blocked while wfserver holds the codec.
     Autostart: `x6100_ui.sh stop`, then x6100_trx with cat pty: wfserver comes up;
     restart x6100_trx: wfserver restarts on the new pty; `x6100_ui.sh start` stops it.
+    2026-10-28 first run: deploy, `--setup`, wfview over LAN connects; RX audio, VFO A / B,
+    meters and (with WaterfallFormat 0) the scope work on address 61. Found on the way:
+    SerialPortRadio must be /tmp/x6100-civ (not auto), WaterfallFormat 1 loses the
+    scope, `wfserver off` / `on` lost the audio (fixed: stop waits for wfserver). Open:
+    TX audio, CPU load, dropouts, the audio after the fix, why combined mode fails.
 
 ## Next steps (suggested order)
 

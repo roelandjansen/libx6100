@@ -7,6 +7,9 @@
 ; AudioSystem: 0 Qt (ALSA), 1 PortAudio, 2 RtAudio. RigCIVuInt: 97 = 0x61 (X6100.rig,
 ; x6100_trx GEN row CI-V ADDRESS on X6100) or 164 = 0xA4 (IC-705). PTTType 0: PTT over CI-V
 ; (the pty has no RTS line). Audio: the X6100 codec (card 0) for input and output.
+; WaterfallFormat must stay 0: with 1 (combined, the wizard may set it) wfserver merges
+; the 11 scope divisions and wfview shows no scope. The wizard's ServerScopePort (50004) is
+; not used for an Icom-type radio: the scope goes with CI-V (50002), audio is 50003.
 
 [General]
 AudioSystem=0
