@@ -170,6 +170,7 @@ int main(void)
 	m.supported[X6100_CIV_NB] = false;
 	m.v[X6100_CIV_FREQ][0] = 14074000;
 	m.v[X6100_CIV_FREQ][1] = 7074000;
+	m.v[X6100_CIV_MOD_IN][1] = 1;	/* DATA MOD: USB, as the radio starts */
 	m.v[X6100_CIV_MODE][0] = X6100_MODE_USB_DIG;
 	m.v[X6100_CIV_MODE][1] = X6100_MODE_LSB;
 	m.v[X6100_CIV_FIL][0] = 2;
@@ -436,6 +437,12 @@ int main(void)
 		check(&civ, "1A 05 01 31 00", "FB");
 		check(&civ, "1A 05 01 31", "1A 05 01 31 00");
 		check(&civ, "1A 05 01 31 02", "FA");
+
+		check(&civ, "1A 05 01 18", "1A 05 01 18 00");
+		check(&civ, "1A 05 01 19", "1A 05 01 19 01");
+		check(&civ, "1A 05 01 18 01", "FB");
+		check(&civ, "1A 05 01 18", "1A 05 01 18 01");
+		check(&civ, "1A 05 01 19 03", "FA");
 	}
 
 	// Announcements and framer

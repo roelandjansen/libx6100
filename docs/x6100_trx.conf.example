@@ -54,3 +54,8 @@ cat 19200
 # CI-V address: a4 = IC-705 (out of the box; wfview IC-705 rig file), 61 = X6100 (needs
 # contrib/wfview/X6100.rig in wfview: only the commands x6100_trx answers, our spans).
 # civaddr 61
+
+# TX audio input for the PTT key and CAT PTT, DATA OFF MOD (SSB / AM / FM) and DATA MOD
+# (USB-D / LSB-D): mic, or usb = the codec (audio played by a Linux program: wfserver).
+# Default mic usb; set here it fixes the GEN rows.
+# modin usb usb

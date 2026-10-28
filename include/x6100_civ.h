@@ -62,6 +62,8 @@
 //   SCOPE_TX           scope during TX 0 / 1 (27 1B)
 //   SCOPE_CTYPE        center type 0 filter centre, 1 carrier point, 2 carrier point with
 //                      absolute frequency (27 1C)
+//   MOD_IN             TX audio input, vfo 0 = DATA OFF MOD (1A 05 0118), 1 = DATA MOD
+//                      (0119): 0 MIC, 1 USB (the codec: a Linux program such as wfserver)
 //
 // The vfo argument: 0 = foreground (selected), 1 = background (unselected).
 //
@@ -140,6 +142,7 @@ typedef enum
 	X6100_CIV_SCOPE_FEDGE_HI,
 	X6100_CIV_SCOPE_TX,
 	X6100_CIV_SCOPE_CTYPE,
+	X6100_CIV_MOD_IN,
 	X6100_CIV_ITEM_COUNT
 } x6100_civ_item_t;
 

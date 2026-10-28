@@ -427,6 +427,7 @@ static int g_cat_baud;		/* CI-V baud, 0 = no CAT, CAT_PTY: conf token cat, or --
 #define CAT_PTY		(-1)		/* g_cat_baud: CI-V on a pseudo-terminal instead, at any speed */
 static bool g_i2c_down;		/* 2 s of failed I2C writes: TX dropped and refused, still trying */
 static int g_civ_addr = X6100_CIV_ADDR_IC705;	/* conf token civaddr: a4 (IC-705) or 61 (X6100 rig file) */
+static int g_modin[2] = { 0, 1 };	/* TX audio input, DATA OFF MOD / DATA MOD (1A 05 0118 / 0119): 0 MIC, 1 USB (codec) */
 static char g_ntp_server[64];	/* conf token ntp <server> | off; empty = ntp.conf or pool.ntp.org */
 static int g_bright;		/* backlight level, % (10-100); 0 = leave as the OS set it */
 static unsigned g_conf_set;	/* GEN rows that x6100_trx.conf fixes (bit = row): shown CONF, locked */
@@ -436,8 +437,8 @@ static char g_ntp_msg[64] = "not run";	/* last NTP result, for the status page *
 static char g_toast[24];		/* short confirmation over the scope (VFO A / B, A=B) */
 static uint64_t g_toast_until;	/* ms; shown while now_ms() is before this */
 
-enum { GEN_BRIGHT, GEN_CAT, GEN_CIVADDR, GEN_NTP, GEN_WIFI, GEN_WNET, GEN_BT, GEN_BTPAIR, GEN_BTDEV, GEN_BSCAN,
-	GEN_BMARK, GEN_BNOTCH, GEN_ROWS };	/* GEN rows */
+enum { GEN_BRIGHT, GEN_CAT, GEN_CIVADDR, GEN_MODOFF, GEN_MODDATA, GEN_NTP, GEN_WIFI, GEN_WNET, GEN_BT, GEN_BTPAIR,
+	GEN_BTDEV, GEN_BSCAN, GEN_BMARK, GEN_BNOTCH, GEN_ROWS };	/* GEN rows */
 
 static void gen_adjust(int row, int dir, bool def);
 
@@ -1066,10 +1067,18 @@ static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 
 static void apply_flags(x6100_ctl_t *ctl, const rx_t *rx)
 {
+	x6100_mode_t mode = tx_mode(rx);
+	bool data = mode == X6100_MODE_LSB_DIG || mode == X6100_MODE_USB_DIG;
+	bool cw = mode == X6100_MODE_CW || mode == X6100_MODE_CWR;
+
+	// PTT (key, CAT) with the mod input on USB: the codec playback is the TX audio. Codec TX
+	// keys by itself (as for voice messages), so the PTT bit stays off then
+	bool usb_in = rx->ptt && !rx->tuning && rx->send == SEND_NONE && !cw && g_modin[data];
+
 	x6100_ctl_set(ctl, X6100_REG_FLAGS, 0);
-	x6100_set_ptt(ctl, rx->ptt);
+	x6100_set_ptt(ctl, rx->ptt && !usb_in);
 	x6100_ctl_update(ctl, X6100_REG_FLAGS, X6100_FLAG_SWRSCAN, rx->send == SEND_SCAN ? X6100_FLAG_SWRSCAN : 0);
-	x6100_set_codec_tx(ctl, rx->codec_tx);
+	x6100_set_codec_tx(ctl, rx->codec_tx || usb_in);
 	x6100_atu_enable(ctl, rx->atu_on || rx->tuning);
 	x6100_atu_tune(ctl, rx->tuning);
 }
@@ -4499,8 +4508,8 @@ static void draw_filter_panel(x6100_lcd_t *lcd, const rx_t *rx)
 //
 
 static const char *g_gen_name[GEN_ROWS] = {
-	"BRIGHTNESS", "CAT CI-V", "CI-V ADDRESS", "NTP SYNC", "WIFI", "WIFI NETWORK", "BLUETOOTH", "BT PAIRING",
-	"BT DEVICE", "BIRDIE SCAN", "BIRDIE MARKS", "BIRDIE NOTCH",
+	"BRIGHTNESS", "CAT CI-V", "CI-V ADDRESS", "DATA OFF MOD", "DATA MOD", "NTP SYNC", "WIFI", "WIFI NETWORK",
+	"BLUETOOTH", "BT PAIRING", "BT DEVICE", "BIRDIE SCAN", "BIRDIE MARKS", "BIRDIE NOTCH",
 };
 static const int g_cat_rates[] = { 0, 4800, 9600, 19200, CAT_PTY };	/* the DEV port carries no more than 19200 */
 
@@ -4796,6 +4805,10 @@ static void gen_value(int row, char *s, size_t n)
 	case GEN_CIVADDR:
 		snprintf(s, n, "%s %02X", civ_ident(), g_civ_addr);
 		break;
+	case GEN_MODOFF:
+	case GEN_MODDATA:
+		snprintf(s, n, "%s", g_modin[row == GEN_MODDATA] ? "USB" : "MIC");
+		break;
 	case GEN_NTP:
 		snprintf(s, n, "%s", strcmp(g_ntp_server, "off") == 0 ? "OFF" : "AT START");
 		break;
@@ -4844,6 +4857,10 @@ static void gen_hint(int row, char *s, size_t n)
 		break;
 	case GEN_CIVADDR:
 		snprintf(s, n, "WFVIEW: %s RIG FILE", g_civ_addr == X6100_CIV_ADDR_X6100 ? "X6100" : "IC-705");
+		break;
+	case GEN_MODOFF:	/* the TX audio a PTT key or CAT PTT uses; the hand mic PTT is always MIC */
+	case GEN_MODDATA:
+		snprintf(s, n, "%s  USB: AUDIO FROM LINUX (WFSERVER)", row == GEN_MODDATA ? "USB-D LSB-D" : "SSB AM FM");
 		break;
 	case GEN_WIFI:
 		if (g_sys.ssid[0] != '\0')
@@ -4901,6 +4918,10 @@ static void gen_adjust(int row, int dir, bool def)
 	}
 	case GEN_CIVADDR:	/* IC-705 (A4) <-> X6100 (61); the main loop gives it to the engine at once */
 		g_civ_addr = def || g_civ_addr != X6100_CIV_ADDR_IC705 ? X6100_CIV_ADDR_IC705 : X6100_CIV_ADDR_X6100;
+		break;
+	case GEN_MODOFF:	/* MIC <-> USB; default as an Icom: MIC, data USB */
+	case GEN_MODDATA:
+		g_modin[row == GEN_MODDATA] = def ? row == GEN_MODDATA : !g_modin[row == GEN_MODDATA];
 		break;
 	case GEN_NTP:
 		snprintf(g_ntp_server, sizeof(g_ntp_server), "%s", def || strcmp(g_ntp_server, "off") == 0 ? "" : "off");
@@ -6931,6 +6952,24 @@ static bool console_line(rx_t *rx, char *line)
 			continue;
 		}
 
+		// modin <mic|usb> <mic|usb>: TX audio input for DATA OFF MOD and DATA MOD (GEN rows
+		// too; in the conf it fixes them). usb: the codec, played by a Linux program (wfserver)
+		if (strcasecmp(t, "modin") == 0) {
+			const char *v0 = strtok(NULL, " \t\r\n"), *v1 = strtok(NULL, " \t\r\n");
+			int m0 = v0 == NULL ? -1 : strcasecmp(v0, "mic") == 0 ? 0 : strcasecmp(v0, "usb") == 0 ? 1 : -1;
+			int m1 = v1 == NULL ? -1 : strcasecmp(v1, "mic") == 0 ? 0 : strcasecmp(v1, "usb") == 0 ? 1 : -1;
+
+			if (m0 >= 0 && m1 >= 0) {
+				g_modin[0] = m0;
+				g_modin[1] = m1;
+				g_conf_set |= g_conf_reading ? 1u << GEN_MODOFF | 1u << GEN_MODDATA : 0;
+			} else {
+				fprintf(stderr, "\nmodin: <mic|usb> <mic|usb> (data off, data)\n");
+			}
+
+			continue;
+		}
+
 		// ntp <server> | ntp off: the one sync at start (read at start only)
 		if (strcasecmp(t, "ntp") == 0) {
 			const char *v = strtok(NULL, " \t\r\n");
@@ -7642,6 +7681,7 @@ static void state_save(const rx_t *rx)
 		fprintf(fp, "cat off ");
 
 	fprintf(fp, "civaddr %02x ", g_civ_addr);
+	fprintf(fp, "modin %s %s ", g_modin[0] ? "usb" : "mic", g_modin[1] ? "usb" : "mic");
 	fprintf(fp, "ntp %s", strcmp(g_ntp_server, "off") == 0 ? "off" : "on");
 
 	if (g_bright > 0)
@@ -8057,6 +8097,9 @@ static bool cat_get(void *ctx, x6100_civ_item_t item, int vfo, int32_t *v)
 	case X6100_CIV_TRANSCEIVE:
 		*v = !cat->no_transceive;
 		return true;
+	case X6100_CIV_MOD_IN:		/* vfo 0 DATA OFF MOD, 1 DATA MOD */
+		*v = g_modin[vfo != 0];
+		return true;
 	default:
 		return false;	/* NB, NR, DNF, RIT, other levels */
 	}
@@ -8086,6 +8129,12 @@ static bool cat_set(void *ctx, x6100_civ_item_t item, int vfo, int32_t v)
 		break;
 	case X6100_CIV_TRANSCEIVE:	/* 1A 05 0131 */
 		cat->no_transceive = v == 0;
+		break;
+	case X6100_CIV_MOD_IN:		/* 1A 05 0118 / 0119; the conf may fix it */
+		if (g_conf_set & (1u << GEN_MODOFF))
+			return false;
+
+		g_modin[vfo != 0] = v != 0;
 		break;
 	case X6100_CIV_FREQ:
 		if (v < (int32_t) FREQ_MIN || v > (int32_t) FREQ_MAX)
@@ -8972,6 +9021,7 @@ int main(int argc, char **argv)
 	int apcm_slot = -1;	/* audio scope capture, fd -1 while closed */
 	x6100_pcm_t apcm;
 	bool apcm_open = false;
+	bool codec_routed = false;	/* codec mixer set up for a mod input on USB */
 	static cat_t cat = { .fd = -1 };
 	rx_t rx = { .vol = 20, .rfg = 100, .step = 100, .agc = (x6100_agc_t) -1, .mode = X6100_MODE_USB,
 		.txpwr = TXPWR_DEF, .scope = SCOPE_CENTER, .span = SPAN_HZ,
@@ -9404,6 +9454,17 @@ int main(int argc, char **argv)
 		if (cat.fd >= 0 && cat.civ.addr != (uint8_t) g_civ_addr) {
 			cat.civ.addr = (uint8_t) g_civ_addr;
 			printf("\nCAT: address %02X (%s)\n", cat.civ.addr, civ_ident());
+		}
+
+		// A mod input on USB: route the codec once for a Linux audio program (wfserver):
+		// capture carries the RX audio, playback goes to the modulator
+		if ((g_modin[0] || g_modin[1]) && !codec_routed) {
+			int boost = rx.mode == X6100_MODE_AM || rx.mode == X6100_MODE_NFM ? 0 : 1;	/* as x6100_audio */
+
+			if (x6100_mixer_rx_setup(X6100_PCM_CARD, boost) < 0 || x6100_mixer_tx_setup(X6100_PCM_CARD) < 0)
+				fprintf(stderr, "\nmod input USB: codec mixer setup failed\n");
+
+			codec_routed = true;
 		}
 
 		// Message and app panels after 10 s

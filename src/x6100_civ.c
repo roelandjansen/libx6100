@@ -659,8 +659,6 @@ typedef struct
 
 static const menu_t g_menu[] = {
 	{ 0x0045, 0x00 },	/* Quick SPLIT: OFF */
-	{ 0x0118, 0x00 },	/* DATA OFF MOD: MIC */
-	{ 0x0119, 0x01 },	/* DATA MOD: USB (rear USB sound card) */
 };
 
 static size_t cmd_menu(req_t *r)
@@ -686,6 +684,26 @@ static size_t cmd_menu(req_t *r)
 		out_byte(r->o, 0x01);
 		out_byte(r->o, 0x31);
 		out_byte(r->o, v ? 0x01 : 0x00);
+
+		return out_end(r->o);
+	}
+
+	// 0118 DATA OFF MOD, 0119 DATA MOD: 00 MIC, 01 USB (MIC,USB and LAN: NG)
+	if (item == 0x0118 || item == 0x0119) {
+		int vfo = item == 0x0119;
+
+		if (r->n >= 4)
+			return reply_ok(r, r->d[3] <= 0x01 && set(r, X6100_CIV_MOD_IN, vfo, r->d[3]));
+
+		if (!get(r, X6100_CIV_MOD_IN, vfo, &v))
+			return reply_ng(r);
+
+		reply_head(r);
+		out_byte(r->o, 0x1A);
+		out_byte(r->o, 0x05);
+		out_byte(r->o, 0x01);
+		out_byte(r->o, r->d[2]);
+		out_byte(r->o, (uint8_t) v);
 
 		return out_end(r->o);
 	}
