@@ -229,14 +229,15 @@ deploy_wfserver() {
 		return 0
 	fi
 
-	scp -q -- "${G_WFSERVER}" "${G_HOST}:/tmp/wfserver-armhf.tar.gz"
-
-	# Unpack beside the old bundle, then swap: a running wfserver keeps its files until restarted
-	if ! ssh -- "${G_HOST}" "set -e
-		trap 'rm -f /tmp/wfserver-armhf.tar.gz' EXIT
+	# The image's busybox tar has no gzip: unpack the gzip here and stream the tar, with
+	# ssh compression for the WiFi. Unpacked beside the old bundle, then swapped: a running
+	# wfserver keeps its files until restarted
+	if ! gzip -dc -- "${G_WFSERVER}" | ssh -C -- "${G_HOST}" "set -e
 		rm -rf ${C_WFS_DIR}.new ${C_WFS_DIR}.old
+		trap 'rm -rf ${C_WFS_DIR}.new' EXIT
 		mkdir -p ${C_WFS_DIR}.new
-		tar -C ${C_WFS_DIR}.new -xzf /tmp/wfserver-armhf.tar.gz
+		cd ${C_WFS_DIR}.new
+		tar -x
 		mv ${C_WFS_DIR}.new/wfserver-armhf/* ${C_WFS_DIR}.new/
 		rmdir ${C_WFS_DIR}.new/wfserver-armhf
 		printf '%s\n' ${L_SUM} > ${C_WFS_DIR}.new/.bundle

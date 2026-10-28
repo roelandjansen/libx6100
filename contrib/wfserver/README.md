@@ -69,18 +69,17 @@ cd .. && bash build.sh deploy
 ```
 
 deploy compares the bundle's sha256 with `/opt/wfserver/.bundle` on the radio and only
-copies it (about 33 MB) when it differs. It unpacks next to the old bundle and swaps the
+sends it when it differs: unpacked from gzip on the PC and streamed as tar over `ssh -C`
+(the image's busybox tar has no gzip). It unpacks next to the old bundle and swaps the
 directories; a failed unpack leaves the old one in place. A running wfserver carries on
 with the old files until it is restarted. `/etc/x6100/wfserver.ini` is put in from the
 example only when the radio has none (a backed-up one is restored first).
 
-By hand:
+By hand (the image's busybox tar has no `-z`: unpack the gzip on the PC, stream the tar):
 
 ```
-scp wfserver-armhf.tar.gz root@<radio>:/tmp/
-ssh root@<radio>
-mkdir -p /opt && tar -C /opt -xzf /tmp/wfserver-armhf.tar.gz && mv /opt/wfserver-armhf /opt/wfserver
-cp /opt/wfserver/wfserver.ini.example /etc/x6100/wfserver.ini
+gzip -dc wfserver-armhf.tar.gz | ssh -C root@<radio> 'mkdir -p /opt && cd /opt && tar -x && mv wfserver-armhf wfserver'
+ssh root@<radio> 'cp /opt/wfserver/wfserver.ini.example /etc/x6100/wfserver.ini'
 ```
 
 The bundle expects to live in `/opt/wfserver` (the rig files are looked up in
