@@ -5,7 +5,9 @@ panel. `x6100_rx` is the same program, receive only (PTT and tune refused).
 
 ## Start
 
-Stop the stock GUI first (`scripts/x6100_ui.sh stop`).
+Stop the stock GUI first (`scripts/x6100_ui.sh stop`). That also starts wfserver when it is
+installed and set up (`contrib/wfserver`): it runs while x6100_trx serves `cat pty`;
+`x6100_ui.sh wfserver off` / `on` switches that off / on, `x6100_ui.sh start` stops it.
 
 ```
 x6100_trx [--oob] [--no-limit] [--cat[=baud|pty]] [--cat-log] [--probe] [freq] [mode] [agc] [att|noatt] [pre|nopre] [vol 0-100]

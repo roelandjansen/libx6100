@@ -98,6 +98,14 @@ in x6100_trx by default (1A 05 0131). Then:
 /opt/wfserver/wfserver.sh -s /etc/x6100/wfserver.ini -l /tmp/wfserver.log
 ```
 
+Or automatically: `x6100_ui.sh stop` (handing the radio to x6100_trx) starts a detached
+watcher that runs wfserver as above while x6100_trx serves `/tmp/x6100-civ`. It starts
+wfserver when the pty appears, restarts it when the pty changes (x6100_trx restarted)
+or wfserver ends, and `x6100_ui.sh start` (back to the GUI) stops both. It does this
+only when wfserver is installed and set up (a user in the ini). `x6100_ui.sh wfserver
+off` switches the autostart off (`/etc/x6100/wfserver.off`) and stops it, `on` switches
+it on and starts it; `x6100_ui.sh status` shows it.
+
 Use an absolute path with `-s`: a bare file name is taken relative to wfserver's data
 directory (`~/.local/share/wfview`). `-d` adds debug logging, `-b` runs it in the
 background.

@@ -10,9 +10,15 @@
 # After stopping, checks that nothing holds the display (/dev/dri): x6100_trx
 # needs to be DRM master, else "display not available (Permission denied)".
 #
+# wfserver (contrib/wfserver, /opt/wfserver): stop also starts a detached watcher that
+# runs wfserver while x6100_trx serves CI-V on /tmp/x6100-civ (cat pty), and restarts it
+# when x6100_trx restarts; start stops it. Only when installed, set up (a user in
+# /etc/x6100/wfserver.ini) and not switched off (/etc/x6100/wfserver.off).
+#
 # Busybox sh on the radio: POSIX only.
 #
 # Usage: x6100_ui.sh stop|start|status
+#        x6100_ui.sh wfserver on|off    autostart on (and start now) / off (and stop now)
 #
 
 set -eu
@@ -24,6 +30,13 @@ readonly C_STOCK_CTL="/usr/share/support/userapp"
 readonly C_MONITRC="/etc/monitrc"
 readonly C_IU1WXY="/usr/sbin/x6100-iu1wxy-gui"
 readonly C_GUIS="x6100_gui x6100-iu1wxy-gui x6100_ui_v100"
+
+readonly C_WFS="/opt/wfserver/wfserver.sh"
+readonly C_WFS_INI="/etc/x6100/wfserver.ini"
+readonly C_WFS_OFF="/etc/x6100/wfserver.off"
+readonly C_WFS_PID="/var/run/x6100_wfserver.pid"
+readonly C_WFS_LOG="/tmp/wfserver.log"
+readonly C_CIV_LINK="/tmp/x6100-civ"
 
 #
 # Print the PIDs of shell processes running the respawn loop
@@ -104,6 +117,7 @@ ui_stop() {
 	fi
 
 	printf '%s\n' 'display free'
+	wfs_start
 }
 
 #
@@ -111,6 +125,7 @@ ui_stop() {
 #
 
 ui_start() {
+	wfs_stop	# the GUI takes the baseband: no CI-V pty, and the codec is its own
 	if [ -x "${C_IU1WXY}" ]; then
 		L_INIT="$(iu1wxy_init)"
 
@@ -141,6 +156,104 @@ ui_start() {
 	fi
 }
 
+#
+# True when a process is alive (an exited child stays a zombie until reaped: not alive)
+#
+
+pid_alive() {
+	[ -n "$1" ] && [ -d "/proc/$1" ] && ! grep -q '^State:[[:space:]]*Z' "/proc/$1/status" 2>/dev/null
+}
+
+#
+# Print the PID of the wfserver watcher, if it runs
+#
+
+wfs_pid() {
+	L_PID="$(cat "${C_WFS_PID}" 2>/dev/null || true)"	# no pid file: not running
+
+	if pid_alive "${L_PID}"; then
+		printf '%s\n' "${L_PID}"
+	fi
+}
+
+#
+# Why wfserver does not start automatically; nothing when it does
+#
+
+wfs_why_not() {
+	if [ ! -x "${C_WFS}" ]; then
+		printf '%s\n' 'not installed (build.sh deploy)'
+	elif [ -f "${C_WFS_OFF}" ]; then
+		printf '%s\n' "off (${0##*/} wfserver on)"
+	elif ! grep -q 'Users\\1\\Username=.' "${C_WFS_INI}" 2>/dev/null; then
+		printf '%s\n' "no user in ${C_WFS_INI} (${C_WFS} -s ${C_WFS_INI} --setup)"
+	fi
+}
+
+#
+# The watcher: runs wfserver while x6100_trx serves CI-V on the pty, restarts it when
+# the pty changes (x6100_trx restarted) or wfserver ends
+#
+
+wfs_loop() {
+	L_WPID=""
+	trap 'if pid_alive "${L_WPID}"; then kill "${L_WPID}"; fi; rm -f "${C_WFS_PID}"; exit 0' TERM INT
+
+	while :; do
+		L_PTY="$(readlink "${C_CIV_LINK}" 2>/dev/null || true)"	# x6100_trx not on cat pty: wait
+
+		if [ -z "${L_PTY}" ]; then
+			sleep 2
+			continue
+		fi
+
+		"${C_WFS}" -s "${C_WFS_INI}" -l "${C_WFS_LOG}" </dev/null >/dev/null 2>&1 &
+		L_WPID=$!
+
+		while pid_alive "${L_WPID}" && [ "$(readlink "${C_CIV_LINK}" 2>/dev/null || true)" = "${L_PTY}" ]; do
+			sleep 2
+		done
+
+		if pid_alive "${L_WPID}"; then
+			kill "${L_WPID}"
+		fi
+
+		wait "${L_WPID}" 2>/dev/null || true	# its exit status does not matter: start again
+		L_WPID=""
+		sleep 2
+	done
+}
+
+#
+# Start the watcher, detached, when wfserver is installed, on and set up
+#
+
+wfs_start() {
+	L_WHY="$(wfs_why_not)"
+
+	if [ -n "${L_WHY}" ]; then
+		printf 'wfserver: %s\n' "${L_WHY}"
+	elif [ -n "$(wfs_pid)" ]; then
+		printf '%s\n' 'wfserver: already running'
+	else
+		setsid sh "$(readlink -f "$0")" wfloop </dev/null >/dev/null 2>&1 &
+		printf '%s\n' "wfserver: started, runs while x6100_trx serves ${C_CIV_LINK} (log ${C_WFS_LOG})"
+	fi
+}
+
+#
+# Stop the watcher and its wfserver
+#
+
+wfs_stop() {
+	L_PID="$(wfs_pid)"
+
+	if [ -n "${L_PID}" ]; then
+		kill "${L_PID}"
+		printf '%s\n' 'wfserver: stopped'
+	fi
+}
+
 ui_status() {
 	L_DAEMON="$(daemon_pids)"
 
@@ -152,6 +265,15 @@ ui_status() {
 
 	printf '%-17s %s\n' 'monit:' "$(pidof monit || printf '%s' 'not running')"
 	printf '%-17s %s\n' 'display held by:' "$(dri_holders | tr '\n' ' ')"
+
+	L_WHY="$(wfs_why_not)"
+	L_PID="$(wfs_pid)"
+
+	if [ -n "${L_PID}" ]; then
+		printf '%-17s %s\n' 'wfserver:' "watcher ${L_PID}, pty ${C_CIV_LINK} $([ -L "${C_CIV_LINK}" ] && printf '%s' 'up' || printf '%s' 'not there (x6100_trx cat pty?)')"
+	else
+		printf '%-17s %s\n' 'wfserver:' "not running${L_WHY:+, ${L_WHY}}"
+	fi
 }
 
 if [ "$(id -u)" -ne 0 ]; then
@@ -169,8 +291,30 @@ case "${1:-}" in
 	status)
 		ui_status
 		;;
+	wfserver)
+		case "${2:-}" in
+			on)
+				rm -f "${C_WFS_OFF}"
+				wfs_start
+				;;
+			off)
+				mkdir -p "${C_WFS_OFF%/*}"
+				: > "${C_WFS_OFF}"
+				wfs_stop
+				printf '%s\n' 'wfserver: autostart off'
+				;;
+			*)
+				printf 'usage: %s wfserver on|off\n' "$0" >&2
+				exit 1
+				;;
+		esac
+		;;
+	wfloop)		# internal: the detached watcher started by wfs_start
+		printf '%s\n' "$$" > "${C_WFS_PID}"
+		wfs_loop
+		;;
 	*)
-		printf 'usage: %s stop|start|status\n' "$0" >&2
+		printf 'usage: %s stop|start|status|wfserver on|off\n' "$0" >&2
 		exit 1
 		;;
 esac

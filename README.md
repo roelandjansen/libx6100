@@ -138,7 +138,7 @@ Not yet: GPIO (hand mic PTT is invisible to Linux), Icom LAN server, keyer.
 | `tools/x6100_trx.c` | transceiver: x6100_rx plus PTT, ATU, TX power, TX meters |
 | `tools/x6100_spk.c` | experiment, negative: speaker through Linux via reg 12 bit 0x8 (capture loses RX audio in play mode), kept for reference |
 | `tools/x6100_iqcal.c` | RX IQ image calibration attempt (registers 48/49); parked: flow IQ too little range to measure |
-| `scripts/x6100_ui.sh` | stop/start the GUI (stock and R1CBU images) |
+| `scripts/x6100_ui.sh` | stop/start the GUI (stock, R1CBU and IU1WXY images); wfserver autostart |
 | `docs/x6100_control_interface.md` | protocol documentation |
 | `docs/x6100_netaudio_design.md` | network audio / wfview design (draft) |
 | `docs/x6100_baseband_handover.md` | handover for a separate baseband-firmware (clean-room) discussion |

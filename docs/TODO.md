@@ -150,9 +150,10 @@ under GEN until a better key turns up.
   x6100_trx and its tools run on it (`build.sh deploy`). wfserver for the R16 is built
   as a self-contained bundle (`contrib/wfserver`, Ubuntu 24.04 armhf Qt, own glibc
   loader; 2026-10-28), so it does not need the IU1WXY buildroot tree. To do: run it on
-  the radio (STATUS item 17), an autostart (x6100_ui.sh or an init script); report
+  the radio (STATUS item 17); report
   the no-audio-device crash to wfview (findInput -1). `build.sh deploy` installs the
-  bundle (out/wfserver-armhf.tar.gz) when it changed.
+  bundle (out/wfserver-armhf.tar.gz) when it changed; `x6100_ui.sh stop` starts it
+  (watcher on the CI-V pty), `start` stops it.
 - Later: our own buildroot, self-contained, no longer depending on the IU1WXY or other
   images. Two deliverables:
   - full image: a microSD image with OS, x6100_trx, wfserver and the tools;

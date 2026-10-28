@@ -150,6 +150,8 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
 17. wfserver on the radio: install the bundle, `--setup`, wfview over LAN (control,
     scope, RX audio, TX audio with DATA MOD USB in USB-D and DATA OFF MOD USB in USB);
     CPU load, audio dropouts; the audio scope is blocked while wfserver holds the codec.
+    Autostart: `x6100_ui.sh stop`, then x6100_trx with cat pty: wfserver comes up;
+    restart x6100_trx: wfserver restarts on the new pty; `x6100_ui.sh start` stops it.
 
 ## Next steps (suggested order)
 
