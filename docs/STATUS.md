@@ -106,7 +106,8 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
 2. Battery low notes at 20 / 10 % (on battery only).
 3. GEN WiFi / Bluetooth rows: WiFi / Bluetooth on / off, pair a headset (may need a
    bluez agent; see S39btpairings), panel stutter from polling.
-4. wfview over CAT: duplex, keyer levels. VFO A / B, split, RIT / XIT and ATT / PRE work
+4. wfview over CAT: keyer levels. VFO A / B, split, RIT / XIT, duplex DUP- / DUP+ and ATT /
+   PRE work
    (with the IC-705 file wfview offered two PRE values, PREAMP 1 / 2: check with
    X6100.rig, which has off / on only, item 11).
 5. Repeater duplex, the rest: CAT PTT, mem 22 (AUTO) and a memory with dup- 100, state
