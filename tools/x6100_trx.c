@@ -7839,6 +7839,9 @@ static int civ_band(int code)
 {
 	static const int map[11] = { -1, 0, 1, 3, 4, 5, 6, 7, 8, 9, 10 };
 
+	if (code == 15)
+		return BAND_COUNT;	/* IC-705 GEN: our GEN band (outside the ham bands) */
+
 	return code >= 1 && code <= 10 ? map[code] : -1;
 }
 
@@ -8024,6 +8027,18 @@ static bool cat_get(void *ctx, x6100_civ_item_t item, int vfo, int32_t *v)
 
 		if (b < 0)
 			return false;
+
+		// GEN: its last frequency and mode (the current ones while on GEN)
+		if (b == BAND_COUNT) {
+			if (item == X6100_CIV_BAND_FREQ)
+				*v = (int32_t) (rx->band < 0 ? rx->freq : rx->gen_freq);
+			else if (item == X6100_CIV_BAND_MODE)
+				*v = rx->band < 0 ? rx->mode : rx->gen_mode;
+			else
+				*v = rx->fil + 1;
+
+			return true;
+		}
 
 		if (item == X6100_CIV_BAND_FREQ)
 			*v = (int32_t) rx->band_freq[b];
@@ -8347,6 +8362,15 @@ static bool cat_set(void *ctx, x6100_civ_item_t item, int vfo, int32_t v)
 		break;
 	case X6100_CIV_BAND_FREQ: {
 		int b = civ_band(vfo);
+
+		// GEN: any frequency the radio tunes; stored as GEN's last frequency
+		if (b == BAND_COUNT) {
+			if (v < (int32_t) FREQ_MIN || v > (int32_t) FREQ_MAX)
+				return false;
+
+			rx->gen_freq = (uint32_t) v;
+			return true;
+		}
 
 		if (b < 0 || (uint32_t) v < g_bands[b].low || (uint32_t) v > g_bands[b].high)
 			return false;
