@@ -48,10 +48,27 @@ The decode of a clean signal is the light case: on a real off-air signal the rec
 also searches for sync. rade_c's `FDV_offair.wav` is an off-air recording at 48 kHz;
 resampled to 8 kHz it can be decoded with `rade_rx_wav` for that case.
 
-## Status
+`lpcnet_demo` is built as well: the benchmark runs the FARGAN vocoder alone on the
+decoded features (`v1 fargan`), so decode minus FARGAN is the demodulator and the RADE
+decoder. If both halves stay below 1.0, the receiver fits in real time as two threads on
+two cores.
 
-Written 2026-10-29. Not built or run yet: the build needs media.xiph.org, which the
-cloud session could not reach; the benchmark script was checked with stand-in tools.
+## Results
+
+2026-10-29, X6100, R16 at 1008 MHz (cpufreq as the image sets it), rade_c c8a3dc1,
+rade_c's 9.8 s sample, x6100_trx not running:
+
+| Step | RTF (two runs) |
+|---|---|
+| V1 encode (TX) | 0.42, 0.45 |
+| V1 decode (RX) | 1.08, 1.14 |
+| V2 encode | 0.47, 0.54 |
+| V2 decode | 1.15, 1.21 |
+
+TX fits easily. RX misses real time by 8-20 % on one core. To look at next: the FARGAN /
+decoder split (above), whether the build has NEON (build.sh prints it), the clock (the
+benchmark prints governor and steps; the R16 is rated to 1.2 GHz), and then a two-thread
+receiver.
 
 Published figures for comparison: the FreeDV team gives a Pi 4 as the smallest
 comfortable machine (RADE V1 FlexRadio waveform about 30 % of one core with the C port);

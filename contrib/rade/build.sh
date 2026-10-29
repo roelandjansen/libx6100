@@ -147,6 +147,10 @@ rade_build() {
 		"${G_ZIG}" cc "${L_FLAGS[@]}" -static -s -o "${C_OUT}/${L_T}" "${L_SRC}/${L_T}.c" "${L_OBJS[@]}" \
 			"${L_OPUS}/.libs/libopus.a" -lm
 	done
+
+	# FARGAN alone (features to speech), for the benchmark's split of the decode time
+	"${G_ZIG}" cc "${L_FLAGS[@]}" -static -s -o "${C_OUT}/lpcnet_demo" "${L_SRC}/lpcnet_demo.c" \
+		"${L_OPUS}/.libs/libopus.a" -lm
 }
 
 #
@@ -156,7 +160,8 @@ rade_build() {
 tools_check
 mkdir -p -- "${C_WORK}" "${C_OUT}"
 
-printf 'zig %s, rade_c %s\n' "$("${G_ZIG}" version)" "${C_RADE_REV:0:7}"
+printf 'zig %s, rade_c %s, NEON %s\n' "$("${G_ZIG}" version)" "${C_RADE_REV:0:7}" \
+	"$("${G_ZIG}" cc -target "${C_TARGET}" -mcpu="${C_CPU}" -dM -E -x c /dev/null | grep '__ARM_NEON ' > /dev/null && printf yes || printf 'NO (Opus falls back to plain C)')"
 checkout "${C_WORK}/rade_c" "${C_RADE_URL}" "${C_RADE_REV}"
 opus_build
 rade_build

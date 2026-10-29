@@ -21,7 +21,7 @@ G_DIR=$(dirname "$(readlink -f "$0")")
 G_IN="${1:-${G_DIR}/input_sample.wav}"
 G_TMP=$(mktemp -d /tmp/rade_bench.XXXXXX)
 
-trap 'rm -f "${G_TMP}"/*.wav; rmdir "${G_TMP}"' EXIT
+trap 'rm -f "${G_TMP}"/*.wav "${G_TMP}"/*.f32 "${G_TMP}"/*.pcm; rmdir "${G_TMP}"' EXIT
 
 #
 # Centiseconds since boot (/proc/uptime: no need for date +%N)
@@ -70,6 +70,10 @@ printf 'cpu: %s x %s, %s MHz; load %s\n' "$(grep -c '^processor' /proc/cpuinfo)"
 	"$(sed -n 's/^CPU part[[:space:]]*: //p' /proc/cpuinfo | head -n 1)" \
 	"$(( $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq 2>/dev/null || printf '0') / 1000 ))" \
 	"$(cut -d ' ' -f 1-3 /proc/loadavg)"
+G_CF=/sys/devices/system/cpu/cpu0/cpufreq
+printf 'cpufreq: governor %s, max %s MHz, steps %s\n' "$(cat "${G_CF}/scaling_governor" 2>/dev/null || printf '-')" \
+	"$(( $(cat "${G_CF}/scaling_max_freq" 2>/dev/null || printf '0') / 1000 ))" \
+	"$(cat "${G_CF}/scaling_available_frequencies" 2>/dev/null || printf '-')"
 printf 'input: %s\n' "${G_IN}"
 
 G_LEN=$(wav_cs "${G_IN}" 16000)
@@ -83,5 +87,13 @@ for G_V in v1 v2; do
 
 	step "${G_V} encode" "${G_LEN}" "${G_DIR}/rade_tx_wav" ${G_OPT} "${G_IN}" "${G_TMP}/tx.wav"
 	G_TXLEN=$(wav_cs "${G_TMP}/tx.wav" 8000)
-	step "${G_V} decode" "${G_TXLEN}" "${G_DIR}/rade_rx_wav" ${G_OPT} "${G_TMP}/tx.wav" "${G_TMP}/rx.wav"
+	step "${G_V} decode" "${G_TXLEN}" "${G_DIR}/rade_rx_wav" ${G_OPT} -f "${G_TMP}/feat.f32" "${G_TMP}/tx.wav" \
+		"${G_TMP}/rx.wav"
+
+	# The vocoder alone on the decoded features: 36 floats per 10 ms frame, the first 5
+	# prime it. Decode minus this is the demodulator and the RADE decoder
+	if [ -x "${G_DIR}/lpcnet_demo" ]; then
+		G_FLEN=$(( $(wc -c < "${G_TMP}/feat.f32") / 144 - 5 ))
+		step "${G_V} fargan" "${G_FLEN}" "${G_DIR}/lpcnet_demo" -fargan-synthesis "${G_TMP}/feat.f32" "${G_TMP}/rx.pcm"
+	fi
 done

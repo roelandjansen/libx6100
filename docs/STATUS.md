@@ -171,7 +171,9 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
    `x6100_netaudio_design.md`), recordings, RX / TX equaliser.
    RADE on the R16: benchmark ready (`contrib/rade`: rade_c built with zig, `rade_bench.sh`
    on the radio prints the real-time factor of V1 / V2 encode and decode); build on the
-   PC and run it, then decide (2026-10-29).
+   PC and run it, then decide (2026-10-29). First run: encode RTF 0.42-0.54, decode
+   1.08-1.21 at 1008 MHz on one core: TX fits, RX just misses; next the FARGAN split,
+   NEON, clock, two threads.
 4. Measurements: S-meter calibration, codec level against ALC.
 5. CTCSS for the repeaters (see TODO: no tone encoder known, mic bypasses Linux).
 6. Later: own buildroot, self-contained (now the IU1WXY image is the base): a full image
