@@ -602,14 +602,21 @@ static int div_round(int a, int b)
 	return a >= 0 ? (a + b / 2) / b : -((-a + b / 2) / b);
 }
 
-static void rx_filter(const rx_t *rx, uint32_t *low, uint32_t *high)
+// PBT shifts set and the mode one where they act (not AM / FM): the FIL label shows PBT
+static bool pbt_active(const rx_t *rx)
 {
 	fgroup_t g = mode_group(rx->mode);
+
+	return g != FG_AM && g != FG_FM && (rx->pbt_in != 0 || rx->pbt_out != 0);
+}
+
+static void rx_filter(const rx_t *rx, uint32_t *low, uint32_t *high)
+{
 	int lo, hi;
 
 	mode_filter(rx->mode, rx->fil, low, high);
 
-	if (g == FG_AM || g == FG_FM || (rx->pbt_in == 0 && rx->pbt_out == 0))
+	if (!pbt_active(rx))
 		return;
 
 	lo = (int) *low + (rx->pbt_in > rx->pbt_out ? rx->pbt_in : rx->pbt_out);
@@ -6455,7 +6462,7 @@ overlays:
 
 		rx_filter(rx, &lo, &hi);	/* the width with twin PBT */
 		fil_width_str(hi - lo, w, sizeof(w));
-		snprintf(m, sizeof(m), "FIL%d %s%s", rx->fil + 1, w, rx->pbt_in || rx->pbt_out ? " PBT" : "");
+		snprintf(m, sizeof(m), "FIL%d %s%s", rx->fil + 1, w, pbt_active(rx) ? " PBT" : "");
 		tw = x6100_lcd_text_width(m, 2);
 		x6100_lcd_fill(lcd, W - tw - 10, SPEC_Y + 40, tw + 8, 18, 0x000000);
 		x6100_lcd_text(lcd, W - tw - 6, SPEC_Y + 42, 2, m, rx->fedit ? SCR_WARN : SCR_ACCENT);
