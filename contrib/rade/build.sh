@@ -151,6 +151,10 @@ rade_build() {
 	# FARGAN alone (features to speech), for the benchmark's split of the decode time
 	"${G_ZIG}" cc "${L_FLAGS[@]}" -static -s -o "${C_OUT}/lpcnet_demo" "${L_SRC}/lpcnet_demo.c" \
 		"${L_OPUS}/.libs/libopus.a" -lm
+
+	# The receiver in two threads (demodulator + decoder, vocoder): contrib/rade/rade_rx_mt.c
+	"${G_ZIG}" cc "${L_FLAGS[@]}" -static -s -pthread -o "${C_OUT}/rade_rx_mt" "${C_HERE}/rade_rx_mt.c" \
+		"${L_OBJS[@]}" "${L_OPUS}/.libs/libopus.a" -lm
 }
 
 #

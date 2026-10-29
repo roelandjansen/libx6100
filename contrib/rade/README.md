@@ -65,10 +65,26 @@ rade_c's 9.8 s sample, x6100_trx not running:
 | V2 encode | 0.47, 0.54 |
 | V2 decode | 1.15, 1.21 |
 
-TX fits easily. RX misses real time by 8-20 % on one core. To look at next: the FARGAN /
-decoder split (above), whether the build has NEON (build.sh prints it), the clock (the
-benchmark prints governor and steps; the R16 is rated to 1.2 GHz), and then a two-thread
-receiver.
+TX fits easily; RX misses real time by 8-20 % on one core. The build has NEON (build.sh
+prints `NEON yes` for the zig flags).
+
+Second run, with the FARGAN split (cpufreq: governor performance, the image's table
+stops at 1008 MHz, so no higher clock without a device tree change):
+
+| Step | RTF, x6100_trx off | x6100_trx running |
+|---|---|---|
+| V1 decode | 1.08 | 1.14 |
+| V1 FARGAN alone | 0.57 | 0.61 |
+| V1 demodulator + decoder (decode minus FARGAN) | 0.54 | 0.53 |
+| V2 decode | 1.18 | 1.23 |
+| V2 FARGAN alone | 0.59 | 0.63 |
+
+Both halves stay near 0.55-0.6: as two threads on two cores the receiver fits.
+`rade_rx_mt` (`rade_rx_mt.c`, derived from rade_c's `rade_rx_wav.c`) does that: the
+demodulator and decoder in one thread, FARGAN in the other, a queue of feature frames
+(up to 0.64 s) between them. The benchmark times it as `v1 2 threads`, and the receiver
+on 10 s of noise as `v1 no signal` (searching for sync: its idle load on the air).
+
 
 Published figures for comparison: the FreeDV team gives a Pi 4 as the smallest
 comfortable machine (RADE V1 FlexRadio waveform about 30 % of one core with the C port);

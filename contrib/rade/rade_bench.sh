@@ -42,6 +42,15 @@ wav_cs() {
 }
 
 #
+# 10 s of white noise as an 8 kHz 16-bit mono WAV: header (data 160000 bytes), then random
+#
+
+noise_wav() {
+	printf 'RIFF\044\161\002\000WAVEfmt \020\000\000\000\001\000\001\000\100\037\000\000\200\076\000\000\002\000\020\000data\000\161\002\000' > "$1"
+	head -c 160000 /dev/urandom >> "$1"
+}
+
+#
 # Run one step and print its time and real-time factor: <name> <audio cs> <command...>
 #
 
@@ -96,4 +105,13 @@ for G_V in v1 v2; do
 		G_FLEN=$(( $(wc -c < "${G_TMP}/feat.f32") / 144 - 5 ))
 		step "${G_V} fargan" "${G_FLEN}" "${G_DIR}/lpcnet_demo" -fargan-synthesis "${G_TMP}/feat.f32" "${G_TMP}/rx.pcm"
 	fi
+
+	# The same decode as two threads (contrib/rade/rade_rx_mt.c)
+	if [ -x "${G_DIR}/rade_rx_mt" ]; then
+		step "${G_V} 2 threads" "${G_TXLEN}" "${G_DIR}/rade_rx_mt" ${G_OPT} "${G_TMP}/tx.wav" "${G_TMP}/rx.wav"
+	fi
+
+	# No signal: 10 s of noise, the receiver searching for sync (its idle load on the air)
+	noise_wav "${G_TMP}/noise.wav"
+	step "${G_V} no signal" 1000 "${G_DIR}/rade_rx_wav" ${G_OPT} "${G_TMP}/noise.wav" "${G_TMP}/rx.wav"
 done
