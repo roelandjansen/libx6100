@@ -93,6 +93,9 @@ Status: 2026-10-27 (v0.13.0). Summary and next steps: `STATUS.md`.
   flag: traced 2026-10-27 (x6100_control_interface.md), the scan now uses it.
 - RX / TX equaliser (baseband or liquid-dsp; GEN TX panel).
 - Digital modes on the radio (FT8, CW / RTTY decoder) as APP entries; a recorder.
+- x6100_tx micrec: the power / ALC telemetry reads 0.0 W / 100 while transmitting (seen
+  2026-10-29, the IC-7851 heard the mic): read the flow in its own non-blocking step or
+  thread instead of between blocking capture reads.
 
 ## Key plan (GEN / KEY / MSG / APP / DFN / DFL)
 

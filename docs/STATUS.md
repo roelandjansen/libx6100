@@ -190,6 +190,14 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     reaches Linux only while really transmitting. Open: E4b (--rf, the bandwidth of the
     monitor) and E4d (--rf --micgain 0: SSB sends nothing without mic audio; does the
     monitor tap before the gain?).
+    E4b / E4d (2026-10-29): keyed with RF the IC-7851 heard the mic, also with both mic
+    gains at 0 (checked in x6100_trx, TX panel): gain 0 is a minimum, not a mute. The
+    capture while keyed was not RX audio (energy 100-800 Hz, no 3 kHz edge): the monitor.
+    Result: the mic reaches Linux only while it is being transmitted. RADE inside the
+    radio is not possible (store-and-forward would send each over in analog first); RADE
+    runs on the PC (wfview / wfserver + FreeDV, TX audio via DATA MOD USB, item 17).
+    x6100_tx micrec: its power / ALC columns read 0.0 W / 100 while transmitting (wrong:
+    the flow telemetry is not read in time while the loop waits for audio); see TODO.
 
 ## Next steps (suggested order)
 
