@@ -89,7 +89,7 @@ Gaps 16, 18–19, 26, 30–32, 35–40, 52, 54: unknown.
 | Bit mask  | Meaning |
 |-----------|---------|
 | `0x00002` | split |
-| `0x00008` | voice rec: codec plays on the speaker instead of RX audio (local playback); must not be set for TX. x6100_gui also sets it (with both mic gains at 0) while it records a voice message from the codec capture: the capture then likely carries the microphone (see below) |
+| `0x00008` | voice rec: codec plays on the speaker instead of RX audio (local playback); must not be set for TX. x6100_gui also sets it (with both mic gains at 0) while it records a voice message. Measured 2026-10-29: the capture then carries neither RX audio nor the microphone (internal or hand, gains 30 / 20 or 0; see below) |
 | `0x00010` | SWR scan: the baseband keys its own carrier, no PTT (see below) |
 | `0x01000` | ATU enable |
 | `0x02000` | ATU tune start |
@@ -123,8 +123,12 @@ the allocation segment of the VFO.
 
 Voice record (`audio_play_en`): both mic gains (register 20) to 0 and `0x08` on, for
 local playback and for recording; while recording, x6100_gui writes the codec capture
-samples to the file. With the gains at 0 the TX path stays quiet, so the capture most
-likely carries the microphone when `0x08` is set (not measured here).
+samples to the file. With the gains at 0 the TX path stays quiet. Measured 2026-10-29
+(`x6100_audio --play-mode --mic int|hand [--micgain 0]`, speaking into the mic): the
+capture stays flat and does not follow the voice: -37 dBFS at Mic1 boost +24 dB, -46 dBFS
+at boost 0 (only 9 dB less: the codec noise floor plus a tiny residual input, about -61
+dBFS before the boost); with 0x8 off the RX audio is -22.5 dBFS. No microphone path into
+Linux is known.
 
 ### Modes (registers 4 / 10)
 

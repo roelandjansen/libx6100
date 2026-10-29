@@ -167,6 +167,11 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     E2 modulation in play mode: `x6100_tx 14236000 codec 5 1 1000 -30 --play-mode`: does
     the tone go out (second receiver, power / ALC), or to the speaker?
     Both yes: RADE TX from the built-in mic works (mic -> capture -> encode -> codec TX).
+    Result 2026-10-29: E1 no. With 0x8 the capture stays flat (-37 dBFS at boost +24, -46
+    at boost 0) whatever is said into either mic, gains 30 / 20 or 0; RX audio without 0x8
+    -22.5. No mic and no speaker path for Linux: RADE inside x6100_trx is not possible with
+    the known controls (E2 moot). RADE goes through the PC: wfview / wfserver + FreeDV,
+    TX audio via DATA MOD USB (item 17).
 
 ## Next steps (suggested order)
 
@@ -189,7 +194,8 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
    rade_acq_fft.patch does the search with FFTs (13 instead of 98 million operations,
    same detection): search 170 -> 51.5 ms per frame. Result 2026-10-29: V1 encode 0.42-0.45,
    2-thread decode 0.61-0.65, no signal 0.48-0.52 (x6100_trx off / on): RADE V1 runs on
-   the R16. Next, if wanted: RADE in x6100_trx (TX via codec, RX two threads).
+   the R16. RADE in x6100_trx itself is blocked by the audio routing (item 18); RADE via
+   the PC (wfserver + FreeDV) is the way.
 4. Measurements: S-meter calibration, codec level against ALC.
 5. CTCSS for the repeaters (see TODO: no tone encoder known, mic bypasses Linux).
 6. Later: own buildroot, self-contained (now the IU1WXY image is the base): a full image
