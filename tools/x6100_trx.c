@@ -589,7 +589,8 @@ static void mode_filter(x6100_mode_t mode, int fil, uint32_t *low, uint32_t *hig
 //
 // The receive filter with twin PBT, Icom style: each PBT shifts its own copy of the
 // filter and the passband is their overlap, so both the same way shift it and opposite
-// ways narrow it. Not in AM / FM (the baseband needs a symmetric filter there)
+// ways narrow it. AM: the baseband needs a symmetric filter, so the shift is a receive
+// offset and the filter narrows symmetrically (am_pbt). Not in FM (Icom has none there)
 //
 
 #define PBT_MAX_HZ	1250		/* +- Hz over the CI-V range 0000-0255 (hamlib's Icom range) */
@@ -602,12 +603,12 @@ static int div_round(int a, int b)
 	return a >= 0 ? (a + b / 2) / b : -((-a + b / 2) / b);
 }
 
-// PBT shifts set and the mode one where they act (not AM / FM): the FIL label shows PBT
+static void am_pbt(const rx_t *rx, int *shift, int *narrow);
+
+// PBT shifts set and the mode one where they act (not FM): the FIL label shows PBT
 static bool pbt_active(const rx_t *rx)
 {
-	fgroup_t g = mode_group(rx->mode);
-
-	return g != FG_AM && g != FG_FM && (rx->pbt_in != 0 || rx->pbt_out != 0);
+	return mode_group(rx->mode) != FG_FM && (rx->pbt_in != 0 || rx->pbt_out != 0);
 }
 
 static void rx_filter(const rx_t *rx, uint32_t *low, uint32_t *high)
@@ -618,6 +619,15 @@ static void rx_filter(const rx_t *rx, uint32_t *low, uint32_t *high)
 
 	if (!pbt_active(rx))
 		return;
+
+	// AM: the symmetric filter narrows; the shift is in rx_hz
+	if (mode_group(rx->mode) == FG_AM) {
+		int shift, narrow;
+
+		am_pbt(rx, &shift, &narrow);
+		*high -= (uint32_t) narrow;
+		return;
+	}
 
 	lo = (int) *low + (rx->pbt_in > rx->pbt_out ? rx->pbt_in : rx->pbt_out);
 	hi = (int) *high + (rx->pbt_in < rx->pbt_out ? rx->pbt_in : rx->pbt_out);
@@ -814,6 +824,40 @@ static int am_ofs(const rx_t *rx)
 }
 
 //
+// Twin PBT in AM, Icom style, with what the baseband offers (a symmetric filter): an IF
+// passband [L, H] around the carrier is the receiver tuned (L + H) / 2 off with a filter
+// of half-width (H - L) / 2, as the AM offset does. Icom's L = -hi + max(in, out), H =
+// hi + min(in, out) give a shift of (in + out) / 2 and a half-width of hi - |in - out| / 2.
+// The shift is kept so that the carrier stays 100 Hz inside the passband
+//
+
+static void am_pbt(const rx_t *rx, int *shift, int *narrow)
+{
+	uint32_t lo, hi;
+	int d = rx->pbt_in > rx->pbt_out ? rx->pbt_in - rx->pbt_out : rx->pbt_out - rx->pbt_in;
+	int ofs = am_ofs(rx), w, s, smin, smax;
+
+	*shift = 0;
+	*narrow = 0;
+
+	if (rx->mode != X6100_MODE_AM || bscan_running() || (rx->pbt_in == 0 && rx->pbt_out == 0))
+		return;
+
+	mode_filter(rx->mode, rx->fil, &lo, &hi);
+	w = (int) hi - d / 2;
+	w = w < PBT_MIN_WIDTH ? PBT_MIN_WIDTH : w;
+
+	// Carrier at -(ofs + s) from the tuned centre, the filter half-width w + ofs
+	s = (rx->pbt_in + rx->pbt_out) / 2;
+	smax = w - 100;
+	smin = -(w + 2 * ofs) + 100;
+	s = s > smax ? smax : s < smin ? smin : s;
+
+	*shift = s;
+	*narrow = (int) hi - w;
+}
+
+//
 // RX and TX frequency: RX = the VFO in use + RIT (+ the AM offset); TX = the other
 // VFO with split, else the VFO in use + the duplex shift, + XIT (one offset for both,
 // as on Icom radios)
@@ -821,7 +865,11 @@ static int am_ofs(const rx_t *rx)
 
 static uint32_t rx_hz(const rx_t *rx)
 {
-	return (uint32_t) ((int64_t) rx->freq + (rx->rit ? rx->rit_hz : 0) + am_ofs(rx));
+	int shift, narrow;
+
+	am_pbt(rx, &shift, &narrow);	/* AM: the PBT shift is a receive offset */
+
+	return (uint32_t) ((int64_t) rx->freq + (rx->rit ? rx->rit_hz : 0) + am_ofs(rx) + shift);
 }
 
 static uint32_t tx_hz(const rx_t *rx)
@@ -3972,7 +4020,17 @@ static void passband(const rx_t *rx, int *lo, int *hi)
 		*lo = -(int) high;
 		*hi = -(int) low;
 		break;
-	case X6100_MODE_AM:
+	case X6100_MODE_AM: {
+		// Around the carrier: centred on the receive offset (AM offset + PBT shift), the
+		// filter half-width opened by the AM offset (as apply sets it)
+		int shift, narrow, c = am_ofs(rx);
+
+		am_pbt(rx, &shift, &narrow);
+		c += shift;
+		*lo = c - ((int) high + am_ofs(rx));
+		*hi = c + ((int) high + am_ofs(rx));
+		break;
+	}
 	case X6100_MODE_NFM:
 		*lo = -(int) high;
 		*hi = (int) high;

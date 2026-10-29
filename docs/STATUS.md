@@ -161,7 +161,8 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     PC audio heard on the IC-7851); tuner in / out and tune cycle from wfview work.
     Band buttons incl. GEN (code 15, added today), split and RIT from wfview work. Twin
     PBT (14 07 / 08) from wfview works in USB (2026-10-29: passband and FIL label width
-    follow); not in AM / FM by design (the baseband needs a symmetric filter there).
+    follow). AM PBT Icom style built 2026-10-29 (shift = receive offset, symmetric
+    narrowing, carrier kept inside): to check; not in FM.
     Open: CPU load, dropouts, why combined scope mode fails.
 18. RADE in x6100_trx: the codec has one input and one output to the baseband, both
     switched by register 12 bit 0x8 (play mode). RX listening locally has no known path

@@ -276,7 +276,7 @@ The status line starts with the VFO in use (A / B); with split, RIT or XIT it ad
 | `ab`, `a=b` | VFO A <-> B, A=B |
 | `txsplit`, `notxsplit` | split on / off |
 | `rit`, `norit`, `xit`, `noxit`, `ritofs -9990-9990` | RIT / XIT on / off, offset in Hz |
-| `pbtin -1250-1250`, `pbtout -1250-1250` | twin PBT shifts in Hz (0 = centre; CI-V 14 07 / 08, wfview); not in AM / FM; the FIL label shows PBT while it acts; `pbtin 0 pbtout 0` resets |
+| `pbtin -1250-1250`, `pbtout -1250-1250` | twin PBT shifts in Hz (0 = centre; CI-V 14 07 / 08, wfview); in AM as a receive offset plus symmetric narrowing (the baseband filter is symmetric), not in FM; the FIL label shows PBT while it acts; `pbtin 0 pbtout 0` resets |
 | `dupauto`, `dupoff`, `dup-`, `dup+`, `dupshift 10-10000` | repeater duplex, shift in kHz |
 | `am_offset 500` | AM receive offset above the dial, 0-1000 Hz (0 = off); also AGC long, row AM OFFSET |
 | `step ch` | 60 m channel steps |
