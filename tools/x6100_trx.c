@@ -806,13 +806,15 @@ static int dup_shift(const rx_t *rx)
 
 //
 // AM receive offset: the baseband is zero IF and notches DC, which in AM takes part
-// of the carrier when tuned exactly on it (distorted audio). In AM the receiver sits
-// g_am_ofs Hz above the dial, the filter opens by as much (apply), the dial and TX
+// g_am_ofs Hz above the dial, the filter set by am_pass, the dial and TX
+// stay on the carrier. 20 Hz already helps, 500 Hz sounds clean (2026-10-26, MW), but a
+// weak station then carries a tone at the offset (the leftover at the receive frequency
+// beating with the carrier, 2026-10-29); 100 Hz is the compromise, 50 Hz still usable.
 // stay on the carrier. 20 Hz already helps, 500 Hz sounds clean (2026-10-26, MW).
 // Not during a birdie scan (it needs the IQ centre on the dial).
 //
 
-#define AM_OFS_DEF	500
+#define AM_OFS_DEF	100
 #define AM_OFS_MAX	1000
 #define TPARS		6	/* rows of the RIT / XIT / duplex panel (AGC long), AM OFFSET last */
 
@@ -5505,7 +5507,7 @@ static void draw_mem_panel(x6100_lcd_t *lcd, const rx_t *rx)
 // Five rows in view, scrolling with the selection. MFK turn: offset in 10 Hz steps,
 // on / off on the RIT and XIT rows, AUTO / OFF / DUP- / DUP+, shift in 10 kHz steps,
 // AM offset in 10 Hz steps; push: next row; hold: offset 0 (CLEAR), duplex AUTO,
-// shift 100 kHz, AM offset 500 Hz.
+// shift 100 kHz, AM offset 100 Hz.
 //
 
 static void draw_rit_panel(x6100_lcd_t *lcd, const rx_t *rx)

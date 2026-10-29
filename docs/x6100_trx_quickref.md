@@ -162,13 +162,14 @@ Values are kept in the last state (see Settings); defaults NR 20, NB 10 / 10, no
 - STEP and status fields right-aligned, fixed width
 - S-meter: S0-S9, then S9+10 .. S9+60 in rounded 10 dB steps; dBm line exact
 - AGC default AUTO; AM / FM SLOW (AUTO squashes AM)
-- AM receives 500 Hz above the dial (AM OFFSET in the AGC long panel, console / conf
+- AM receives 100 Hz above the dial (AM OFFSET in the AGC long panel, console / conf
   `am_offset`, 0-1000, 0 = off): the baseband is zero
   IF and its DC notch takes part of the carrier when tuned exactly on it, which sounds
   distorted. The dial and TX stay on the carrier. The upper edge stays at the FIL
   width (an adjacent station above stays out); the lower edge comes 2 x offset inside
-  (FIL ±4.5 kHz, offset 500: -3.5 .. +4.5 kHz), so the top of the audio comes from one
-  sideband only, about 6 dB down
+  (FIL ±4.5 kHz, offset 100: -4.3 .. +4.5 kHz), so the top of the audio comes from one
+  sideband only, about 6 dB down. 100 Hz is a compromise: lower distorts the carrier
+  (DC notch), higher puts a tone at the offset on weak stations; 50 Hz still usable
 
   ![AM on 918 kHz](images/x6100_trx_am.png)
 
@@ -286,7 +287,7 @@ The status line starts with the VFO in use (A / B); with split, RIT or XIT it ad
 | `rit`, `norit`, `xit`, `noxit`, `ritofs -9990-9990` | RIT / XIT on / off, offset in Hz |
 | `pbtin -1250-1250`, `pbtout -1250-1250` | twin PBT shifts in Hz (0 = centre; CI-V 14 07 / 08, wfview); in AM as a receive offset plus symmetric narrowing (the baseband filter is symmetric), not in FM; the FIL label shows PBT while it acts; `pbtin 0 pbtout 0` resets |
 | `dupauto`, `dupoff`, `dup-`, `dup+`, `dupshift 10-10000` | repeater duplex, shift in kHz |
-| `am_offset 500` | AM receive offset above the dial, 0-1000 Hz (0 = off); also AGC long, row AM OFFSET |
+| `am_offset 100` | AM receive offset above the dial, 0-1000 Hz (0 = off); also AGC long, row AM OFFSET |
 | `step ch` | 60 m channel steps |
 | `memr` | list the used memory channels |
 | `memr 5`, `memw 5`, `memc 5` | recall / write the VFO into / clear memory channel 5 |
@@ -518,7 +519,7 @@ there is no local backup.
   with split. No CTCSS: the baseband has no known tone encoder and the microphone
   audio does not pass through Linux, so repeaters that need a tone cannot be opened yet.
 - AM OFFSET, the sixth row of the same panel (it scrolls, five rows in view): the AM
-  receive offset, 0-1000 Hz in 10 Hz steps (500), MFK long = 500; green in AM.
+  receive offset, 0-1000 Hz in 10 Hz steps (100), MFK long = 100; green in AM.
 
   ![AM offset](images/x6100_trx_am_offset.png)
 
