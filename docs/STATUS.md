@@ -179,6 +179,12 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     I2S interface) is muted and unrouted in the image, never listened to.
     E1b result: no input follows the voice (Mic2 -49.8, Line In -61.7 dBFS, steady tones;
     mixer and AIF2 deliver nothing). The mics go to the baseband only.
+    E3 (2026-10-29): yes. Keyed with the PTT key (monitor on, level 70), the audio scope
+    shows the mic, internal and hand: while keyed, the codec capture carries the monitor.
+    E4, keyed but no RF (TX enable off, as the TOT lock): `x6100_tx 14200000 micrec 10
+    /tmp/e4.wav` (no RF), `--rf` (with RF, compare), `--monilvl 0` (is it the monitor?).
+    If E4 is yes: RADE store-and-forward (PTT: record the mic, no RF; release: send the
+    over as RADE via codec TX), receive on the PC.
 
 ## Next steps (suggested order)
 

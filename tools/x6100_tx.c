@@ -20,6 +20,13 @@
  *       (listen on a second receiver, watch power and ALC), or does play mode send the
  *       codec to the speaker instead? 0x8 is cleared with the TX flags on every exit
  *
+ *   x6100_tx <freq_hz> micrec <seconds> <out.wav> [watts] [--rf] [--monilvl 0-100]
+ *       USB, keyed with PTT (the mic as TX source) and the monitor at its level (default
+ *       70); TX enable (registers 0 / 6 bit 0) off unless --rf, so no RF. Records the codec
+ *       capture to a WAV and prints its level with tx / power / ALC once a second. Test E4
+ *       (RADE): with the monitor the mic reaches the capture while keyed (E3, 2026-10-29);
+ *       does it without RF too? --monilvl 0: is it the monitor at all?
+ *
  * Safety:
  *   - power 0.1 .. 10 W, default 1.0 W; duration 1 .. 30 s
  *   - amateur bands only; 3 s countdown before keying
@@ -65,7 +72,8 @@ typedef enum
 {
 	CMD_TUNE = 0,
 	CMD_CARRIER,
-	CMD_CODEC
+	CMD_CODEC,
+	CMD_MICREC
 } cmd_t;
 
 typedef struct
@@ -80,6 +88,8 @@ typedef struct
 } tx_t;
 
 static bool g_play;		/* --play-mode: register 12 bit 0x8 with codec TX */
+static bool g_rf;		/* micrec --rf: TX enable on (RF out); off by default: keyed, no RF */
+static int g_monilvl = 70;	/* micrec --monilvl: monitor level, register 29 */
 static volatile sig_atomic_t g_stop;
 
 static void on_signal(int sig)
@@ -369,13 +379,146 @@ static int do_tx(tx_t *tx, cmd_t cmd, int seconds, double tone_hz, double level_
 	return result;
 }
 
+//
+// 16-bit PCM WAV header (data size patched at the end)
+//
+
+static void wav_header(FILE *f, unsigned rate, unsigned ch, uint32_t bytes)
+{
+	uint32_t riff = 36 + bytes, fmt_size = 16, byte_rate = rate * ch * 2;
+	uint16_t fmt = 1, nch = (uint16_t) ch, align = (uint16_t) (ch * 2), bps = 16;
+
+	fwrite("RIFF", 1, 4, f);
+	fwrite(&riff, 4, 1, f);
+	fwrite("WAVEfmt ", 1, 8, f);
+	fwrite(&fmt_size, 4, 1, f);
+	fwrite(&fmt, 2, 1, f);
+	fwrite(&nch, 2, 1, f);
+	fwrite(&rate, 4, 1, f);
+	fwrite(&byte_rate, 4, 1, f);
+	fwrite(&align, 2, 1, f);
+	fwrite(&bps, 2, 1, f);
+	fwrite("data", 1, 4, f);
+	fwrite(&bytes, 4, 1, f);
+}
+
+//
+// micrec: keyed with PTT (the mic as TX source), TX enable off unless --rf; the codec
+// capture (the baseband's audio, with the monitor while keyed) to a WAV, its level and
+// the TX telemetry once a second: does the mic reach Linux without RF?
+//
+
+static int do_micrec(tx_t *tx, int seconds, const char *path)
+{
+	static int16_t buf[PERIOD * 2];
+	x6100_pcm_t pcm = { 0 };
+	FILE *wav;
+	uint64_t t0, last;
+	uint32_t bytes = 0;
+	double sum = 0.0;
+	int peak = 0, n = 0, rc, result = 0;
+
+	if ((rc = x6100_mixer_rx_setup(X6100_PCM_CARD, 1)) < 0)
+		fprintf(stderr, "warning: mixer setup: %s\n", strerror(-rc));
+
+	if ((rc = x6100_pcm_open(&pcm, X6100_PCM_CARD, X6100_PCM_DEVICE, true, RATE, 2, PERIOD, PERIODS)) < 0) {
+		fprintf(stderr, "pcm capture open: %s\n", strerror(-rc));
+		return 1;
+	}
+
+	if ((wav = fopen(path, "wb")) == NULL) {
+		perror(path);
+		x6100_pcm_close(&pcm);
+		return 1;
+	}
+
+	wav_header(wav, RATE, 2, 0);
+
+	if (!countdown(tx, "PTT (mic)")) {
+		fclose(wav);
+		x6100_pcm_close(&pcm);
+		return 1;
+	}
+
+	x6100_set_ptt(&tx->ctl, true);
+	x6100_ctl_sync(&tx->ctl);
+	t0 = last = now_ms();
+
+	while (!g_stop) {
+		uint64_t t = now_ms();
+		ssize_t got = x6100_pcm_read(&pcm, buf, PERIOD);
+
+		if (got < 0) {
+			fprintf(stderr, "pcm read failed\n");
+			result = 1;
+			break;
+		}
+
+		fwrite(buf, 4, (size_t) got, wav);
+		bytes += (uint32_t) got * 4;
+
+		for (ssize_t i = 0; i < got * 2; i++) {
+			int v = abs(buf[i]);
+
+			sum += (double) buf[i] * buf[i];
+			peak = v > peak ? v : peak;
+		}
+
+		n += (int) got * 2;
+		poll_flow(tx);
+
+		// With --rf the SWR trip applies as for the other TX tests
+		if (g_rf && tx->have_frame && (tx->frame.flags & X6100_FLOW_TX) && tx->frame.vswr * 0.1 > SWR_LIMIT) {
+			fprintf(stderr, "ABORT: SWR %.1f above %.1f\n", tx->frame.vswr * 0.1, SWR_LIMIT);
+			result = 1;
+			break;
+		}
+
+		if (t - last >= 1000 && n > 0) {
+			const x6100_flow_frame_t *f = &tx->frame;
+
+			printf("t=%2.0fs  capture rms %6.1f pk %6.1f dBFS   tx=%u  pwr %4.1f W  alc %3u\n",
+				(t - t0) / 1000.0, 10.0 * log10(sum / n / (32768.0 * 32768.0) + 1e-12),
+				20.0 * log10(peak / 32768.0 + 1e-9), tx->have_frame && (f->flags & X6100_FLOW_TX),
+				tx->have_frame ? f->tx_power * 0.1 : 0.0, tx->have_frame ? f->alc_level : 0);
+			fflush(stdout);
+			sum = 0.0;
+			peak = 0;
+			n = 0;
+			last = t;
+		}
+
+		if (t - t0 >= (uint64_t) seconds * 1000)
+			break;
+
+		if (key_pressed(tx)) {
+			fprintf(stderr, "aborted by key\n");
+			break;
+		}
+
+		x6100_set_ptt(&tx->ctl, true);
+		x6100_ctl_sync(&tx->ctl);
+	}
+
+	tx_off(tx);
+	fseek(wav, 0, SEEK_SET);
+	wav_header(wav, RATE, 2, bytes);
+	fclose(wav);
+	x6100_pcm_close(&pcm);
+	printf("PTT off; wrote %s (%u Hz, 2 ch, %.1f s)\n", path, RATE, bytes / (4.0 * RATE));
+
+	return result;
+}
+
 static void usage(const char *argv0)
 {
 	fprintf(stderr,
 		"usage: %s <freq_hz> tune\n"
 		"       %s <freq_hz> carrier <seconds 1-30> [watts 0.1-10, default 1]\n"
 		"       %s <freq_hz> codec <seconds 1-30> [watts 0.1-10, default 1] [tone_hz 200-2800, default 1000]\n"
-		"           [level_dbfs -60..-3, default -30] [--play-mode]\n", argv0, argv0, argv0);
+		"           [level_dbfs -60..-3, default -30] [--play-mode]\n"
+		"       %s <freq_hz> micrec <seconds 1-30> <out.wav> [watts 0.1-10, default 1] [--rf] [--monilvl 0-100]\n",
+		argv0, argv0, argv0, argv0);
 }
 
 int main(int argc, char **argv)
@@ -392,13 +535,17 @@ int main(int argc, char **argv)
 	const char *mode_name;
 	int rc;
 
-	// --play-mode anywhere: taken out, the rest stays positional
+	// --play-mode, --rf, --monilvl anywhere: taken out, the rest stays positional
 	{
 		int n = 1;
 
 		for (int i = 1; i < argc; i++) {
 			if (strcmp(argv[i], "--play-mode") == 0)
 				g_play = true;
+			else if (strcmp(argv[i], "--rf") == 0)
+				g_rf = true;
+			else if (strcmp(argv[i], "--monilvl") == 0 && i + 1 < argc)
+				g_monilvl = atoi(argv[++i]);
 			else
 				argv[n++] = argv[i];
 		}
@@ -419,6 +566,8 @@ int main(int argc, char **argv)
 		cmd = CMD_CARRIER;
 	} else if (strcmp(argv[2], "codec") == 0 && argc >= 4) {
 		cmd = CMD_CODEC;
+	} else if (strcmp(argv[2], "micrec") == 0 && argc >= 5) {
+		cmd = CMD_MICREC;
 	} else {
 		usage(argv[0]);
 		return 1;
@@ -429,9 +578,16 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
+	if (g_rf && cmd != CMD_MICREC) {
+		fprintf(stderr, "--rf goes with micrec only\n");
+		return 1;
+	}
+
 	if (cmd != CMD_TUNE) {
+		int w = cmd == CMD_MICREC ? 5 : 4;	/* micrec: the WAV file comes first */
+
 		seconds = atoi(argv[3]);
-		watts = argc > 4 ? strtof(argv[4], NULL) : 1.0f;
+		watts = argc > w ? strtof(argv[w], NULL) : 1.0f;
 	}
 
 	if (cmd == CMD_CODEC) {
@@ -441,7 +597,7 @@ int main(int argc, char **argv)
 
 	if (freq < 1800000 || freq > 54000000 || seconds < 0 || seconds > 30 || (cmd != CMD_TUNE && seconds < 1)
 		|| watts < 0.1f || watts > 10.0f || tone_hz < 200.0 || tone_hz > 2800.0 || level_dbfs < -60.0
-		|| level_dbfs > -3.0) {
+		|| level_dbfs > -3.0 || g_monilvl < 0 || g_monilvl > 100) {
 		usage(argv[0]);
 		return 1;
 	}
@@ -479,6 +635,10 @@ int main(int argc, char **argv)
 		mode = X6100_MODE_USB;
 		mode_name = "USB codec TX";
 		break;
+	case CMD_MICREC:
+		mode = X6100_MODE_USB;
+		mode_name = g_rf ? "USB mic (PTT), RF on" : "USB mic (PTT), TX enable off: no RF";
+		break;
 	default:
 		mode = X6100_MODE_USB;
 		mode_name = "ATU tune";
@@ -491,6 +651,17 @@ int main(int argc, char **argv)
 	x6100_set_mode(&tx.ctl, 1, mode);
 	x6100_set_txpwr(&tx.ctl, watts);
 	x6100_ctl_set(&tx.ctl, X6100_REG_FLAGS, 0);
+
+	// micrec: the monitor at its level; TX enable (registers 0 / 6 bit 0) off unless --rf,
+	// as x6100_trx's TOT lock does: keyed, the RF stays off
+	if (cmd == CMD_MICREC) {
+		x6100_ctl_set(&tx.ctl, X6100_REG_MONILEVEL, (uint32_t) g_monilvl);
+
+		if (!g_rf) {
+			x6100_ctl_update(&tx.ctl, X6100_REG_VFOA_BAND, 1, 0);
+			x6100_ctl_update(&tx.ctl, X6100_REG_VFOB_BAND, 1, 0);
+		}
+	}
 
 	if ((rc = x6100_ctl_refresh(&tx.ctl)) < 0) {
 		fprintf(stderr, "refresh: %s\n", strerror(-rc));
@@ -505,12 +676,23 @@ int main(int argc, char **argv)
 		printf("%u Hz %s, power %.1f W, tone %.0f Hz at %.0f dBFS\n", freq, mode_name, watts, tone_hz, level_dbfs);
 	else if (cmd == CMD_CARRIER)
 		printf("%u Hz %s, power %.1f W\n", freq, mode_name, watts);
+	else if (cmd == CMD_MICREC)
+		printf("%u Hz %s, power %.1f W, monitor level %d; speak while keyed\n", freq, mode_name, watts, g_monilvl);
 	else
 		printf("%u Hz %s\n", freq, mode_name);
 
-	rc = cmd == CMD_TUNE ? do_tune(&tx) : do_tx(&tx, cmd, seconds, tone_hz, level_dbfs);
+	if (cmd == CMD_TUNE)
+		rc = do_tune(&tx);
+	else if (cmd == CMD_MICREC)
+		rc = do_micrec(&tx, seconds, argv[4]);
+	else
+		rc = do_tx(&tx, cmd, seconds, tone_hz, level_dbfs);
 
 	tx_off(&tx);
+
+	// TX enable back as the band gives it (micrec cleared it)
+	x6100_set_freq(&tx.ctl, 0, freq);
+	x6100_set_freq(&tx.ctl, 1, freq);
 
 	//
 	// Back to the voice mode for the band: a digital mode left set makes PTT ignore the mic
