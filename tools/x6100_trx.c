@@ -806,11 +806,11 @@ static int dup_shift(const rx_t *rx)
 
 //
 // AM receive offset: the baseband is zero IF and notches DC, which in AM takes part
-// g_am_ofs Hz above the dial, the filter set by am_pass, the dial and TX
-// stay on the carrier. 20 Hz already helps, 500 Hz sounds clean (2026-10-26, MW), but a
-// weak station then carries a tone at the offset (the leftover at the receive frequency
+// of the carrier when tuned exactly on it (distorted audio). In AM the receiver sits
+// g_am_ofs Hz above the dial, the filter set by am_pass, the dial and TX stay on the
+// carrier. 20 Hz already helps, 500 Hz sounds clean (2026-10-26, MW), but a weak
+// station then carries a tone at the offset (the leftover at the receive frequency
 // beating with the carrier, 2026-10-29); 100 Hz is the compromise, 50 Hz still usable.
-// stay on the carrier. 20 Hz already helps, 500 Hz sounds clean (2026-10-26, MW).
 // Not during a birdie scan (it needs the IQ centre on the dial).
 //
 
