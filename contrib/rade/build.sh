@@ -167,6 +167,13 @@ mkdir -p -- "${C_WORK}" "${C_OUT}"
 printf 'zig %s, rade_c %s, NEON %s\n' "$("${G_ZIG}" version)" "${C_RADE_REV:0:7}" \
 	"$("${G_ZIG}" cc -target "${C_TARGET}" -mcpu="${C_CPU}" -dM -E -x c /dev/null | grep '__ARM_NEON ' > /dev/null && printf yes || printf 'NO (Opus falls back to plain C)')"
 checkout "${C_WORK}/rade_c" "${C_RADE_URL}" "${C_RADE_REV}"
+
+# Pilot search on NEON (contrib/rade/rade_acq_neon.patch, README): once per checkout
+if ! grep -q acq_dot_conj "${C_WORK}/rade_c/src/rade_acq.c"; then
+	patch -s -d "${C_WORK}/rade_c" -p1 < "${C_HERE}/rade_acq_neon.patch"
+	printf '%s\n' "rade_c: rade_acq_neon.patch applied"
+fi
+
 opus_build
 rade_build
 

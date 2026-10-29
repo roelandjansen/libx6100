@@ -1,0 +1,104 @@
+--- a/src/rade_acq.c	2026-10-29 15:20:25.134367774 +0000
++++ b/src/rade_acq.c	2026-10-29 15:20:25.135658021 +0000
+@@ -37,6 +37,9 @@
+ #include <string.h>
+ #include <stdlib.h>
+ #include <assert.h>
++#if defined(__ARM_NEON) || defined(__ARM_NEON__)
++#include <arm_neon.h>
++#endif
+ 
+ /*---------------------------------------------------------------------------*\
+                            INITIALIZATION
+@@ -84,6 +87,47 @@
+                            PILOT DETECTION
+ \*---------------------------------------------------------------------------*/
+ 
++/* conj(x) . p over n samples, with x and p split into real and imaginary arrays:
++   re = sum(xr*pr + xi*pi), im = sum(xr*pi - xi*pr). Split arrays let the dot
++   product run four samples at a time on NEON; the result equals the complex
++   loop up to the order of the float additions. */
++static RADE_COMP acq_dot_conj(const float *xr, const float *xi,
++                              const float *pr, const float *pi, int n) {
++    float re = 0.0f, im = 0.0f;
++    int k = 0;
++
++#if defined(__ARM_NEON) || defined(__ARM_NEON__)
++    float32x4_t vre = vdupq_n_f32(0.0f);
++    float32x4_t vim = vdupq_n_f32(0.0f);
++
++    for (; k + 4 <= n; k += 4) {
++        float32x4_t a = vld1q_f32(&xr[k]);
++        float32x4_t b = vld1q_f32(&xi[k]);
++        float32x4_t c = vld1q_f32(&pr[k]);
++        float32x4_t d = vld1q_f32(&pi[k]);
++
++        vre = vmlaq_f32(vre, a, c);
++        vre = vmlaq_f32(vre, b, d);
++        vim = vmlaq_f32(vim, a, d);
++        vim = vmlsq_f32(vim, b, c);
++    }
++
++    /* Sum the four lanes (no vaddvq_f32 on ARMv7) */
++    float32x2_t sre = vadd_f32(vget_low_f32(vre), vget_high_f32(vre));
++    float32x2_t sim = vadd_f32(vget_low_f32(vim), vget_high_f32(vim));
++    re = vget_lane_f32(vpadd_f32(sre, sre), 0);
++    im = vget_lane_f32(vpadd_f32(sim, sim), 0);
++#endif
++
++    for (; k < n; k++) {
++        re += xr[k] * pr[k] + xi[k] * pi[k];
++        im += xr[k] * pi[k] - xi[k] * pr[k];
++    }
++
++    RADE_COMP out = { re, im };
++    return out;
++}
++
+ int rade_acq_detect_pilots(rade_acq *acq, const RADE_COMP *rx, int *tmax, float *fmax) {
+     int M = acq->m;
+     int Nmf = acq->nmf;
+@@ -101,20 +145,33 @@
+     memset(acq->Dt1, 0, sizeof(acq->Dt1));
+     memset(acq->Dt2, 0, sizeof(acq->Dt2));
+ 
++    /* rx and the frequency-shifted pilots as split real / imaginary arrays,
++       once per call: the 2 x Nmf x n_fcoarse dot products below read them */
++    float xr[2 * RADE_NMF + RADE_M], xi[2 * RADE_NMF + RADE_M];
++    float pr[RADE_ACQ_NFREQ][RADE_M], pi[RADE_ACQ_NFREQ][RADE_M];
++
++    assert(M <= RADE_M && Nmf <= RADE_NMF && n_fcoarse <= RADE_ACQ_NFREQ);
++
++    for (int n = 0; n < 2 * Nmf + M; n++) {
++        xr[n] = rx[n].real;
++        xi[n] = rx[n].imag;
++    }
++
++    for (int f_idx = 0; f_idx < n_fcoarse; f_idx++) {
++        for (int n = 0; n < M; n++) {
++            pr[f_idx][n] = acq->p_w[f_idx][n].real;
++            pi[f_idx][n] = acq->p_w[f_idx][n].imag;
++        }
++    }
++
+     /* Search over time and frequency */
+     for (int t = 0; t < Nmf; t++) {
+         for (int f_idx = 0; f_idx < n_fcoarse; f_idx++) {
+             /* Correlate with frequency-shifted pilot at time t
+-               Dt1 = sum(conj(rx[t:t+M]) * p_w[:][f_idx]) */
+-            RADE_COMP Dt1 = rade_czero();
+-            RADE_COMP Dt2 = rade_czero();
+-
+-            for (int n = 0; n < M; n++) {
+-                /* Note: Python uses np.conj(rx) first, then matmul
+-                   So Dt1[t] = conj(rx[t:t+M]) . p_w */
+-                Dt1 = rade_cadd(Dt1, rade_cmul(rade_cconj(rx[t + n]), acq->p_w[f_idx][n]));
+-                Dt2 = rade_cadd(Dt2, rade_cmul(rade_cconj(rx[t + Nmf + n]), acq->p_w[f_idx][n]));
+-            }
++               Dt1 = sum(conj(rx[t:t+M]) * p_w[:][f_idx]), as Python's
++               np.conj(rx) followed by matmul */
++            RADE_COMP Dt1 = acq_dot_conj(&xr[t], &xi[t], pr[f_idx], pi[f_idx], M);
++            RADE_COMP Dt2 = acq_dot_conj(&xr[t + Nmf], &xi[t + Nmf], pr[f_idx], pi[f_idx], M);
+ 
+             acq->Dt1[t][f_idx] = Dt1;
+             acq->Dt2[t][f_idx] = Dt2;

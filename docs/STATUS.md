@@ -174,7 +174,8 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
    PC and run it, then decide (2026-10-29). First run: encode RTF 0.42-0.54, decode
    1.08-1.21 at 1008 MHz on one core: TX fits, RX just misses. NEON yes, clock capped at
    1008 MHz; FARGAN and demod + decoder about 0.55 each: two-thread receiver rade_rx_mt
-   built, to measure (with the no-signal load).
+   built: 0.65-0.71 with a signal; V1 with no signal 1.49 (pilot search, scalar code):
+   rade_acq_neon.patch puts that search on NEON, to measure.
 4. Measurements: S-meter calibration, codec level against ALC.
 5. CTCSS for the repeaters (see TODO: no tone encoder known, mic bypasses Linux).
 6. Later: own buildroot, self-contained (now the IU1WXY image is the base): a full image
