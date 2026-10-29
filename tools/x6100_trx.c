@@ -205,6 +205,8 @@ typedef struct
 	bool bb_tx;		/* baseband reports TX (any PTT, hand mic included) */
 	bool split;		/* RX on the VFO in use, TX on the other (V/M long) */
 	int rit_hz;		/* RIT / XIT offset, Hz (Icom: one offset, RIT and XIT on / off) */
+	int pbt_in;		/* twin PBT inner / outer: shift of each filter copy, Hz (0 = centre; CI-V 14 07 / 08) */
+	int pbt_out;
 	bool rit;
 	bool xit;
 	int dup;		/* repeater duplex: DUP_AUTO, DUP_OFF, DUP_MINUS, DUP_PLUS */
@@ -582,6 +584,40 @@ static void mode_filter(x6100_mode_t mode, int fil, uint32_t *low, uint32_t *hig
 	fil = fil < 0 || fil > 2 ? 0 : fil;
 	*low = g_fil[g][fil][0];
 	*high = g_fil[g][fil][1];
+}
+
+//
+// The receive filter with twin PBT, Icom style: each PBT shifts its own copy of the
+// filter and the passband is their overlap, so both the same way shift it and opposite
+// ways narrow it. Not in AM / FM (the baseband needs a symmetric filter there)
+//
+
+#define PBT_MAX_HZ	1250		/* +- Hz over the CI-V range 0000-0255 (hamlib's Icom range) */
+#define PBT_MIN_WIDTH	50		/* narrowest passband left, Hz */
+
+// a / b rounded to the nearest, halves away from zero (b > 0): the PBT level <-> Hz
+// conversion then reads back every CI-V value it was set to
+static int div_round(int a, int b)
+{
+	return a >= 0 ? (a + b / 2) / b : -((-a + b / 2) / b);
+}
+
+static void rx_filter(const rx_t *rx, uint32_t *low, uint32_t *high)
+{
+	fgroup_t g = mode_group(rx->mode);
+	int lo, hi;
+
+	mode_filter(rx->mode, rx->fil, low, high);
+
+	if (g == FG_AM || g == FG_FM || (rx->pbt_in == 0 && rx->pbt_out == 0))
+		return;
+
+	lo = (int) *low + (rx->pbt_in > rx->pbt_out ? rx->pbt_in : rx->pbt_out);
+	hi = (int) *high + (rx->pbt_in < rx->pbt_out ? rx->pbt_in : rx->pbt_out);
+	lo = lo < 0 ? 0 : lo;
+	hi = hi < lo + PBT_MIN_WIDTH ? lo + PBT_MIN_WIDTH : hi;
+	*low = (uint32_t) lo;
+	*high = (uint32_t) hi;
 }
 
 //
@@ -987,7 +1023,10 @@ static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 	uint32_t hz = keyed ? (rx->tx_hz_ovr != 0 ? rx->tx_hz_ovr : tx_hz(rx)) : rx_hz(rx);
 	x6100_mode_t mode = keyed ? (rx->tx_mode_ovr >= 0 ? (x6100_mode_t) rx->tx_mode_ovr : tx_mode(rx)) : rx->mode;
 
-	mode_filter(mode, keyed && rx->split ? rx->b_fil : rx->fil, &low, &high);
+	if (keyed)
+		mode_filter(mode, rx->split ? rx->b_fil : rx->fil, &low, &high);
+	else
+		rx_filter(rx, &low, &high);	/* with twin PBT */
 
 	if (!keyed)
 		high += (uint32_t) am_ofs(rx);	/* AM offset: the filter opens by as much, no sideband is cut */
@@ -3917,7 +3956,7 @@ static void passband(const rx_t *rx, int *lo, int *hi)
 {
 	uint32_t low, high;
 
-	mode_filter(rx->mode, rx->fil, &low, &high);
+	rx_filter(rx, &low, &high);
 
 	switch (rx->mode) {
 	case X6100_MODE_LSB:
@@ -5720,8 +5759,8 @@ static void draw_audio_spec(screen_t *scr, const rx_t *rx, int x0, int w)
 
 	x6100_lcd_fill(lcd, x0, SPEC_Y, w, SPEC_H, 0x05080C);
 
-	// Passband in audio Hz: the filter edges (AM / FM: 0 .. high)
-	mode_filter(rx->mode, rx->fil, &lo, &hi);
+	// Passband in audio Hz: the filter edges with twin PBT (AM / FM: 0 .. high)
+	rx_filter(rx, &lo, &hi);
 	scr->apb_lo = (int) ((long) lo * AS_N / AS_RATE);
 	scr->apb_hi = (int) ((long) (hi > 6000 ? 6000 : hi) * AS_N / AS_RATE);
 
@@ -6411,12 +6450,12 @@ overlays:
 	//
 	{
 		uint32_t lo, hi;
-		char m[24], w[12];
+		char m[32], w[12];
 		int tw;
 
-		mode_filter(rx->mode, rx->fil, &lo, &hi);
+		rx_filter(rx, &lo, &hi);	/* the width with twin PBT */
 		fil_width_str(hi - lo, w, sizeof(w));
-		snprintf(m, sizeof(m), "FIL%d %s", rx->fil + 1, w);
+		snprintf(m, sizeof(m), "FIL%d %s%s", rx->fil + 1, w, rx->pbt_in || rx->pbt_out ? " PBT" : "");
 		tw = x6100_lcd_text_width(m, 2);
 		x6100_lcd_fill(lcd, W - tw - 10, SPEC_Y + 40, tw + 8, 18, 0x000000);
 		x6100_lcd_text(lcd, W - tw - 6, SPEC_Y + 42, 2, m, rx->fedit ? SCR_WARN : SCR_ACCENT);
@@ -7472,6 +7511,14 @@ static bool console_line(rx_t *rx, char *line)
 			continue;
 		}
 
+		// pbtin / pbtout <Hz>: twin PBT shifts, +-1250 (0 = centre; CI-V 14 07 / 08)
+		if (strcasecmp(t, "pbtin") == 0 || strcasecmp(t, "pbtout") == 0) {
+			want_lvl = strcasecmp(t, "pbtin") == 0 ? &rx->pbt_in : &rx->pbt_out;
+			lvl_min = -PBT_MAX_HZ;
+			lvl_max = PBT_MAX_HZ;
+			continue;
+		}
+
 		if (strcasecmp(t, "edge") == 0) {	/* fixed edge in use, 1-4 */
 			want_lvl = &rx->edge;
 			lvl_min = 1;
@@ -7643,7 +7690,8 @@ static void state_save(const rx_t *rx)
 
 	fprintf(fp, "\n%u %s %s fil%d step %d\n", (unsigned) rx->freq, modes[rx->mode], agcs[rx->agc], rx->fil + 1, rx->step);
 	fprintf(fp, "vfob %u %s fil%d vfo %s\n", (unsigned) rx->b_freq, modes[rx->b_mode], rx->b_fil + 1, rx->on_b ? "b" : "a");
-	fprintf(fp, "%s %s %s ritofs %d\n", rx->split ? "txsplit" : "notxsplit", rx->rit ? "rit" : "norit", rx->xit ? "xit" : "noxit", rx->rit_hz);
+	fprintf(fp, "%s %s %s ritofs %d pbtin %d pbtout %d\n", rx->split ? "txsplit" : "notxsplit", rx->rit ? "rit" : "norit",
+		rx->xit ? "xit" : "noxit", rx->rit_hz, rx->pbt_in, rx->pbt_out);
 	fprintf(fp, "%s dupshift %d am_offset %d\n", g_dup_tok[rx->dup], rx->dup_khz, g_am_ofs);
 	fprintf(fp, "vol %d %s rfg %d pwr %.1f\n", rx->vol, rx->mute ? "mute" : "nomute", rx->rfg, rx->txpwr / 10.0);
 	fprintf(fp, "keytype %d wpm %d iambic %d cwpitch %d cwvol %d qsk %d ratio %d.%d\n", rx->keymode, rx->wpm, rx->iambic,
@@ -8112,6 +8160,14 @@ static bool cat_get(void *ctx, x6100_civ_item_t item, int vfo, int32_t *v)
 	case X6100_CIV_TRANSCEIVE:
 		*v = !cat->no_transceive;
 		return true;
+	case X6100_CIV_LVL_PBT1:	/* 14 07 / 08: 0128 centre, +-1250 Hz over 0000-0255 */
+	case X6100_CIV_LVL_PBT2: {
+		int hz = item == X6100_CIV_LVL_PBT1 ? rx->pbt_in : rx->pbt_out;
+		int lv = 128 + div_round(hz * 128, PBT_MAX_HZ);
+
+		*v = lv < 0 ? 0 : lv > 255 ? 255 : lv;
+		return true;
+	}
 	case X6100_CIV_MOD_IN:		/* vfo 0 DATA OFF MOD, 1 DATA MOD */
 		*v = g_modin[vfo != 0];
 		return true;
@@ -8145,6 +8201,19 @@ static bool cat_set(void *ctx, x6100_civ_item_t item, int vfo, int32_t v)
 	case X6100_CIV_TRANSCEIVE:	/* 1A 05 0131 */
 		cat->no_transceive = v == 0;
 		break;
+	case X6100_CIV_LVL_PBT1:	/* 14 07 / 08: twin PBT, 9.8 Hz a step */
+	case X6100_CIV_LVL_PBT2: {
+		int hz = div_round((v - 128) * PBT_MAX_HZ, 128);
+
+		hz = hz < -PBT_MAX_HZ ? -PBT_MAX_HZ : hz > PBT_MAX_HZ ? PBT_MAX_HZ : hz;
+
+		if (item == X6100_CIV_LVL_PBT1)
+			rx->pbt_in = hz;
+		else
+			rx->pbt_out = hz;
+
+		break;
+	}
 	case X6100_CIV_MOD_IN:		/* 1A 05 0118 / 0119; the conf may fix it */
 		if (g_conf_set & (1u << GEN_MODOFF))
 			return false;
