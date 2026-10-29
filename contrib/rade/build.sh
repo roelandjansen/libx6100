@@ -155,6 +155,15 @@ rade_build() {
 	# The receiver in two threads (demodulator + decoder, vocoder): contrib/rade/rade_rx_mt.c
 	"${G_ZIG}" cc "${L_FLAGS[@]}" -static -s -pthread -o "${C_OUT}/rade_rx_mt" "${C_HERE}/rade_rx_mt.c" \
 		"${L_OBJS[@]}" "${L_OPUS}/.libs/libopus.a" -lm
+
+	# The patch against the original function on the radio: same result, time per call
+	# (contrib/rade/test/acq_test.c). The original comes from git, its functions renamed
+	git -C "${C_WORK}/rade_c" show HEAD:src/rade_acq.c > "${L_OBJ}/rade_acq_orig.c"
+	"${G_ZIG}" cc "${L_FLAGS[@]}" -Drade_acq_init=o_init -Drade_acq_detect_pilots=o_detect \
+		-Drade_acq_refine=o_refine -Drade_acq_check_pilots=o_check -c "${L_OBJ}/rade_acq_orig.c" \
+		-o "${L_OBJ}/rade_acq_orig.o"
+	"${G_ZIG}" cc "${L_FLAGS[@]}" -static -s -o "${C_OUT}/acq_test" "${C_HERE}/test/acq_test.c" \
+		"${L_OBJ}/rade_acq_orig.o" "${L_OBJ}/rade_acq.o" -lm
 }
 
 #
@@ -168,9 +177,14 @@ printf 'zig %s, rade_c %s, NEON %s\n' "$("${G_ZIG}" version)" "${C_RADE_REV:0:7}
 	"$("${G_ZIG}" cc -target "${C_TARGET}" -mcpu="${C_CPU}" -dM -E -x c /dev/null | grep '__ARM_NEON ' > /dev/null && printf yes || printf 'NO (Opus falls back to plain C)')"
 checkout "${C_WORK}/rade_c" "${C_RADE_URL}" "${C_RADE_REV}"
 
-# Pilot search on NEON (contrib/rade/rade_acq_neon.patch, README): once per checkout
-if ! grep -q acq_dot_conj "${C_WORK}/rade_c/src/rade_acq.c"; then
+# Pilot search on NEON (contrib/rade/rade_acq_neon.patch, README): applied to the original
+# rade_acq.c whenever the patch differs from the one applied last
+G_PATCH_SUM="$(sha256sum -- "${C_HERE}/rade_acq_neon.patch" | cut -d ' ' -f 1)"
+
+if [[ "$(cat -- "${C_WORK}/rade_c/.x6100-acq-patch" 2>/dev/null || true)" != "${G_PATCH_SUM}" ]]; then	# none yet: empty
+	git -C "${C_WORK}/rade_c" checkout -q -- src/rade_acq.c
 	patch -s -d "${C_WORK}/rade_c" -p1 < "${C_HERE}/rade_acq_neon.patch"
+	printf '%s\n' "${G_PATCH_SUM}" > "${C_WORK}/rade_c/.x6100-acq-patch"
 	printf '%s\n' "rade_c: rade_acq_neon.patch applied"
 fi
 

@@ -117,11 +117,24 @@ What the patch changes, in that one function only:
 - once per call, copy rx (2 x 960 + 160 samples) and the 40 shifted pilots into separate
   real and imaginary float arrays (about 67 KB on the stack);
 - each 160-sample correlation is `acq_dot_conj()`: re = sum(xr*pr + xi*pi), im =
-  sum(xr*pi - xi*pr), on ARM with NEON four samples per instruction in four running sums
-  that are added at the end; elsewhere (and for a remainder) the plain C loop, in the same
-  order as before;
-- the search for the maximum, the threshold from the noise statistics and the return
-  value are untouched.
+  sum(xr*pi - xi*pr). On ARM with NEON eight samples a step, in eight independent
+  running sums (one per product and half step) that are added at the end: the
+  multiply-adds overlap instead of each waiting for the previous one (the A7's NEON
+  multiply-add has a long latency). Elsewhere (and for a remainder) the plain C loop, in
+  the same order as before;
+- the grid is filled with frequency in the outer loop and time in the inner one: one
+  pilot (1.3 KB) and rx (16 KB) stay in the 32 KB L1 cache. Upstream walks all 40 pilots
+  (51 KB) for every time offset, so they come from L2 each time;
+- the search for the maximum then runs over the finished grid in the original order
+  (time outer), so ties pick the same entry; the threshold from the noise statistics and
+  the return value are untouched.
+
+The first version (four samples a step, two running sums, the original loop order) did
+not help on the R16: `v1 no signal` stayed at 1.52. `acq_test` on the radio prints the
+time per call of the original and the patched function, so each version is measured
+directly:
+
+    /root/rade/acq_test       # PASS, then ms per call; budget 120 ms (one modem frame)
 
 The result is the same apart from float rounding: the NEON path adds in a different
 order. Checked with `test/acq_test.c`, which runs the original function and the patched

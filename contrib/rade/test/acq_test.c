@@ -8,10 +8,19 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "rade_acq.h"
 
 int o_detect(rade_acq *acq, const RADE_COMP *rx, int *tmax, float *fmax);
+
+#if defined(__ARM_NEON) || defined(__ARM_NEON__)
+#define NEON_PATH	"compiled in"
+#else
+#define NEON_PATH	"not compiled (plain C)"
+#endif
+
+#define CALLS	20
 
 /* rade_acq_init (not called here) needs it */
 RADE_COMP rade_cdot(const RADE_COMP *a, const RADE_COMP *b, int n)
@@ -27,6 +36,23 @@ RADE_COMP rade_cdot(const RADE_COMP *a, const RADE_COMP *b, int n)
 
 static rade_acq g_a, g_b;
 static RADE_COMP g_rx[2 * RADE_NMF + RADE_M + RADE_NCP];
+
+/* Milliseconds per call of a detect function, over CALLS calls on g_rx */
+static double ms_per_call(int (*detect)(rade_acq *, const RADE_COMP *, int *, float *), rade_acq *acq)
+{
+	struct timespec t0, t1;
+	int t;
+	float f;
+
+	clock_gettime(CLOCK_MONOTONIC, &t0);
+
+	for (int i = 0; i < CALLS; i++)
+		detect(acq, g_rx, &t, &f);
+
+	clock_gettime(CLOCK_MONOTONIC, &t1);
+
+	return ((t1.tv_sec - t0.tv_sec) * 1e3 + (t1.tv_nsec - t0.tv_nsec) / 1e6) / CALLS;
+}
 
 static float frand(void)
 {
@@ -102,6 +128,11 @@ int main(void)
 	fails += ra != rb || ta != tb || fa != fb || ta != t0 || fabsf(fa - g_a.fcoarse_range[f0]) > 0.01f;
 	fails += err > 1e-4f * mag || fabsf(g_a.Dthresh - g_b.Dthresh) > 1e-4f * g_a.Dthresh;
 	printf("%s\n", fails ? "FAIL" : "PASS");
+
+	/* Time per call (one call per 120 ms modem frame while out of sync) */
+	printf("neon path: %s\n", NEON_PATH);
+	printf("orig: %6.1f ms per call\n", ms_per_call(o_detect, &g_a));
+	printf("new:  %6.1f ms per call   (budget 120 ms per frame)\n", ms_per_call(rade_acq_detect_pilots, &g_b));
 
 	return fails != 0;
 }
