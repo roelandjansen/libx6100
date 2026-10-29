@@ -165,7 +165,10 @@ Values are kept in the last state (see Settings); defaults NR 20, NB 10 / 10, no
 - AM receives 500 Hz above the dial (AM OFFSET in the AGC long panel, console / conf
   `am_offset`, 0-1000, 0 = off): the baseband is zero
   IF and its DC notch takes part of the carrier when tuned exactly on it, which sounds
-  distorted; the filter opens by the same amount, dial and TX stay on the carrier
+  distorted. The dial and TX stay on the carrier. The upper edge stays at the FIL
+  width (an adjacent station above stays out); the lower edge comes 2 x offset inside
+  (FIL ±4.5 kHz, offset 500: -3.5 .. +4.5 kHz), so the top of the audio comes from one
+  sideband only, about 6 dB down
 
   ![AM on 918 kHz](images/x6100_trx_am.png)
 

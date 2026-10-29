@@ -590,7 +590,7 @@ static void mode_filter(x6100_mode_t mode, int fil, uint32_t *low, uint32_t *hig
 // The receive filter with twin PBT, Icom style: each PBT shifts its own copy of the
 // filter and the passband is their overlap, so both the same way shift it and opposite
 // ways narrow it. AM: the baseband needs a symmetric filter, so the shift is a receive
-// offset and the filter narrows symmetrically (am_pbt). Not in FM (Icom has none there)
+// offset and the filter narrows symmetrically (am_pass). Not in FM (Icom has none there)
 //
 
 #define PBT_MAX_HZ	1250		/* +- Hz over the CI-V range 0000-0255 (hamlib's Icom range) */
@@ -604,7 +604,7 @@ static int div_round(int a, int b)
 	return a >= 0 ? (a + b / 2) / b : -((-a + b / 2) / b);
 }
 
-static void am_pbt(const rx_t *rx, int *shift, int *narrow);
+static void am_pass(const rx_t *rx, int *centre, int *half);
 
 // PBT shifts set and the mode one where they act (not FM): the FIL label shows PBT
 static bool pbt_active(const rx_t *rx)
@@ -621,12 +621,13 @@ static void rx_filter(const rx_t *rx, uint32_t *low, uint32_t *high)
 	if (!pbt_active(rx))
 		return;
 
-	// AM: the symmetric filter narrows; the shift is in rx_hz
+	// AM: shown as Icom's half-width, narrowed by |in - out| / 2; the baseband filter
+	// and the receive offset are am_pass
 	if (mode_group(rx->mode) == FG_AM) {
-		int shift, narrow;
+		int d = rx->pbt_in > rx->pbt_out ? rx->pbt_in - rx->pbt_out : rx->pbt_out - rx->pbt_in;
 
-		am_pbt(rx, &shift, &narrow);
-		*high -= (uint32_t) narrow;
+		hi = (int) *high - d / 2;
+		*high = (uint32_t) (hi < PBT_MIN_WIDTH ? PBT_MIN_WIDTH : hi);
 		return;
 	}
 
@@ -825,37 +826,40 @@ static int am_ofs(const rx_t *rx)
 }
 
 //
-// Twin PBT in AM, Icom style, with what the baseband offers (a symmetric filter): an IF
-// passband [L, H] around the carrier is the receiver tuned (L + H) / 2 off with a filter
-// of half-width (H - L) / 2, as the AM offset does. Icom's L = -hi + max(in, out), H =
-// hi + min(in, out) give a shift of (in + out) / 2 and a half-width of hi - |in - out| / 2.
-// The shift is kept so that the carrier stays 100 Hz inside the passband
+// AM passband, Icom style, with what the baseband offers (a filter symmetric around the
+// receive frequency): an IF passband [L, H] around the carrier is the receiver tuned
+// (L + H) / 2 off with a half-width of (H - L) / 2. Icom's twin PBT gives L = -hi +
+// max(in, out), H = hi + min(in, out). The AM offset moves the receiver up; the upper
+// edge stays at H (an adjacent station above is kept out, 2026-10-29: 4.5 kHz FIL with
+// the filter opened by the offset on both sides let a carrier 5 kHz up whistle) and the
+// lower edge comes 2 x offset inside L: the top of the audio comes from one sideband
+// only, 6 dB down. The carrier stays at least 100 Hz inside the passband.
 //
 
-static void am_pbt(const rx_t *rx, int *shift, int *narrow)
+static void am_pass(const rx_t *rx, int *centre, int *half)
 {
 	uint32_t lo, hi;
-	int d = rx->pbt_in > rx->pbt_out ? rx->pbt_in - rx->pbt_out : rx->pbt_out - rx->pbt_in;
-	int ofs = am_ofs(rx), w, s, smin, smax;
-
-	*shift = 0;
-	*narrow = 0;
-
-	if (rx->mode != X6100_MODE_AM || bscan_running() || (rx->pbt_in == 0 && rx->pbt_out == 0))
-		return;
+	int ofs = am_ofs(rx), mx = 0, mn = 0, l, h;
 
 	mode_filter(rx->mode, rx->fil, &lo, &hi);
-	w = (int) hi - d / 2;
-	w = w < PBT_MIN_WIDTH ? PBT_MIN_WIDTH : w;
 
-	// Carrier at -(ofs + s) from the tuned centre, the filter half-width w + ofs
-	s = (rx->pbt_in + rx->pbt_out) / 2;
-	smax = w - 100;
-	smin = -(w + 2 * ofs) + 100;
-	s = s > smax ? smax : s < smin ? smin : s;
+	if (rx->mode != X6100_MODE_AM || bscan_running()) {
+		*centre = 0;
+		*half = (int) hi;
+		return;
+	}
 
-	*shift = s;
-	*narrow = (int) hi - w;
+	if (pbt_active(rx)) {
+		mx = rx->pbt_in > rx->pbt_out ? rx->pbt_in : rx->pbt_out;
+		mn = rx->pbt_in < rx->pbt_out ? rx->pbt_in : rx->pbt_out;
+	}
+
+	l = -(int) hi + mx + 2 * ofs;
+	h = (int) hi + mn;
+	l = l > -100 ? -100 : l;
+	h = h < 100 ? 100 : h;
+	*centre = (l + h) / 2;
+	*half = (h - l) / 2;
 }
 
 //
@@ -866,11 +870,11 @@ static void am_pbt(const rx_t *rx, int *shift, int *narrow)
 
 static uint32_t rx_hz(const rx_t *rx)
 {
-	int shift, narrow;
+	int centre, half;
 
-	am_pbt(rx, &shift, &narrow);	/* AM: the PBT shift is a receive offset */
+	am_pass(rx, &centre, &half);	/* AM: the offset and PBT shift are a receive offset */
 
-	return (uint32_t) ((int64_t) rx->freq + (rx->rit ? rx->rit_hz : 0) + am_ofs(rx) + shift);
+	return (uint32_t) ((int64_t) rx->freq + (rx->rit ? rx->rit_hz : 0) + centre);
 }
 
 static uint32_t tx_hz(const rx_t *rx)
@@ -1079,13 +1083,17 @@ static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 	uint32_t hz = keyed ? (rx->tx_hz_ovr != 0 ? rx->tx_hz_ovr : tx_hz(rx)) : rx_hz(rx);
 	x6100_mode_t mode = keyed ? (rx->tx_mode_ovr >= 0 ? (x6100_mode_t) rx->tx_mode_ovr : tx_mode(rx)) : rx->mode;
 
-	if (keyed)
+	if (keyed) {
 		mode_filter(mode, rx->split ? rx->b_fil : rx->fil, &low, &high);
-	else
-		rx_filter(rx, &low, &high);	/* with twin PBT */
+	} else if (rx->mode == X6100_MODE_AM) {
+		int centre, half;
 
-	if (!keyed)
-		high += (uint32_t) am_ofs(rx);	/* AM offset: the filter opens by as much, no sideband is cut */
+		am_pass(rx, &centre, &half);	/* AM offset and twin PBT, the upper edge kept */
+		low = 0;
+		high = (uint32_t) half;
+	} else {
+		rx_filter(rx, &low, &high);	/* with twin PBT */
+	}
 
 	x6100_set_freq(ctl, 0, hz);
 	x6100_set_freq(ctl, 1, hz);
@@ -4043,14 +4051,12 @@ static void passband(const rx_t *rx, int *lo, int *hi)
 		*hi = -(int) low;
 		break;
 	case X6100_MODE_AM: {
-		// Around the carrier: centred on the receive offset (AM offset + PBT shift), the
-		// filter half-width opened by the AM offset (as apply sets it)
-		int shift, narrow, c = am_ofs(rx);
+		// Around the carrier: centred on the receive offset, the half-width apply sets
+		int centre, half;
 
-		am_pbt(rx, &shift, &narrow);
-		c += shift;
-		*lo = c - ((int) high + am_ofs(rx));
-		*hi = c + ((int) high + am_ofs(rx));
+		am_pass(rx, &centre, &half);
+		*lo = centre - half;
+		*hi = centre + half;
 		break;
 	}
 	case X6100_MODE_NFM:
