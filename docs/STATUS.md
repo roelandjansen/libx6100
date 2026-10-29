@@ -174,7 +174,9 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     TX audio via DATA MOD USB (item 17).
     E1b, the other codec inputs (Mic1 carries the baseband RX audio): `x6100_mixer list`
     (which capture switches the codec has), then `x6100_audio 14236000 usb 10
-    /tmp/e1b.wav --input mic2|line|mixer [--play-mode]`, speaking into the hand mic.
+    /tmp/e1b.wav --input mic2|line|mixer|aif2 [--play-mode]`, speaking into the hand mic.
+    The list (2026-10-29): 41 controls; Mic2, Line In and the mixer exist; AIF2 (the second
+    I2S interface) is muted and unrouted in the image, never listened to.
 
 ## Next steps (suggested order)
 

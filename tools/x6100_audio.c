@@ -15,7 +15,9 @@
  *
  * --input mic2|line|mixer captures one other codec input instead of Mic1 (where the
  * baseband delivers the RX audio): is the hand mic wired to one of them? x6100_mixer list
- * shows which switches the codec has. Mic1 again on exit.
+ * shows which switches the codec has. --input aif2 captures what arrives on AIF2, the
+ * codec's second I2S interface (on A33 boards a modem or Bluetooth chip; here unknown,
+ * muted in the image). Mic1 and the ADC again on exit.
  *
  * --iq sets the auxiqen bit (register 21 bit 6, "IQ OUT EN" in the stock UI)
  * to test whether the baseband then delivers IQ on the codec input.
@@ -33,7 +35,7 @@
  * writes 12 kHz mono 16-bit (WSJT-X File > Open format); <seconds> is ignored.
  * The radio clock must be on UTC time within about a second (NTP).
  *
- * Usage: x6100_audio <freq_hz> <mode> <seconds> <out.wav> [--iq] [--rate N] [--ft8] [--boost 0-7] [--agc off|slow|fast|auto] [--rfg 0-100] [--lpf] [--play-mode] [--mic int|hand|auto] [--micgain 0-100] [--input mic1|mic2|line|mixer]
+ * Usage: x6100_audio <freq_hz> <mode> <seconds> <out.wav> [--iq] [--rate N] [--ft8] [--boost 0-7] [--agc off|slow|fast|auto] [--rfg 0-100] [--lpf] [--play-mode] [--mic int|hand|auto] [--micgain 0-100] [--input mic1|mic2|line|mixer|aif2]
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -79,7 +81,7 @@ static const char *argv_gain(int gain)
 static int parse_input(const char *s)
 {
 	return strcmp(s, "mic1") == 0 ? 0 : strcmp(s, "mic2") == 0 ? 1 : strcmp(s, "line") == 0 ? 2
-		: strcmp(s, "mixer") == 0 ? 3 : -1;
+		: strcmp(s, "mixer") == 0 ? 3 : strcmp(s, "aif2") == 0 ? 4 : -1;
 }
 
 //
@@ -91,17 +93,36 @@ static void set_input(int input, int boost)
 {
 	static const char *sw[] = { "Mic1 Capture Switch", "Mic2 Capture Switch", "Line In Capture Switch",
 		"Mixer Capture Switch" };
+	int analog = input < 4 ? input : 0;	/* aif2: the analog side stays on Mic1, unused */
+	bool aif2 = input == 4;
 	int rc;
 
 	for (int i = 0; i < 4; i++) {
-		if ((rc = x6100_mixer_set(X6100_PCM_CARD, sw[i], i == input)) < 0)
+		if ((rc = x6100_mixer_set(X6100_PCM_CARD, sw[i], i == analog)) < 0)
 			fprintf(stderr, "input: %s: %s\n", sw[i], strerror(-rc));
 	}
 
 	if (input == 1 && (rc = x6100_mixer_set(X6100_PCM_CARD, "Mic2 Boost Volume", boost)) < 0)
 		fprintf(stderr, "input: Mic2 Boost Volume: %s\n", strerror(-rc));
 
-	if (input != 0)
+	// The digital side of the capture (AIF1 AD0): the ADC (default) or what arrives on AIF2,
+	// the codec's second I2S interface; its volume 160 = 0 dB, 0 = muted as the image has it
+	{
+		static const struct { const char *name; long on, off; } C_DIG[] = {
+			{ "AIF1 Data Digital ADC Capture Switch", 0, 1 },
+			{ "AIF2 Digital ADC Capture Switch", 1, 0 },
+			{ "AIF2 DAC Playback Volume", 160, 0 },
+		};
+
+		for (size_t i = 0; i < sizeof(C_DIG) / sizeof(C_DIG[0]); i++) {
+			if ((rc = x6100_mixer_set(X6100_PCM_CARD, C_DIG[i].name, aif2 ? C_DIG[i].on : C_DIG[i].off)) < 0)
+				fprintf(stderr, "input: %s: %s\n", C_DIG[i].name, strerror(-rc));
+		}
+	}
+
+	if (aif2)
+		printf("capture input: AIF2 (second I2S interface) instead of the ADC\n");
+	else if (input != 0)
 		printf("capture input: %s only\n", sw[input]);
 }
 
@@ -297,7 +318,7 @@ static void wait_slot(void)
 
 static void usage(const char *argv0)
 {
-	fprintf(stderr, "usage: %s <freq_hz> <usb|lsb|cw|cwr|am|nfm> <seconds> <out.wav> [--iq] [--rate N] [--ft8] [--boost 0-7] [--agc off|slow|fast|auto] [--rfg 0-100] [--lpf] [--play-mode] [--mic int|hand|auto] [--micgain 0-100] [--input mic1|mic2|line|mixer]\n", argv0);
+	fprintf(stderr, "usage: %s <freq_hz> <usb|lsb|cw|cwr|am|nfm> <seconds> <out.wav> [--iq] [--rate N] [--ft8] [--boost 0-7] [--agc off|slow|fast|auto] [--rfg 0-100] [--lpf] [--play-mode] [--mic int|hand|auto] [--micgain 0-100] [--input mic1|mic2|line|mixer|aif2]\n", argv0);
 }
 
 int main(int argc, char **argv)

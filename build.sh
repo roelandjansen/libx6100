@@ -171,6 +171,10 @@ update_tree() {
 		return 0
 	fi
 
+	local L_BEFORE
+
+	L_BEFORE="$(sha256sum -- build.sh)"
+
 	if ! git pull --ff-only; then
 		printf '%s\n' 'error: git pull --ff-only failed (local commits or conflicts?)' >&2
 		exit 1
@@ -178,6 +182,13 @@ update_tree() {
 
 	# Submodules (third_party/liquid-dsp) follow the commit recorded here
 	git submodule update --init --depth 1
+
+	# The pull changed this script: bash has read the old one (tool list, deploy), so run
+	# the new one with the same arguments; no second pull
+	if [[ "$(sha256sum -- build.sh)" != "${L_BEFORE}" ]]; then
+		printf '%s\n' 'build.sh changed with the pull: starting the new one'
+		exec bash ./build.sh --no-pull "${G_ARGV[@]}"
+	fi
 }
 
 #
@@ -404,6 +415,7 @@ readonly C_SETTINGS=(x6100_trx.conf x6100_trx.state filters.conf memories.conf b
 readonly C_NM_DIR="/etc/NetworkManager/system-connections"
 readonly C_WFS_DIR="/opt/wfserver"
 
+G_ARGV=("$@")	# the arguments as given, for the restart after a pull that changed build.sh
 G_HOST="${X6100_HOST:-root@x6100}"
 G_CONFIG="${X6100_CONFIG:-${HOME}/.config/x6100}"
 G_WFSERVER="${X6100_WFSERVER:-${C_OUT}/wfserver-armhf.tar.gz}"
