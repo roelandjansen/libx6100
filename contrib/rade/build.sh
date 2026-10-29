@@ -30,7 +30,8 @@ readonly C_CPU="cortex_a7"
 readonly C_RADE_SRC=(rade_api.c rade_enc.c rade_dec.c rade_enc_data.c rade_dec_data.c
 	rade_dsp.c rade_ofdm.c rade_bpf.c rade_acq.c rade_tx.c rade_rx.c
 	rade_enc_v2.c rade_dec_v2.c rade_sync.c rade_enc_v2_data.c rade_dec_v2_data.c rade_sync_data.c
-	rade_v2_ofdm.c rade_tx_v2.c rade_rx_v2.c)
+	rade_v2_ofdm.c rade_tx_v2.c rade_rx_v2.c
+	kiss_fft.c)				# for rade_acq_fft.patch
 readonly C_TOOLS=(rade_tx_wav rade_rx_wav)
 
 G_ZIG="${ZIG:-zig}"
@@ -163,7 +164,7 @@ rade_build() {
 		-Drade_acq_refine=o_refine -Drade_acq_check_pilots=o_check -c "${L_OBJ}/rade_acq_orig.c" \
 		-o "${L_OBJ}/rade_acq_orig.o"
 	"${G_ZIG}" cc "${L_FLAGS[@]}" -static -s -o "${C_OUT}/acq_test" "${C_HERE}/test/acq_test.c" \
-		"${L_OBJ}/rade_acq_orig.o" "${L_OBJ}/rade_acq.o" -lm
+		"${L_OBJ}/rade_acq_orig.o" "${L_OBJ}/rade_acq.o" "${L_OBJ}/kiss_fft.o" -lm
 }
 
 #
@@ -177,15 +178,15 @@ printf 'zig %s, rade_c %s, NEON %s\n' "$("${G_ZIG}" version)" "${C_RADE_REV:0:7}
 	"$("${G_ZIG}" cc -target "${C_TARGET}" -mcpu="${C_CPU}" -dM -E -x c /dev/null | grep '__ARM_NEON ' > /dev/null && printf yes || printf 'NO (Opus falls back to plain C)')"
 checkout "${C_WORK}/rade_c" "${C_RADE_URL}" "${C_RADE_REV}"
 
-# Pilot search on NEON (contrib/rade/rade_acq_neon.patch, README): applied to the original
+# Pilot search with FFTs (contrib/rade/rade_acq_fft.patch, README): applied to the original
 # rade_acq.c whenever the patch differs from the one applied last
-G_PATCH_SUM="$(sha256sum -- "${C_HERE}/rade_acq_neon.patch" | cut -d ' ' -f 1)"
+G_PATCH_SUM="$(sha256sum -- "${C_HERE}/rade_acq_fft.patch" | cut -d ' ' -f 1)"
 
 if [[ "$(cat -- "${C_WORK}/rade_c/.x6100-acq-patch" 2>/dev/null || true)" != "${G_PATCH_SUM}" ]]; then	# none yet: empty
-	git -C "${C_WORK}/rade_c" checkout -q -- src/rade_acq.c
-	patch -s -d "${C_WORK}/rade_c" -p1 < "${C_HERE}/rade_acq_neon.patch"
+	git -C "${C_WORK}/rade_c" checkout -q -- src/rade_acq.c src/rade_acq.h src/CMakeLists.txt
+	patch -s -d "${C_WORK}/rade_c" -p1 < "${C_HERE}/rade_acq_fft.patch"
 	printf '%s\n' "${G_PATCH_SUM}" > "${C_WORK}/rade_c/.x6100-acq-patch"
-	printf '%s\n' "rade_c: rade_acq_neon.patch applied"
+	printf '%s\n' "rade_c: rade_acq_fft.patch applied"
 fi
 
 opus_build

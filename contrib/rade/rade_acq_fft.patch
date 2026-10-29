@@ -1,0 +1,136 @@
+--- a/src/rade_acq.h	2026-10-29 15:51:39.169306221 +0000
++++ b/src/rade_acq.h	2026-10-29 15:52:15.992206525 +0000
+@@ -38,6 +38,12 @@
+ 
+ #include "rade_dsp.h"
+ #include "rade_ofdm.h"
++#include "kiss_fft.h"
++
++/* FFT size for the pilot correlation in rade_acq_detect_pilots(): a power of
++   two >= 2*Nmf + M - 1 (2079), the input samples the 2*Nmf lags read, so the
++   circular correlation does not wrap around */
++#define RADE_ACQ_NFFT           4096
+ 
+ #ifdef __cplusplus
+ extern "C" {
+@@ -72,6 +78,15 @@
+     RADE_COMP Dt1[RADE_NMF][RADE_ACQ_NFREQ];   /* Correlation at first pilot */
+     RADE_COMP Dt2[RADE_NMF][RADE_ACQ_NFREQ];   /* Correlation at second pilot */
+ 
++    /* FFT correlation for rade_acq_detect_pilots(), set up by rade_acq_init().
++       The kiss_fft state lives in fft_mem (no malloc, no pointer: the struct
++       stays copyable); about 1.4 MB */
++    kiss_fft_cpx fft_mem[RADE_ACQ_NFFT + 64];  /* kiss_fft state, forward FFT */
++    kiss_fft_cpx fft_pw[RADE_ACQ_NFREQ][RADE_ACQ_NFFT]; /* FFT(conj(p_w[f])) / NFFT */
++    kiss_fft_cpx fft_x[RADE_ACQ_NFFT];         /* work: input spectrum */
++    kiss_fft_cpx fft_y[RADE_ACQ_NFFT];         /* work: product */
++    kiss_fft_cpx fft_z[RADE_ACQ_NFFT];         /* work: correlation */
++
+     /* Detection thresholds and results */
+     float Dthresh;
+     float Dtmax12;
+--- a/src/rade_acq.c	2026-10-29 15:51:39.165686942 +0000
++++ b/src/rade_acq.c	2026-10-29 15:52:34.036205715 +0000
+@@ -78,6 +78,24 @@
+             acq->p_w[f_idx][n] = rade_cmul(w_vec, acq->p[n]);
+         }
+     }
++
++    /* FFT correlation for rade_acq_detect_pilots(): the forward FFT state in
++       fft_mem, and each shifted pilot transformed once, conjugated and scaled
++       by 1/NFFT: fft_pw[f] = FFT(conj(p_w[f])) / NFFT */
++    size_t fft_len = sizeof(acq->fft_mem);
++    kiss_fft_cfg cfg = kiss_fft_alloc(RADE_ACQ_NFFT, 0, acq->fft_mem, &fft_len);
++    assert(cfg == (kiss_fft_cfg)acq->fft_mem);
++
++    for (int f_idx = 0; f_idx < acq->n_fcoarse; f_idx++) {
++        memset(acq->fft_y, 0, sizeof(acq->fft_y));
++
++        for (int n = 0; n < RADE_M; n++) {
++            acq->fft_y[n].r = acq->p_w[f_idx][n].real / RADE_ACQ_NFFT;
++            acq->fft_y[n].i = -acq->p_w[f_idx][n].imag / RADE_ACQ_NFFT;
++        }
++
++        kiss_fft(cfg, acq->fft_y, acq->fft_pw[f_idx]);
++    }
+ }
+ 
+ /*---------------------------------------------------------------------------*\
+@@ -101,23 +119,53 @@
+     memset(acq->Dt1, 0, sizeof(acq->Dt1));
+     memset(acq->Dt2, 0, sizeof(acq->Dt2));
+ 
++    /* Correlate with each frequency-shifted pilot at every time t:
++         Dt1[t][f] = sum(conj(rx[t:t+M]) * p_w[f][:])   (Python: np.conj(rx), then matmul)
++         Dt2[t][f] = the same at t + Nmf
++       This is a cross-correlation of x = conj(rx) with p_w[f] over lags s =
++       0..2*Nmf-1, done with FFTs instead of 2*Nmf*n_fcoarse dot products of M:
++         c[s] = sum(x[s+n] * p_w[f][n]) = IFFT(FFT(x) * conj(FFT(conj(p_w[f]))))[s]
++       With fft_pw[f] = FFT(conj(p_w[f]))/NFFT and IFFT(Y) = conj(FFT(conj(Y)))*NFFT:
++         c = conj(FFT(conj(FFT(x)) * fft_pw[f]))
++       The same values as the direct sums, up to float rounding */
++    kiss_fft_cfg cfg = (kiss_fft_cfg)acq->fft_mem;
++    int L = 2 * Nmf + M - 1;    /* the samples the 2*Nmf lags read */
++
++    assert(L <= RADE_ACQ_NFFT && n_fcoarse <= RADE_ACQ_NFREQ);
++
++    memset(acq->fft_y, 0, sizeof(acq->fft_y));
++    for (int n = 0; n < L; n++) {
++        acq->fft_y[n].r = rx[n].real;
++        acq->fft_y[n].i = -rx[n].imag;
++    }
++    kiss_fft(cfg, acq->fft_y, acq->fft_x);
++
++    for (int f_idx = 0; f_idx < n_fcoarse; f_idx++) {
++        const kiss_fft_cpx *v = acq->fft_pw[f_idx];
++
++        /* fft_y = conj(fft_x) * fft_pw[f] */
++        for (int k = 0; k < RADE_ACQ_NFFT; k++) {
++            float xr = acq->fft_x[k].r, xi = -acq->fft_x[k].i;
++
++            acq->fft_y[k].r = xr * v[k].r - xi * v[k].i;
++            acq->fft_y[k].i = xr * v[k].i + xi * v[k].r;
++        }
++
++        kiss_fft(cfg, acq->fft_y, acq->fft_z);
++
++        for (int t = 0; t < Nmf; t++) {
++            acq->Dt1[t][f_idx].real = acq->fft_z[t].r;
++            acq->Dt1[t][f_idx].imag = -acq->fft_z[t].i;
++            acq->Dt2[t][f_idx].real = acq->fft_z[t + Nmf].r;
++            acq->Dt2[t][f_idx].imag = -acq->fft_z[t + Nmf].i;
++        }
++    }
++
+     /* Search over time and frequency */
+     for (int t = 0; t < Nmf; t++) {
+         for (int f_idx = 0; f_idx < n_fcoarse; f_idx++) {
+-            /* Correlate with frequency-shifted pilot at time t
+-               Dt1 = sum(conj(rx[t:t+M]) * p_w[:][f_idx]) */
+-            RADE_COMP Dt1 = rade_czero();
+-            RADE_COMP Dt2 = rade_czero();
+-
+-            for (int n = 0; n < M; n++) {
+-                /* Note: Python uses np.conj(rx) first, then matmul
+-                   So Dt1[t] = conj(rx[t:t+M]) . p_w */
+-                Dt1 = rade_cadd(Dt1, rade_cmul(rade_cconj(rx[t + n]), acq->p_w[f_idx][n]));
+-                Dt2 = rade_cadd(Dt2, rade_cmul(rade_cconj(rx[t + Nmf + n]), acq->p_w[f_idx][n]));
+-            }
+-
+-            acq->Dt1[t][f_idx] = Dt1;
+-            acq->Dt2[t][f_idx] = Dt2;
++            RADE_COMP Dt1 = acq->Dt1[t][f_idx];
++            RADE_COMP Dt2 = acq->Dt2[t][f_idx];
+ 
+             /* Combined metric: |Dt1| + |Dt2| */
+             float Dt12 = rade_cabs(Dt1) + rade_cabs(Dt2);
+--- a/src/CMakeLists.txt	2026-10-29 15:51:39.173662374 +0000
++++ b/src/CMakeLists.txt	2026-10-29 15:52:44.735074475 +0000
+@@ -48,6 +48,7 @@
+     rade_dec.c
+     rade_enc_data.c
+     rade_dec_data.c
++    kiss_fft.c
+     ${RADE_DSP_SOURCES}
+     ${RADE_V2_ML_SOURCES}
+     ${RADE_V2_DSP_SOURCES}

@@ -97,55 +97,62 @@ With a signal the two-thread receiver fits. With no signal, V1 does not: while i
 in sync, the receiver searches for the pilots once per 120 ms modem frame, and that
 search costs more than decoding.
 
-## Patch: V1 pilot search on NEON (`rade_acq_neon.patch`)
+## Patch: V1 pilot search with FFTs (`rade_acq_fft.patch`)
 
-What the search does (`rade_acq_detect_pilots()` in rade_c's `src/rade_acq.c`): for each
-of 960 time offsets t (one modem frame) and 40 frequency offsets (+-50 Hz in 2.5 Hz
-steps) it correlates 160 received samples with the pilot shifted to that frequency,
-twice (at t and one frame later):
+What the search does (`rade_acq_detect_pilots()` in rade_c's `src/rade_acq.c`): while
+the receiver is not in sync, once per 120 ms modem frame, for each of 960 time offsets t
+and 40 frequency offsets (+-50 Hz in 2.5 Hz steps) it correlates 160 received samples
+with the pilot shifted to that frequency, twice (at t and one frame later):
 
     Dt1[t][f] = sum over n of conj(rx[t + n]) * p_w[f][n],   n = 0..159
     Dt2[t][f] = the same at rx[t + 960 + n]
 
-That is 960 x 40 x 2 x 160 = 12.3 million complex multiply-adds per frame, 102 million a
-second. The upstream code writes each one as `rade_cadd(Dt, rade_cmul(rade_cconj(rx),
-p))` on a struct of two floats; the compiler cannot vectorise that, so it runs as scalar
-code: about 14 CPU cycles per complex multiply-add on the R16 (RTF 1.49 at 1008 MHz).
+That is 960 x 40 x 2 x 160 = 12.3 million complex multiply-adds (49 million real ones)
+per frame. On the R16 it takes 171 ms per call against a frame of 120 ms (`acq_test` on
+the radio): about 3.4 cycles per multiply-add.
 
-What the patch changes, in that one function only:
+First tried (patch A, dropped): the same sums with NEON. Split real / imaginary arrays,
+four and then eight running sums, the loops reordered for the L1 cache: the result was
+the same, the time too (171 / 175 ms per call). The A7's NEON unit is 64 bits wide; a
+four-float multiply-add takes about 4 cycles, so it processes floats no faster than the
+scalar VFP. The amount of arithmetic is the limit, not the way it is written.
 
-- once per call, copy rx (2 x 960 + 160 samples) and the 40 shifted pilots into separate
-  real and imaginary float arrays (about 67 KB on the stack);
-- each 160-sample correlation is `acq_dot_conj()`: re = sum(xr*pr + xi*pi), im =
-  sum(xr*pi - xi*pr). On ARM with NEON eight samples a step, in eight independent
-  running sums (one per product and half step) that are added at the end: the
-  multiply-adds overlap instead of each waiting for the previous one (the A7's NEON
-  multiply-add has a long latency). Elsewhere (and for a remainder) the plain C loop, in
-  the same order as before;
-- the grid is filled with frequency in the outer loop and time in the inner one: one
-  pilot (1.3 KB) and rx (16 KB) stay in the 32 KB L1 cache. Upstream walks all 40 pilots
-  (51 KB) for every time offset, so they come from L2 each time;
-- the search for the maximum then runs over the finished grid in the original order
-  (time outer), so ties pick the same entry; the threshold from the noise statistics and
-  the return value are untouched.
+What the patch does instead: the same correlations through FFTs. For one frequency, Dt1
+and Dt2 over all t are one cross-correlation of x = conj(rx) with p_w[f] over the lags
+s = 0..2*960-1:
 
-The first version (four samples a step, two running sums, the original loop order) did
-not help on the R16: `v1 no signal` stayed at 1.52. `acq_test` on the radio prints the
-time per call of the original and the patched function, so each version is measured
-directly:
+    c[s] = sum over n of x[s + n] * p_w[f][n] = IFFT(FFT(x) * conj(FFT(conj(p_w[f]))))[s]
 
-    /root/rade/acq_test       # PASS, then ms per call; budget 120 ms (one modem frame)
+- `rade_acq_init()` transforms each of the 40 shifted pilots once (4096-point FFT,
+  conjugated, scaled by 1/4096) into `fft_pw` in `rade_acq` (40 x 4096 complex, about
+  1.3 MB; with the FFT state and three work buffers about 1.4 MB more per receiver,
+  inside `struct rade`, which `rade_open()` mallocs);
+- per frame, `rade_acq_detect_pilots()` transforms the 2079 input samples it needs once,
+  then per frequency multiplies by `fft_pw[f]` and does one FFT: 41 FFTs of 4096 points
+  and 40 x 4096 complex multiplies, about 13 million operations instead of about 98
+  million;
+- Dt1[t][f] and Dt2[t][f] are read from that result (lags t and t + 960); the maximum
+  search, the threshold from the noise statistics and the return value are unchanged.
+  4096 >= 2 x 960 + 160 - 1, so the circular correlation does not wrap around;
+- the FFT is rade_c's own kiss_fft (`src/kiss_fft.c`, already in rade_c, now also in
+  the rade library's sources in `src/CMakeLists.txt`); its state lives inside
+  `rade_acq` (no malloc, no pointer, so the struct stays copyable).
 
-The result is the same apart from float rounding: the NEON path adds in a different
-order. Checked with `test/acq_test.c`, which runs the original function and the patched
-one on noise with a pilot at t = 333, frequency index 17: both find it there, with the
-same threshold and peak; the 960 x 40 x 2 correlation grid is bit-identical in the plain C
-path (x86) and differs by at most 7e-5 of values up to 162 in the NEON path (ARMv7 under
-qemu). `rade_acq_check_pilots()` and `rade_acq_refine()` (the checks while in sync,
-already inside the measured decode times) are not changed.
+The result is the same apart from float rounding. Checked with `test/acq_test.c`: the
+original function and the patched one on noise with a pilot at t = 333, frequency index
+17 (-7.5 Hz): both find it there, the threshold agrees to 4 digits (35.2089), the
+960 x 40 x 2 correlation grid differs by at most 7e-5 of values up to 162 (x86, and ARMv7
+under qemu). On x86 a call takes 1.5 ms instead of 6.9 ms.
 
-To send upstream later: the patch applies to rade_c at `C_RADE_REV`; it helps every ARM
-board (Pi Zero 2 W and up), and x86 builds are unchanged in their results.
+On the radio:
+
+    /root/rade/acq_test       # PASS, ms per call of both, budget 120 ms (one frame)
+
+`rade_acq_check_pilots()` and `rade_acq_refine()` (the checks while in sync, already
+inside the measured decode times) are not changed.
+
+To send upstream later: the patch applies to rade_c at `C_RADE_REV`; it helps every small
+ARM board, at the price of about 1.4 MB per receiver.
 
 ## Comparison
 

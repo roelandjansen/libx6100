@@ -1,5 +1,5 @@
 /*
- * acq_test.c - equivalence test for rade_acq_neon.patch: rade_c's original
+ * acq_test.c - equivalence and timing test for rade_acq_fft.patch: rade_c's original
  * rade_acq_detect_pilots() (built from the unpatched rade_acq.c with its functions renamed,
  * -Drade_acq_detect_pilots=o_detect and so on) against the patched one, on noise with a
  * pilot at a known time and frequency. See contrib/rade/README.md.
@@ -14,26 +14,23 @@
 
 int o_detect(rade_acq *acq, const RADE_COMP *rx, int *tmax, float *fmax);
 
-#if defined(__ARM_NEON) || defined(__ARM_NEON__)
-#define NEON_PATH	"compiled in"
-#else
-#define NEON_PATH	"not compiled (plain C)"
-#endif
 
 #define CALLS	20
 
-/* rade_acq_init (not called here) needs it */
+/* rade_dsp.c's complex dot product, for rade_acq_init (the test links rade_acq only) */
 RADE_COMP rade_cdot(const RADE_COMP *a, const RADE_COMP *b, int n)
 {
 	RADE_COMP z = { 0.0f, 0.0f };
 
-	(void) a;
-	(void) b;
-	(void) n;
+	for (int i = 0; i < n; i++) {
+		z.real += a[i].real * b[i].real - a[i].imag * b[i].imag;
+		z.imag += a[i].real * b[i].imag + a[i].imag * b[i].real;
+	}
 
 	return z;
 }
 
+static rade_ofdm g_ofdm;
 static rade_acq g_a, g_b;
 static RADE_COMP g_rx[2 * RADE_NMF + RADE_M + RADE_NCP];
 
@@ -113,30 +110,18 @@ int main(void)
 	const int t0 = 333, f0 = 17;
 
 	srand(1);
-	g_a.fs = RADE_FS;
-	g_a.m = RADE_M;
-	g_a.ncp = RADE_NCP;
-	g_a.nmf = RADE_NMF;
-	g_a.n_fcoarse = RADE_ACQ_NFREQ;
-	g_a.Pacq_error1 = RADE_ACQ_PACQ_ERR1;
 
-	for (int f = 0; f < RADE_ACQ_NFREQ; f++) {
-		g_a.fcoarse_range[f] = -50.0f + 2.5f * f;
+	/* A pilot of random phases, set up as the receiver does it (the patched function
+	   needs rade_acq_init's FFT set-up; the original reads only p_w and the fields) */
+	for (int n = 0; n < RADE_M; n++) {
+		float ph = (float) M_PI * frand();
 
-		for (int n = 0; n < RADE_M; n++) {
-			float w = 2.0f * (float) M_PI * g_a.fcoarse_range[f] / RADE_FS * n;
-			float ph = (float) M_PI * frand();	/* pilot: random phases */
-
-			if (f == 0) {
-				g_a.p[n].real = cosf(ph);
-				g_a.p[n].imag = sinf(ph);
-			}
-
-			g_a.p_w[f][n].real = g_a.p[n].real * cosf(w) - g_a.p[n].imag * sinf(w);
-			g_a.p_w[f][n].imag = g_a.p[n].real * sinf(w) + g_a.p[n].imag * cosf(w);
-		}
+		g_ofdm.p[n].real = cosf(ph);
+		g_ofdm.p[n].imag = sinf(ph);
+		g_ofdm.pend[n] = g_ofdm.p[n];
 	}
 
+	rade_acq_init(&g_a, &g_ofdm, RADE_ACQ_FRANGE, RADE_ACQ_FSTEP);
 	g_b = g_a;
 
 	for (size_t i = 0; i < sizeof(g_rx) / sizeof(g_rx[0]); i++) {
@@ -177,7 +162,6 @@ int main(void)
 	printf("%s\n", fails ? "FAIL" : "PASS");
 
 	/* Time per call (one call per 120 ms modem frame while out of sync) */
-	printf("neon path: %s\n", NEON_PATH);
 	printf("orig: %6.1f ms per call\n", ms_per_call(o_detect, &g_a));
 	printf("new:  %6.1f ms per call   (budget 120 ms per frame)\n", ms_per_call(rade_acq_detect_pilots, &g_b));
 
