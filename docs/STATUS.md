@@ -177,6 +177,8 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     /tmp/e1b.wav --input mic2|line|mixer|aif2 [--play-mode]`, speaking into the hand mic.
     The list (2026-10-29): 41 controls; Mic2, Line In and the mixer exist; AIF2 (the second
     I2S interface) is muted and unrouted in the image, never listened to.
+    E1b result: no input follows the voice (Mic2 -49.8, Line In -61.7 dBFS, steady tones;
+    mixer and AIF2 deliver nothing). The mics go to the baseband only.
 
 ## Next steps (suggested order)
 

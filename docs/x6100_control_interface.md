@@ -127,7 +127,11 @@ samples to the file. With the gains at 0 the TX path stays quiet. Measured 2026-
 (`x6100_audio --play-mode --mic int|hand [--micgain 0]`, speaking into the mic): the
 capture stays flat and does not follow the voice: -37 dBFS at Mic1 boost +24 dB, -46 dBFS
 at boost 0 (only 9 dB less: the codec noise floor plus a tiny residual input, about -61
-dBFS before the boost); with 0x8 off the RX audio is -22.5 dBFS. No microphone path into
+dBFS before the boost); with 0x8 off the RX audio is -22.5 dBFS. The other codec inputs
+(`x6100_audio --input`, speaking into the hand mic): Mic2 -49.8 dBFS and Line In -61.7
+dBFS, both steady with a crest factor of 3-4 dB (a constant tone or hum, not the mic); the
+analog mixer (no source switched on) and AIF2 (the second I2S interface, not clocked)
+deliver no samples (read: I/O error). No microphone path into
 Linux is known.
 
 ### Modes (registers 4 / 10)
