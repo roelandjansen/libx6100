@@ -14,6 +14,12 @@
  *       bit 0x4000 (codec as TX audio, not the microphone);
  *       tone default 1000 Hz, level default -30 dBFS
  *
+ *   x6100_tx <freq_hz> codec ... --play-mode
+ *       the same with register 12 bit 0x8 (voice_rec, "play mode") set as well while
+ *       keyed. Test E2 (RADE TX): does the codec tone still go out as the TX signal
+ *       (listen on a second receiver, watch power and ALC), or does play mode send the
+ *       codec to the speaker instead? 0x8 is cleared with the TX flags on every exit
+ *
  * Safety:
  *   - power 0.1 .. 10 W, default 1.0 W; duration 1 .. 30 s
  *   - amateur bands only; 3 s countdown before keying
@@ -73,6 +79,7 @@ typedef struct
 	int ninputs;
 } tx_t;
 
+static bool g_play;		/* --play-mode: register 12 bit 0x8 with codec TX */
 static volatile sig_atomic_t g_stop;
 
 static void on_signal(int sig)
@@ -133,6 +140,7 @@ static void tx_off(tx_t *tx)
 {
 	x6100_set_ptt(&tx->ctl, false);
 	x6100_set_codec_tx(&tx->ctl, false);
+	x6100_ctl_update(&tx->ctl, X6100_REG_FLAGS, X6100_FLAG_VOICE_REC, 0);
 	x6100_atu_tune(&tx->ctl, false);
 	x6100_ctl_sync(&tx->ctl);
 	x6100_ctl_refresh(&tx->ctl);
@@ -254,10 +262,12 @@ static int do_tune(tx_t *tx)
 
 static void key(tx_t *tx, cmd_t cmd)
 {
-	if (cmd == CMD_CODEC)
+	if (cmd == CMD_CODEC) {
 		x6100_set_codec_tx(&tx->ctl, true);
-	else
+		x6100_ctl_update(&tx->ctl, X6100_REG_FLAGS, X6100_FLAG_VOICE_REC, g_play ? X6100_FLAG_VOICE_REC : 0);
+	} else {
 		x6100_set_ptt(&tx->ctl, true);
+	}
 }
 
 static int do_tx(tx_t *tx, cmd_t cmd, int seconds, double tone_hz, double level_dbfs)
@@ -365,7 +375,7 @@ static void usage(const char *argv0)
 		"usage: %s <freq_hz> tune\n"
 		"       %s <freq_hz> carrier <seconds 1-30> [watts 0.1-10, default 1]\n"
 		"       %s <freq_hz> codec <seconds 1-30> [watts 0.1-10, default 1] [tone_hz 200-2800, default 1000]\n"
-		"           [level_dbfs -60..-3, default -30]\n", argv0, argv0, argv0);
+		"           [level_dbfs -60..-3, default -30] [--play-mode]\n", argv0, argv0, argv0);
 }
 
 int main(int argc, char **argv)
@@ -381,6 +391,20 @@ int main(int argc, char **argv)
 	x6100_mode_t mode;
 	const char *mode_name;
 	int rc;
+
+	// --play-mode anywhere: taken out, the rest stays positional
+	{
+		int n = 1;
+
+		for (int i = 1; i < argc; i++) {
+			if (strcmp(argv[i], "--play-mode") == 0)
+				g_play = true;
+			else
+				argv[n++] = argv[i];
+		}
+
+		argc = n;
+	}
 
 	if (argc < 3) {
 		usage(argv[0]);
@@ -400,6 +424,11 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
+	if (g_play && cmd != CMD_CODEC) {
+		fprintf(stderr, "--play-mode goes with codec only\n");
+		return 1;
+	}
+
 	if (cmd != CMD_TUNE) {
 		seconds = atoi(argv[3]);
 		watts = argc > 4 ? strtof(argv[4], NULL) : 1.0f;
@@ -416,6 +445,9 @@ int main(int argc, char **argv)
 		usage(argv[0]);
 		return 1;
 	}
+
+	if (g_play)
+		printf("play mode: register 12 bit 0x8 set with codec TX while keyed (test E2)\n");
 
 	if (!(x6100_band_index(freq) & 1)) {
 		fprintf(stderr, "%u Hz is outside the amateur bands; refusing to transmit\n", freq);

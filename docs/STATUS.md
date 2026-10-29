@@ -157,6 +157,15 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     SerialPortRadio must be /tmp/x6100-civ (not auto), WaterfallFormat 1 loses the
     scope, `wfserver off` / `on` lost the audio (fixed: stop waits for wfserver). Open:
     TX audio, CPU load, dropouts, the audio after the fix, why combined mode fails.
+18. RADE in x6100_trx: the codec has one input and one output to the baseband, both
+    switched by register 12 bit 0x8 (play mode). RX listening locally has no known path
+    (decoding needs the RX audio in the capture, 0x8 off; the speaker plays Linux audio
+    only with 0x8 on). TX depends on two tests (x6100_trx stopped, dummy load):
+    E1 mic into Linux: `x6100_audio 14236000 usb 10 /tmp/e1.wav --play-mode`, speak into
+    the mic: does the RMS follow the voice (and the WAV hold it)?
+    E2 modulation in play mode: `x6100_tx 14236000 codec 5 1 1000 -30 --play-mode`: does
+    the tone go out (second receiver, power / ALC), or to the speaker?
+    Both yes: RADE TX from the built-in mic works (mic -> capture -> encode -> codec TX).
 
 ## Next steps (suggested order)
 

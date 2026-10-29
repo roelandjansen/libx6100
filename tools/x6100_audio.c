@@ -7,6 +7,11 @@
  *   corr ~ 1     both channels carry the same (mono) audio
  *   corr ~ 0     channels independent; with --iq this hints at I/Q in quadrature
  *
+ * --play-mode sets register 12 bit 0x8 (voice_rec): the speaker plays the codec and the
+ * capture loses the RX audio (2026-10-21). Test E1 (RADE TX): does the capture then carry
+ * the microphone? Speak into the active mic (register 21 mic select auto: the hand mic when
+ * plugged in) and watch the RMS per second. Cleared on exit.
+ *
  * --iq sets the auxiqen bit (register 21 bit 6, "IQ OUT EN" in the stock UI)
  * to test whether the baseband then delivers IQ on the codec input.
  *
@@ -23,7 +28,7 @@
  * writes 12 kHz mono 16-bit (WSJT-X File > Open format); <seconds> is ignored.
  * The radio clock must be on UTC time within about a second (NTP).
  *
- * Usage: x6100_audio <freq_hz> <mode> <seconds> <out.wav> [--iq] [--rate N] [--ft8] [--boost 0-7] [--agc off|slow|fast|auto] [--rfg 0-100] [--lpf]
+ * Usage: x6100_audio <freq_hz> <mode> <seconds> <out.wav> [--iq] [--rate N] [--ft8] [--boost 0-7] [--agc off|slow|fast|auto] [--rfg 0-100] [--lpf] [--play-mode]
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -241,7 +246,7 @@ static void wait_slot(void)
 
 static void usage(const char *argv0)
 {
-	fprintf(stderr, "usage: %s <freq_hz> <usb|lsb|cw|cwr|am|nfm> <seconds> <out.wav> [--iq] [--rate N] [--ft8] [--boost 0-7] [--agc off|slow|fast|auto] [--rfg 0-100] [--lpf]\n", argv0);
+	fprintf(stderr, "usage: %s <freq_hz> <usb|lsb|cw|cwr|am|nfm> <seconds> <out.wav> [--iq] [--rate N] [--ft8] [--boost 0-7] [--agc off|slow|fast|auto] [--rfg 0-100] [--lpf] [--play-mode]\n", argv0);
 }
 
 int main(int argc, char **argv)
@@ -261,6 +266,7 @@ int main(int argc, char **argv)
 	bool iq = false;
 	bool ft8 = false;
 	bool lpf = false;
+	bool play = false;
 	uint32_t freq;
 	int seconds;
 	int rc;
@@ -276,6 +282,8 @@ int main(int argc, char **argv)
 	for (int i = 5; i < argc; i++) {
 		if (strcmp(argv[i], "--iq") == 0)
 			iq = true;
+		else if (strcmp(argv[i], "--play-mode") == 0)
+			play = true;
 		else if (strcmp(argv[i], "--lpf") == 0)
 			lpf = true;
 		else if (strcmp(argv[i], "--ft8") == 0)
@@ -339,7 +347,7 @@ int main(int argc, char **argv)
 	if (rfg >= 0)
 		x6100_ctl_update(&ctl, X6100_REG_RFG_TXPWR_FFTDEC, 0xFF, (uint32_t) rfg);
 	x6100_ctl_update(&ctl, X6100_REG_MIC_PTT_SQL, 1u << 6, iq ? 1u << 6 : 0);
-	x6100_ctl_set(&ctl, X6100_REG_FLAGS, 0);
+	x6100_ctl_set(&ctl, X6100_REG_FLAGS, play ? X6100_FLAG_VOICE_REC : 0);
 
 	if ((rc = x6100_ctl_refresh(&ctl)) < 0) {
 		fprintf(stderr, "refresh: %s\n", strerror(-rc));
@@ -364,6 +372,9 @@ int main(int argc, char **argv)
 
 	printf("tuned %u Hz %s, auxiqen %s; capture %u Hz %u ch, period %u x %u\n", freq, argv[2], iq ? "ON" : "off",
 		pcm.rate, pcm.channels, pcm.period, pcm.periods);
+
+	if (play)
+		printf("play mode ON (register 12 0x8): speaker plays the codec; speak into the mic now\n");
 
 	FILE *wav = fopen(argv[4], "wb");
 
@@ -482,6 +493,7 @@ int main(int argc, char **argv)
 
 	x6100_ctl_update(&ctl, X6100_REG_MIC_PTT_SQL, 1u << 6, 0);
 	x6100_ctl_set(&ctl, X6100_REG_RXVOL, 0);
+	x6100_ctl_set(&ctl, X6100_REG_FLAGS, 0);	/* play mode off again */
 	x6100_ctl_sync(&ctl);
 
 	printf("wrote %s: %u Hz %u ch, %u bytes, %.1f s\n", argv[4], out_rate, out_ch, data_bytes, (double) total / pcm.rate);
