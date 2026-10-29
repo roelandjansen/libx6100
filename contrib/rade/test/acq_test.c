@@ -54,6 +54,53 @@ static double ms_per_call(int (*detect)(rade_acq *, const RADE_COMP *, int *, fl
 	return ((t1.tv_sec - t0.tv_sec) * 1e3 + (t1.tv_nsec - t0.tv_nsec) / 1e6) / CALLS;
 }
 
+/* Parts of the function on their own, on g_b's grid; the sums keep them from being optimised away */
+static volatile float g_sink;
+
+static void part_clear(void)
+{
+	memset(g_b.Dt1, 0, sizeof(g_b.Dt1));
+	memset(g_b.Dt2, 0, sizeof(g_b.Dt2));
+	g_sink += g_b.Dt1[RADE_NMF / 2][3].real;
+}
+
+static void part_scan(void)
+{
+	float sum = 0.0f;
+
+	for (int t = 0; t < RADE_NMF; t++)
+		for (int f = 0; f < RADE_ACQ_NFREQ; f++)
+			sum += rade_cabs(g_b.Dt1[t][f]) + rade_cabs(g_b.Dt2[t][f]);
+
+	g_sink += sum;
+}
+
+static void part_sqrt(void)
+{
+	float sum = 0.0f, x = g_sink + 2.0f;
+
+	for (int i = 0; i < 2 * RADE_NMF * RADE_ACQ_NFREQ; i++) {
+		sum += sqrtf(x);
+		x += 0.001f;
+	}
+
+	g_sink += sum;
+}
+
+static double ms_part(void (*part)(void))
+{
+	struct timespec t0, t1;
+
+	clock_gettime(CLOCK_MONOTONIC, &t0);
+
+	for (int i = 0; i < CALLS; i++)
+		part();
+
+	clock_gettime(CLOCK_MONOTONIC, &t1);
+
+	return ((t1.tv_sec - t0.tv_sec) * 1e3 + (t1.tv_nsec - t0.tv_nsec) / 1e6) / CALLS;
+}
+
 static float frand(void)
 {
 	return (float) rand() / (float) RAND_MAX * 2.0f - 1.0f;
@@ -133,6 +180,13 @@ int main(void)
 	printf("neon path: %s\n", NEON_PATH);
 	printf("orig: %6.1f ms per call\n", ms_per_call(o_detect, &g_a));
 	printf("new:  %6.1f ms per call   (budget 120 ms per frame)\n", ms_per_call(rade_acq_detect_pilots, &g_b));
+
+	/* Where the time goes: the parts of the function other than the correlations */
+	printf("parts, ms per call:\n");
+	printf("  clear both grids (memset 2 x %zu kB)   %7.2f\n", sizeof(g_b.Dt1) / 1024, ms_part(part_clear));
+	printf("  one |Dt1|+|Dt2| scan (%d rade_cabs)   %7.2f   (the function does 2)\n",
+		2 * RADE_NMF * RADE_ACQ_NFREQ, ms_part(part_scan));
+	printf("  %d bare sqrtf                        %7.2f\n", 2 * RADE_NMF * RADE_ACQ_NFREQ, ms_part(part_sqrt));
 
 	return fails != 0;
 }
