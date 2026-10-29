@@ -161,7 +161,8 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     switched by register 12 bit 0x8 (play mode). RX listening locally has no known path
     (decoding needs the RX audio in the capture, 0x8 off; the speaker plays Linux audio
     only with 0x8 on). TX depends on two tests (x6100_trx stopped, dummy load):
-    E1 mic into Linux: `x6100_audio 14236000 usb 10 /tmp/e1.wav --play-mode`, speak into
+    E1 mic into Linux: `x6100_audio 14236000 usb 10 /tmp/e1.wav --play-mode --mic int`
+    (then --mic hand, and each again with --micgain 0 as the stock UI records), speak into
     the mic: does the RMS follow the voice (and the WAV hold it)?
     E2 modulation in play mode: `x6100_tx 14236000 codec 5 1 1000 -30 --play-mode`: does
     the tone go out (second receiver, power / ALC), or to the speaker?

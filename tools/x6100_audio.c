@@ -10,7 +10,8 @@
  * --play-mode sets register 12 bit 0x8 (voice_rec): the speaker plays the codec and the
  * capture loses the RX audio (2026-10-21). Test E1 (RADE TX): does the capture then carry
  * the microphone? Speak into the active mic (register 21 mic select auto: the hand mic when
- * plugged in) and watch the RMS per second. Cleared on exit.
+ * plugged in, or --mic int / hand) and watch the RMS per second. --micgain sets both mic gains
+ * (register 20; the stock UI uses 0 when it records a voice memo). Cleared on exit.
  *
  * --iq sets the auxiqen bit (register 21 bit 6, "IQ OUT EN" in the stock UI)
  * to test whether the baseband then delivers IQ on the codec input.
@@ -28,7 +29,7 @@
  * writes 12 kHz mono 16-bit (WSJT-X File > Open format); <seconds> is ignored.
  * The radio clock must be on UTC time within about a second (NTP).
  *
- * Usage: x6100_audio <freq_hz> <mode> <seconds> <out.wav> [--iq] [--rate N] [--ft8] [--boost 0-7] [--agc off|slow|fast|auto] [--rfg 0-100] [--lpf] [--play-mode]
+ * Usage: x6100_audio <freq_hz> <mode> <seconds> <out.wav> [--iq] [--rate N] [--ft8] [--boost 0-7] [--agc off|slow|fast|auto] [--rfg 0-100] [--lpf] [--play-mode] [--mic int|hand|auto] [--micgain 0-100]
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -58,6 +59,22 @@ static void on_signal(int sig)
 {
 	(void) sig;
 	g_stop = 1;
+}
+
+// The --micgain value as text, for the start line
+static const char *argv_gain(int gain)
+{
+	static char s[24];
+
+	snprintf(s, sizeof(s), "%d (both)", gain);
+
+	return s;
+}
+
+// --mic: register 21 mic select; -2 when unknown
+static int parse_mic(const char *s)
+{
+	return strcmp(s, "int") == 0 ? 0 : strcmp(s, "hand") == 0 ? 1 : strcmp(s, "auto") == 0 ? 2 : -2;
 }
 
 static int parse_agc(const char *s)
@@ -246,7 +263,7 @@ static void wait_slot(void)
 
 static void usage(const char *argv0)
 {
-	fprintf(stderr, "usage: %s <freq_hz> <usb|lsb|cw|cwr|am|nfm> <seconds> <out.wav> [--iq] [--rate N] [--ft8] [--boost 0-7] [--agc off|slow|fast|auto] [--rfg 0-100] [--lpf] [--play-mode]\n", argv0);
+	fprintf(stderr, "usage: %s <freq_hz> <usb|lsb|cw|cwr|am|nfm> <seconds> <out.wav> [--iq] [--rate N] [--ft8] [--boost 0-7] [--agc off|slow|fast|auto] [--rfg 0-100] [--lpf] [--play-mode] [--mic int|hand|auto] [--micgain 0-100]\n", argv0);
 }
 
 int main(int argc, char **argv)
@@ -261,6 +278,8 @@ int main(int argc, char **argv)
 	int boost = -1;
 	int agc = -1;
 	int rfg = -1;
+	int mic = -1;		/* register 21 [1:0]: 0 internal, 1 hand, 2 auto; -1 library default (auto) */
+	int micgain = -1;	/* register 20 [23:16] and [31:24]; -1 library default (30 / 20) */
 	static int16_t buf[PERIOD * CHANNELS];
 	unsigned rate = DEF_RATE;
 	bool iq = false;
@@ -290,6 +309,10 @@ int main(int argc, char **argv)
 			ft8 = true;
 		else if (strcmp(argv[i], "--agc") == 0 && i + 1 < argc)
 			agc = parse_agc(argv[++i]);
+		else if (strcmp(argv[i], "--mic") == 0 && i + 1 < argc)
+			mic = parse_mic(argv[++i]);
+		else if (strcmp(argv[i], "--micgain") == 0 && i + 1 < argc)
+			micgain = atoi(argv[++i]);
 		else if (strcmp(argv[i], "--rfg") == 0 && i + 1 < argc)
 			rfg = atoi(argv[++i]);
 		else if (strcmp(argv[i], "--boost") == 0 && i + 1 < argc)
@@ -302,7 +325,7 @@ int main(int argc, char **argv)
 		}
 	}
 
-	if (freq < 100000 || freq > 60000000 || seconds < 1 || agc == -2 || rfg > 100) {
+	if (freq < 100000 || freq > 60000000 || seconds < 1 || agc == -2 || rfg > 100 || mic == -2 || micgain > 100) {
 		usage(argv[0]);
 		return 1;
 	}
@@ -347,6 +370,13 @@ int main(int argc, char **argv)
 	if (rfg >= 0)
 		x6100_ctl_update(&ctl, X6100_REG_RFG_TXPWR_FFTDEC, 0xFF, (uint32_t) rfg);
 	x6100_ctl_update(&ctl, X6100_REG_MIC_PTT_SQL, 1u << 6, iq ? 1u << 6 : 0);
+
+	// Microphone (play mode tests): which one, and the gain of both
+	if (mic >= 0)
+		x6100_ctl_update(&ctl, X6100_REG_MIC_PTT_SQL, 0x3, (uint32_t) mic);
+
+	if (micgain >= 0)
+		x6100_ctl_update(&ctl, X6100_REG_AUDIO_GAIN, 0xFFFF0000u, (uint32_t) micgain << 16 | (uint32_t) micgain << 24);
 	x6100_ctl_set(&ctl, X6100_REG_FLAGS, play ? X6100_FLAG_VOICE_REC : 0);
 
 	if ((rc = x6100_ctl_refresh(&ctl)) < 0) {
@@ -375,6 +405,9 @@ int main(int argc, char **argv)
 
 	if (play)
 		printf("play mode ON (register 12 0x8): speaker plays the codec; speak into the mic now\n");
+
+	printf("mic %s, mic gains %s\n", mic == 0 ? "internal" : mic == 1 ? "hand" : "auto (hand when plugged)",
+		micgain >= 0 ? argv_gain(micgain) : "library default (int 30, hand 20)");
 
 	FILE *wav = fopen(argv[4], "wb");
 
