@@ -1,10 +1,11 @@
 # libx6100 / x6100_trx — status
 
-Snapshot: 2026-10-29. Last tag: v0.13.0 (2026-10-27; band edges and IC-705 fixed edges
-on the scope, CI-V memories and transceive switch, CI-V the Icom way with the full
-IC-705 memory layout, wfview rig file X6100.rig on address 61, VOX register fixed).
-Before: v0.12.0 on 0fab380 (AM receive offset, wfview SCROLL-C fix, CAT over the LAN),
-v0.11.0 on c3e536f. Tags are made by hand: they cannot be pushed from the cloud sessions.
+Snapshot: 2026-10-29. Last tag: v0.14.0 (2026-10-29; wfserver for wfview, twin PBT
+Icom style incl. AM and the filter panel PBT box, AM upper edge kept and AM offset
+100 Hz, scope panel, MSG / APP keys, TOT and stuck-TX safety, RADE studies).
+Before: v0.13.0 (band edges, fixed edges, CI-V memories, wfview rig file on 61),
+v0.12.0 on 0fab380 (AM receive offset, wfview SCROLL-C fix, CAT over the LAN).
+Tags are made by hand: they cannot be pushed from the cloud sessions.
 Open work in detail: `TODO.md`. Use: `x6100_trx_quickref.md`. CAT: `x6100_civ.md`.
 
 ## Where we are
