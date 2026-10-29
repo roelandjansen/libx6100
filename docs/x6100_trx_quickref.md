@@ -120,11 +120,16 @@ are copied from the RF rows. The waterfall rows apply to both scopes.
 
 | Control | Action |
 |---|---|
-| MFK turn | adjust BW or SFT |
-| MFK push | select BW <-> SFT |
-| MFK long | DEF (default for this FIL) |
+| MFK turn | adjust BW or SFT; on PBT: shift inner and outer together by 50 Hz |
+| MFK push | select BW -> SFT -> PBT (AM: BW <-> PBT; FM: BW only) |
+| MFK long | DEF (default for this FIL); on PBT: PBT CLR (inner and outer to centre) |
 | F5 | next FIL |
 | F5 long, other key, 10 s idle | close and save |
+
+The PBT box shows `--` at centre, one value when inner and outer agree, else
+inner / outer (amber while active). The edge text and graph show the passband
+as PBT leaves it; BW / SFT stay the saved filter. PBT itself is not saved in
+filters.conf (it is kept in the state file, as from wfview / CI-V 14 07 / 08).
 
 Per mode group (SSB, SSB-D, CW, AM, FM), saved in `/etc/x6100/filters.conf`.
 Maximum 6000 Hz (baseband audio runs at 12 kHz). AM / FM are symmetric.

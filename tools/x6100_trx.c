@@ -335,7 +335,7 @@ typedef struct
 	x6100_agc_t agc_group[FG_COUNT];
 	int agc_last_group;
 	bool fedit;		/* filter panel open (F5 long) */
-	int fedit_par;		/* 0 BW, 1 SFT */
+	int fedit_par;		/* 0 BW, 1 SFT, 2 PBT */
 	uint64_t fedit_since;	/* last panel activity, for the idle close */
 } rx_t;
 
@@ -595,6 +595,7 @@ static void mode_filter(x6100_mode_t mode, int fil, uint32_t *low, uint32_t *hig
 
 #define PBT_MAX_HZ	1250		/* +- Hz over the CI-V range 0000-0255 (hamlib's Icom range) */
 #define PBT_MIN_WIDTH	50		/* narrowest passband left, Hz */
+#define PBT_STEP_HZ	50		/* filter panel PBT box: Hz per MFK step */
 
 // a / b rounded to the nearest, halves away from zero (b > 0): the PBT level <-> Hz
 // conversion then reads back every CI-V value it was set to
@@ -2843,8 +2844,15 @@ static bool on_key(rx_t *rx, int key)
 			return true;
 		}
 
+		// BW -> SFT -> PBT; AM has no SFT (BW <-> PBT), FM neither (BW only)
 		if (key == X6100_KEY_MFK_PUSH) {
-			rx->fedit_par = g == FG_AM || g == FG_FM ? 0 : !rx->fedit_par;
+			if (g == FG_FM)
+				rx->fedit_par = 0;
+			else if (g == FG_AM)
+				rx->fedit_par = rx->fedit_par == 0 ? 2 : 0;
+			else
+				rx->fedit_par = (rx->fedit_par + 1) % 3;
+
 			return true;
 		}
 
@@ -3098,7 +3106,13 @@ static bool on_long_key(rx_t *rx, int key)
 		}
 
 		if (rx->fedit) {
-			fil_default(mode_group(rx->mode), rx->fil);
+			if (rx->fedit_par == 2) {	/* PBT box: PBT CLR, as holding an Icom's PBT knob */
+				rx->pbt_in = 0;
+				rx->pbt_out = 0;
+			} else {
+				fil_default(mode_group(rx->mode), rx->fil);
+			}
+
 			rx->fedit_since = now_ms();
 		} else {
 			rx->mfk_pwr = !rx->mfk_pwr;
@@ -3374,10 +3388,18 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 		if (rx->fedit) {
 			fgroup_t g = mode_group(rx->mode);
 
-			if (rx->fedit_par == 0)
+			if (rx->fedit_par == 0) {
 				fil_bw(g, rx->fil, value * X6100_DIR_MFK);
-			else
+			} else if (rx->fedit_par == 1) {
 				fil_sft(g, rx->fil, value * X6100_DIR_MFK);
+			} else if (g != FG_FM) {
+				// PBT box: both together, 50 Hz a step (the passband shifts, the
+				// difference between inner and outer stays)
+				int d = value * X6100_DIR_MFK * PBT_STEP_HZ;
+
+				rx->pbt_in = clampi(rx->pbt_in + d, -PBT_MAX_HZ, PBT_MAX_HZ);
+				rx->pbt_out = clampi(rx->pbt_out + d, -PBT_MAX_HZ, PBT_MAX_HZ);
+			}
 
 			rx->fedit_since = now_ms();
 		} else if (rx->mfk_pwr) {
@@ -4522,10 +4544,11 @@ static void draw_filter_panel(x6100_lcd_t *lcd, const rx_t *rx)
 	const uint32_t green = 0x3CC83C;
 	fgroup_t g = mode_group(rx->mode);
 	bool no_sft = g == FG_AM || g == FG_FM;
-	uint32_t lo, hi;
+	uint32_t lo, hi, elo, ehi;
 	char s[48], w[12];
 
 	mode_filter(rx->mode, rx->fil, &lo, &hi);
+	rx_filter(rx, &elo, &ehi);	/* the passband as PBT leaves it */
 
 	x6100_lcd_fill(lcd, px, py, pw, ph, bg);
 	x6100_lcd_hline(lcd, px, px + pw - 1, py, edge);
@@ -4558,15 +4581,27 @@ static void draw_filter_panel(x6100_lcd_t *lcd, const rx_t *rx)
 	x6100_lcd_fill(lcd, px + 180, py + 32, 160, 22, rx->fedit_par == 1 ? act : bg);
 	x6100_lcd_text(lcd, px + 186, py + 36, 2, s, rx->fedit_par == 1 ? white : dim);
 
+	// PBT: centre --, one shift when inner and outer agree, else both (inner / outer)
+	if (g == FG_FM || (rx->pbt_in == 0 && rx->pbt_out == 0))
+		snprintf(s, sizeof(s), "PBT --");
+	else if (rx->pbt_in == rx->pbt_out)
+		snprintf(s, sizeof(s), "PBT %+d", rx->pbt_in);
+	else
+		snprintf(s, sizeof(s), "PBT %+d/%+d", rx->pbt_in, rx->pbt_out);
+
+	x6100_lcd_fill(lcd, px + 350, py + 32, 190, 22, rx->fedit_par == 2 ? act : bg);
+	x6100_lcd_text(lcd, px + 356, py + 36, 2, s, rx->fedit_par == 2 ? white : pbt_active(rx) ? SCR_WARN : dim);
+
 	//
-	// Passband on a 0 .. max axis with a trapezoid, edges and centre labelled
+	// Passband (after PBT) on a 0 .. max axis with a trapezoid, edges and centre labelled
 	//
 	{
 		const int ax0 = px + 360, ax1 = px + pw - 16, ay = py + 92;
 		const uint32_t span = g == FG_CW ? 2000 : FIL_MAX_HZ;
-		int x0 = ax0 + (int) ((int64_t) lo * (ax1 - ax0) / span);
-		int x1 = ax0 + (int) ((int64_t) hi * (ax1 - ax0) / span);
+		int x0 = ax0 + (int) ((int64_t) elo * (ax1 - ax0) / span);
+		int x1 = ax0 + (int) ((int64_t) ehi * (ax1 - ax0) / span);
 
+		x0 = x0 > ax1 ? ax1 : x0;
 		x1 = x1 > ax1 ? ax1 : x1;
 		x6100_lcd_hline(lcd, ax0, ax1, ay, dim);
 
@@ -4578,22 +4613,24 @@ static void draw_filter_panel(x6100_lcd_t *lcd, const rx_t *rx)
 				x6100_lcd_hline(lcd, a, b, ay - 28 + r, green);
 		}
 
-		snprintf(s, sizeof(s), "%u", lo);
+		snprintf(s, sizeof(s), "%u", elo);
 		x6100_lcd_text(lcd, x0 - x6100_lcd_text_width(s, 1) / 2, ay + 6, 1, s, white);
-		snprintf(s, sizeof(s), "%u", (lo + hi) / 2);
+		snprintf(s, sizeof(s), "%u", (elo + ehi) / 2);
 		x6100_lcd_text(lcd, (x0 + x1) / 2 - x6100_lcd_text_width(s, 1) / 2, ay + 16, 1, s, dim);
-		snprintf(s, sizeof(s), "%u", hi);
+		snprintf(s, sizeof(s), "%u", ehi);
 		x6100_lcd_text(lcd, x1 - x6100_lcd_text_width(s, 1) / 2, ay + 6, 1, s, white);
 	}
 
 	//
-	// Edges as text, and the controls
+	// Edges as text (amber while PBT moves them), and the controls
 	//
-	snprintf(s, sizeof(s), "%u - %u Hz", lo, hi);
-	x6100_lcd_text(lcd, px + 16, py + 66, 2, s, white);
-	x6100_lcd_text(lcd, px + 16, py + 96, 1, no_sft ? "MFK: BW    HOLD MFK: DEF" : "MFK: ADJUST    PUSH MFK: BW/SFT    HOLD MFK: DEF",
-		dim);
-	x6100_lcd_text(lcd, px + 16, py + 110, 1, "F5: FIL1-3    HOLD F5: CLOSE", dim);
+	snprintf(s, sizeof(s), "%u - %u Hz", elo, ehi);
+	x6100_lcd_text(lcd, px + 16, py + 66, 2, s, pbt_active(rx) ? SCR_WARN : white);
+	x6100_lcd_text(lcd, px + 16, py + 90, 1, g == FG_FM ? "MFK: BW"
+		: g == FG_AM ? "MFK: ADJUST    PUSH MFK: BW/PBT"
+		: "MFK: ADJUST    PUSH MFK: BW/SFT/PBT", dim);
+	x6100_lcd_text(lcd, px + 16, py + 102, 1, g == FG_FM ? "HOLD MFK: DEF" : "HOLD MFK: DEF / PBT CLR", dim);
+	x6100_lcd_text(lcd, px + 16, py + 114, 1, "F5: FIL1-3    HOLD F5: CLOSE", dim);
 }
 
 //
