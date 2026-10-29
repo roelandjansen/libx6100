@@ -19,7 +19,8 @@ bash build.sh deploy          # copies out/rade to /root/rade on the radio
   `dnn/download_model.sh`).
 - Static musl binaries for `arm-linux-musleabihf`, `-mcpu=cortex_a7`: Opus's own
   configure picks its ARM NEON code paths. Output in `out/rade`: `rade_tx_wav`,
-  `rade_rx_wav`, `input_sample.wav` (rade_c's 9.8 s speech sample, 16 kHz) and
+  `rade_rx_wav`, `rade_rx_mt` (the receiver in two threads), `lpcnet_demo` (FARGAN
+  alone), `input_sample.wav` (rade_c's 9.8 s speech sample, 16 kHz) and
   `rade_bench.sh`. Sources and the Opus build stay in `out/rade-work`.
 
 ## Run (on the radio)
