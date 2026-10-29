@@ -20,12 +20,13 @@
  *       (listen on a second receiver, watch power and ALC), or does play mode send the
  *       codec to the speaker instead? 0x8 is cleared with the TX flags on every exit
  *
- *   x6100_tx <freq_hz> micrec <seconds> <out.wav> [watts] [--rf] [--monilvl 0-100]
+ *   x6100_tx <freq_hz> micrec <seconds> <out.wav> [watts] [--rf] [--monilvl 0-100] [--micgain 0-100]
  *       USB, keyed with PTT (the mic as TX source) and the monitor at its level (default
  *       70); TX enable (registers 0 / 6 bit 0) off unless --rf, so no RF. Records the codec
  *       capture to a WAV and prints its level with tx / power / ALC once a second. Test E4
  *       (RADE): with the monitor the mic reaches the capture while keyed (E3, 2026-10-29);
- *       does it without RF too? --monilvl 0: is it the monitor at all?
+ *       does it without RF too? --monilvl 0: is it the monitor at all? --micgain sets both
+ *       mic gains: with --rf and 0, SSB sends no RF; does the monitor still carry the mic?
  *       At the end: the spectrum of the capture (bands, -20 dB upper edge): the audio
  *       bandwidth the monitor delivers.
  *
@@ -92,6 +93,7 @@ typedef struct
 static bool g_play;		/* --play-mode: register 12 bit 0x8 with codec TX */
 static bool g_rf;		/* micrec --rf: TX enable on (RF out); off by default: keyed, no RF */
 static int g_monilvl = 70;	/* micrec --monilvl: monitor level, register 29 */
+static int g_micgain = -1;	/* micrec --micgain: both mic gains, register 20; -1 library default (30 / 20) */
 static volatile sig_atomic_t g_stop;
 
 static void on_signal(int sig)
@@ -653,7 +655,7 @@ static void usage(const char *argv0)
 		"       %s <freq_hz> carrier <seconds 1-30> [watts 0.1-10, default 1]\n"
 		"       %s <freq_hz> codec <seconds 1-30> [watts 0.1-10, default 1] [tone_hz 200-2800, default 1000]\n"
 		"           [level_dbfs -60..-3, default -30] [--play-mode]\n"
-		"       %s <freq_hz> micrec <seconds 1-30> <out.wav> [watts 0.1-10, default 1] [--rf] [--monilvl 0-100]\n",
+		"       %s <freq_hz> micrec <seconds 1-30> <out.wav> [watts 0.1-10, default 1] [--rf] [--monilvl 0-100] [--micgain 0-100]\n",
 		argv0, argv0, argv0, argv0);
 }
 
@@ -680,6 +682,8 @@ int main(int argc, char **argv)
 				g_play = true;
 			else if (strcmp(argv[i], "--rf") == 0)
 				g_rf = true;
+			else if (strcmp(argv[i], "--micgain") == 0 && i + 1 < argc)
+				g_micgain = atoi(argv[++i]);
 			else if (strcmp(argv[i], "--monilvl") == 0 && i + 1 < argc)
 				g_monilvl = atoi(argv[++i]);
 			else
@@ -733,7 +737,7 @@ int main(int argc, char **argv)
 
 	if (freq < 1800000 || freq > 54000000 || seconds < 0 || seconds > 30 || (cmd != CMD_TUNE && seconds < 1)
 		|| watts < 0.1f || watts > 10.0f || tone_hz < 200.0 || tone_hz > 2800.0 || level_dbfs < -60.0
-		|| level_dbfs > -3.0 || g_monilvl < 0 || g_monilvl > 100) {
+		|| level_dbfs > -3.0 || g_monilvl < 0 || g_monilvl > 100 || g_micgain > 100) {
 		usage(argv[0]);
 		return 1;
 	}
@@ -793,6 +797,9 @@ int main(int argc, char **argv)
 	if (cmd == CMD_MICREC) {
 		x6100_ctl_set(&tx.ctl, X6100_REG_MONILEVEL, (uint32_t) g_monilvl);
 
+		if (g_micgain >= 0)
+			x6100_ctl_update(&tx.ctl, X6100_REG_AUDIO_GAIN, 0xFFFF0000u, (uint32_t) g_micgain << 16 | (uint32_t) g_micgain << 24);
+
 		if (!g_rf) {
 			x6100_ctl_update(&tx.ctl, X6100_REG_VFOA_BAND, 1, 0);
 			x6100_ctl_update(&tx.ctl, X6100_REG_VFOB_BAND, 1, 0);
@@ -813,7 +820,8 @@ int main(int argc, char **argv)
 	else if (cmd == CMD_CARRIER)
 		printf("%u Hz %s, power %.1f W\n", freq, mode_name, watts);
 	else if (cmd == CMD_MICREC)
-		printf("%u Hz %s, power %.1f W, monitor level %d; speak while keyed\n", freq, mode_name, watts, g_monilvl);
+		printf("%u Hz %s, power %.1f W, monitor level %d, mic gains %s; speak while keyed\n", freq, mode_name, watts,
+			g_monilvl, g_micgain >= 0 ? (g_micgain == 0 ? "0" : "set") : "default");
 	else
 		printf("%u Hz %s\n", freq, mode_name);
 

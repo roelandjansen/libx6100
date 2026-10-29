@@ -185,6 +185,11 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     /tmp/e4.wav` (no RF), `--rf` (with RF, compare), `--monilvl 0` (is it the monitor?).
     If E4 is yes: RADE store-and-forward (PTT: record the mic, no RF; release: send the
     over as RADE via codec TX), receive on the PC.
+    E4a (2026-10-29): no. With TX enable off the baseband does not key (tx=0): the capture
+    is the RX audio (-21.5 dBFS steady, SSB RX filter edge at 3 kHz), no monitor. The mic
+    reaches Linux only while really transmitting. Open: E4b (--rf, the bandwidth of the
+    monitor) and E4d (--rf --micgain 0: SSB sends nothing without mic audio; does the
+    monitor tap before the gain?).
 
 ## Next steps (suggested order)
 
