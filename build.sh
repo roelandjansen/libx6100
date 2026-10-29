@@ -205,6 +205,13 @@ deploy() {
 
 	settings_seed
 	deploy_wfserver
+
+	# The RADE benchmark (contrib/rade/build.sh), when built: small, copied every time
+	if [[ -x "${C_OUT}/rade/rade_tx_wav" ]]; then
+		ssh -- "${G_HOST}" "mkdir -p /root/rade"
+		scp -q -- "${C_OUT}"/rade/* "${G_HOST}:/root/rade/"
+		printf 'deployed %s to %s:/root/rade (run /root/rade/rade_bench.sh)\n' "${C_OUT}/rade" "${G_HOST}"
+	fi
 }
 
 #

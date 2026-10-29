@@ -169,6 +169,9 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
    (`x6100_netaudio_design.md`).
 3. liquid-dsp in use: network audio / RADE (Icom LAN server design in
    `x6100_netaudio_design.md`), recordings, RX / TX equaliser.
+   RADE on the R16: benchmark ready (`contrib/rade`: rade_c built with zig, `rade_bench.sh`
+   on the radio prints the real-time factor of V1 / V2 encode and decode); build on the
+   PC and run it, then decide (2026-10-29).
 4. Measurements: S-meter calibration, codec level against ALC.
 5. CTCSS for the repeaters (see TODO: no tone encoder known, mic bypasses Linux).
 6. Later: own buildroot, self-contained (now the IU1WXY image is the base): a full image
