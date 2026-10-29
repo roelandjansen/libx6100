@@ -157,6 +157,9 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     SerialPortRadio must be /tmp/x6100-civ (not auto), WaterfallFormat 1 loses the
     scope, `wfserver off` / `on` lost the audio (fixed: stop waits for wfserver). Open:
     TX audio, CPU load, dropouts, the audio after the fix, why combined mode fails.
+    2026-10-29: TX audio from wfview works (USB-D, DATA MOD USB: CAT PTT keys codec TX,
+    PC audio heard on the IC-7851); tuner in / out and tune cycle from wfview work.
+    Open: CPU load, dropouts, why combined scope mode fails.
 18. RADE in x6100_trx: the codec has one input and one output to the baseband, both
     switched by register 12 bit 0x8 (play mode). RX listening locally has no known path
     (decoding needs the RX audio in the capture, 0x8 off; the speaker plays Linux audio
