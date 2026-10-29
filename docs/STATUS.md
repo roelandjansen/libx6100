@@ -177,7 +177,9 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
    built: 0.65-0.71 with a signal; V1 with no signal 1.49 (pilot search, scalar code):
    NEON did not help (A7 NEON no faster than VFP: 171 ms per search, frame 120 ms);
    rade_acq_fft.patch does the search with FFTs (13 instead of 98 million operations,
-   same detection), to measure on the radio.
+   same detection): search 170 -> 51.5 ms per frame. Result 2026-10-29: V1 encode 0.42-0.45,
+   2-thread decode 0.61-0.65, no signal 0.48-0.52 (x6100_trx off / on): RADE V1 runs on
+   the R16. Next, if wanted: RADE in x6100_trx (TX via codec, RX two threads).
 4. Measurements: S-meter calibration, codec level against ALC.
 5. CTCSS for the repeaters (see TODO: no tone encoder known, mic bypasses Linux).
 6. Later: own buildroot, self-contained (now the IU1WXY image is the base): a full image

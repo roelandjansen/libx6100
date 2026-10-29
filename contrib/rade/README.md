@@ -97,6 +97,24 @@ With a signal the two-thread receiver fits. With no signal, V1 does not: while i
 in sync, the receiver searches for the pilots once per 120 ms modem frame, and that
 search costs more than decoding.
 
+Fourth run, with `rade_acq_fft.patch` (below), x6100_trx off / on:
+
+| Step | V1 | V2 |
+|---|---|---|
+| encode (TX) | 0.42 / 0.45 | 0.44 / 0.48 |
+| decode, 2 threads (`rade_rx_mt`) | 0.61 / 0.65 | 0.63 / 0.68 |
+| no signal (10 s of noise) | **0.48 / 0.52** | - / 0.05 |
+| `acq_test`: pilot search per 120 ms frame | 170.1 -> 51.5 ms | |
+
+Everything below 1: the R16 runs RADE V1 in real time, transmit and receive, with x6100_trx
+running. A live receiver needs about 0.65 of one core plus FARGAN on a second; two of the
+four cores stay for x6100_trx and wfserver.
+
+Possible further gain in the search (about 51 -> 25 ms, not done): two FFTs of 1152 points
+per frequency instead of one of 4096 (Dt1 and Dt2 each need 960 lags; the pilots then fit
+the A7's 512 kB L2), and one magnitude pass instead of two (the maximum search and the
+threshold sums visit the grid in the same order).
+
 ## Patch: V1 pilot search with FFTs (`rade_acq_fft.patch`)
 
 What the search does (`rade_acq_detect_pilots()` in rade_c's `src/rade_acq.c`): while
