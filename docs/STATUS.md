@@ -172,6 +172,9 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     -22.5. No mic and no speaker path for Linux: RADE inside x6100_trx is not possible with
     the known controls (E2 moot). RADE goes through the PC: wfview / wfserver + FreeDV,
     TX audio via DATA MOD USB (item 17).
+    E1b, the other codec inputs (Mic1 carries the baseband RX audio): `x6100_mixer list`
+    (which capture switches the codec has), then `x6100_audio 14236000 usb 10
+    /tmp/e1b.wav --input mic2|line|mixer [--play-mode]`, speaking into the hand mic.
 
 ## Next steps (suggested order)
 

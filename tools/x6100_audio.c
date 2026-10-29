@@ -13,6 +13,10 @@
  * plugged in, or --mic int / hand) and watch the RMS per second. --micgain sets both mic gains
  * (register 20; the stock UI uses 0 when it records a voice memo). Cleared on exit.
  *
+ * --input mic2|line|mixer captures one other codec input instead of Mic1 (where the
+ * baseband delivers the RX audio): is the hand mic wired to one of them? x6100_mixer list
+ * shows which switches the codec has. Mic1 again on exit.
+ *
  * --iq sets the auxiqen bit (register 21 bit 6, "IQ OUT EN" in the stock UI)
  * to test whether the baseband then delivers IQ on the codec input.
  *
@@ -29,7 +33,7 @@
  * writes 12 kHz mono 16-bit (WSJT-X File > Open format); <seconds> is ignored.
  * The radio clock must be on UTC time within about a second (NTP).
  *
- * Usage: x6100_audio <freq_hz> <mode> <seconds> <out.wav> [--iq] [--rate N] [--ft8] [--boost 0-7] [--agc off|slow|fast|auto] [--rfg 0-100] [--lpf] [--play-mode] [--mic int|hand|auto] [--micgain 0-100]
+ * Usage: x6100_audio <freq_hz> <mode> <seconds> <out.wav> [--iq] [--rate N] [--ft8] [--boost 0-7] [--agc off|slow|fast|auto] [--rfg 0-100] [--lpf] [--play-mode] [--mic int|hand|auto] [--micgain 0-100] [--input mic1|mic2|line|mixer]
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -69,6 +73,36 @@ static const char *argv_gain(int gain)
 	snprintf(s, sizeof(s), "%d (both)", gain);
 
 	return s;
+}
+
+// --input: codec capture input; -1 when unknown
+static int parse_input(const char *s)
+{
+	return strcmp(s, "mic1") == 0 ? 0 : strcmp(s, "mic2") == 0 ? 1 : strcmp(s, "line") == 0 ? 2
+		: strcmp(s, "mixer") == 0 ? 3 : -1;
+}
+
+//
+// Codec capture from one input only (R16 codec: one capture switch per input); a switch
+// this codec does not have is reported, which is an answer too
+//
+
+static void set_input(int input, int boost)
+{
+	static const char *sw[] = { "Mic1 Capture Switch", "Mic2 Capture Switch", "Line In Capture Switch",
+		"Mixer Capture Switch" };
+	int rc;
+
+	for (int i = 0; i < 4; i++) {
+		if ((rc = x6100_mixer_set(X6100_PCM_CARD, sw[i], i == input)) < 0)
+			fprintf(stderr, "input: %s: %s\n", sw[i], strerror(-rc));
+	}
+
+	if (input == 1 && (rc = x6100_mixer_set(X6100_PCM_CARD, "Mic2 Boost Volume", boost)) < 0)
+		fprintf(stderr, "input: Mic2 Boost Volume: %s\n", strerror(-rc));
+
+	if (input != 0)
+		printf("capture input: %s only\n", sw[input]);
 }
 
 // --mic: register 21 mic select; -2 when unknown
@@ -263,7 +297,7 @@ static void wait_slot(void)
 
 static void usage(const char *argv0)
 {
-	fprintf(stderr, "usage: %s <freq_hz> <usb|lsb|cw|cwr|am|nfm> <seconds> <out.wav> [--iq] [--rate N] [--ft8] [--boost 0-7] [--agc off|slow|fast|auto] [--rfg 0-100] [--lpf] [--play-mode] [--mic int|hand|auto] [--micgain 0-100]\n", argv0);
+	fprintf(stderr, "usage: %s <freq_hz> <usb|lsb|cw|cwr|am|nfm> <seconds> <out.wav> [--iq] [--rate N] [--ft8] [--boost 0-7] [--agc off|slow|fast|auto] [--rfg 0-100] [--lpf] [--play-mode] [--mic int|hand|auto] [--micgain 0-100] [--input mic1|mic2|line|mixer]\n", argv0);
 }
 
 int main(int argc, char **argv)
@@ -280,6 +314,7 @@ int main(int argc, char **argv)
 	int rfg = -1;
 	int mic = -1;		/* register 21 [1:0]: 0 internal, 1 hand, 2 auto; -1 library default (auto) */
 	int micgain = -1;	/* register 20 [23:16] and [31:24]; -1 library default (30 / 20) */
+	int input = 0;		/* codec capture input: 0 Mic1 (the baseband RX audio), 1 Mic2, 2 Line In, 3 mixer */
 	static int16_t buf[PERIOD * CHANNELS];
 	unsigned rate = DEF_RATE;
 	bool iq = false;
@@ -309,6 +344,8 @@ int main(int argc, char **argv)
 			ft8 = true;
 		else if (strcmp(argv[i], "--agc") == 0 && i + 1 < argc)
 			agc = parse_agc(argv[++i]);
+		else if (strcmp(argv[i], "--input") == 0 && i + 1 < argc)
+			input = parse_input(argv[++i]);
 		else if (strcmp(argv[i], "--mic") == 0 && i + 1 < argc)
 			mic = parse_mic(argv[++i]);
 		else if (strcmp(argv[i], "--micgain") == 0 && i + 1 < argc)
@@ -325,7 +362,7 @@ int main(int argc, char **argv)
 		}
 	}
 
-	if (freq < 100000 || freq > 60000000 || seconds < 1 || agc == -2 || rfg > 100 || mic == -2 || micgain > 100) {
+	if (freq < 100000 || freq > 60000000 || seconds < 1 || agc == -2 || rfg > 100 || mic == -2 || micgain > 100 || input < 0) {
 		usage(argv[0]);
 		return 1;
 	}
@@ -392,6 +429,9 @@ int main(int argc, char **argv)
 
 	if ((rc = x6100_mixer_rx_setup(X6100_PCM_CARD, boost)) < 0)
 		fprintf(stderr, "warning: mixer setup: %s\n", strerror(-rc));
+
+	if (input != 0)
+		set_input(input, boost);
 
 	printf("capture: Mic1 boost %d (%s)\n", boost, boost == 0 ? "0 dB" : boost == 1 ? "+24 dB" : "+27 dB or more");
 
@@ -527,6 +567,9 @@ int main(int argc, char **argv)
 	x6100_ctl_update(&ctl, X6100_REG_MIC_PTT_SQL, 1u << 6, 0);
 	x6100_ctl_set(&ctl, X6100_REG_RXVOL, 0);
 	x6100_ctl_set(&ctl, X6100_REG_FLAGS, 0);	/* play mode off again */
+
+	if (input != 0)
+		set_input(0, boost);	/* Mic1 again: x6100_trx and wfserver expect the RX audio there */
 	x6100_ctl_sync(&ctl);
 
 	printf("wrote %s: %u Hz %u ch, %u bytes, %.1f s\n", argv[4], out_rate, out_ch, data_bytes, (double) total / pcm.rate);
