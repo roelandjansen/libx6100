@@ -26,6 +26,8 @@
  *       capture to a WAV and prints its level with tx / power / ALC once a second. Test E4
  *       (RADE): with the monitor the mic reaches the capture while keyed (E3, 2026-10-29);
  *       does it without RF too? --monilvl 0: is it the monitor at all?
+ *       At the end: the spectrum of the capture (bands, -20 dB upper edge): the audio
+ *       bandwidth the monitor delivers.
  *
  * Safety:
  *   - power 0.1 .. 10 W, default 1.0 W; duration 1 .. 30 s
@@ -380,6 +382,136 @@ static int do_tx(tx_t *tx, cmd_t cmd, int seconds, double tone_hz, double level_
 }
 
 //
+// micrec spectrum: the capture (left channel) averaged over SPEC_N-point frames, Hann
+// window; at the end band levels and the -20 dB upper edge (the audio bandwidth)
+//
+
+#define SPEC_N		4096		/* 11.7 Hz per bin at 48 kHz */
+
+static float g_spec_buf[SPEC_N];	/* samples of the frame being filled */
+static int g_spec_fill;
+static double g_spec[SPEC_N / 2];	/* power per bin, summed over frames */
+static int g_spec_frames;
+
+// In-place radix-2 FFT, n a power of two
+static void fft(float *re, float *im, int n)
+{
+	for (int i = 1, j = 0; i < n; i++) {
+		int bit = n >> 1;
+
+		for (; j & bit; bit >>= 1)
+			j ^= bit;
+
+		j ^= bit;
+
+		if (i < j) {
+			float t = re[i];
+
+			re[i] = re[j];
+			re[j] = t;
+			t = im[i];
+			im[i] = im[j];
+			im[j] = t;
+		}
+	}
+
+	for (int len = 2; len <= n; len <<= 1) {
+		double a = -2.0 * M_PI / len;
+
+		for (int i = 0; i < n; i += len) {
+			for (int k = 0; k < len / 2; k++) {
+				float wr = (float) cos(a * k), wi = (float) sin(a * k);
+				float xr = re[i + k + len / 2] * wr - im[i + k + len / 2] * wi;
+				float xi = re[i + k + len / 2] * wi + im[i + k + len / 2] * wr;
+
+				re[i + k + len / 2] = re[i + k] - xr;
+				im[i + k + len / 2] = im[i + k] - xi;
+				re[i + k] += xr;
+				im[i + k] += xi;
+			}
+		}
+	}
+}
+
+// One capture sample (left channel); a full frame is windowed, transformed and added
+static void spec_add(int16_t s)
+{
+	static float re[SPEC_N], im[SPEC_N];
+
+	g_spec_buf[g_spec_fill++] = s / 32768.0f;
+
+	if (g_spec_fill < SPEC_N)
+		return;
+
+	for (int i = 0; i < SPEC_N; i++) {
+		re[i] = g_spec_buf[i] * (float) (0.5 - 0.5 * cos(2.0 * M_PI * i / (SPEC_N - 1)));
+		im[i] = 0.0f;
+	}
+
+	fft(re, im, SPEC_N);
+
+	for (int i = 0; i < SPEC_N / 2; i++)
+		g_spec[i] += (double) re[i] * re[i] + (double) im[i] * im[i];
+
+	g_spec_frames++;
+	g_spec_fill = 0;
+}
+
+// Mean power density (per bin) over lo..hi Hz
+static double spec_band(double lo, double hi)
+{
+	const double hz = (double) RATE / SPEC_N;
+	double sum = 0.0;
+	int n = 0;
+
+	for (int i = (int) (lo / hz); i < SPEC_N / 2 && i * hz < hi; i++, n++)
+		sum += g_spec[i];
+
+	return n ? sum / n : 0.0;
+}
+
+static void spec_report(void)
+{
+	static const int C_EDGES[] = { 100, 300, 500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 5000, 6000, 8000,
+		12000, 24000 };
+	double top = 0.0, edge_ref = 0.0;
+	int edge = 0;
+
+	if (g_spec_frames == 0)
+		return;
+
+	// Bands relative to the strongest band (density, so wide and narrow bands compare)
+	for (size_t i = 0; i + 1 < sizeof(C_EDGES) / sizeof(C_EDGES[0]); i++) {
+		double p = spec_band(C_EDGES[i], C_EDGES[i + 1]);
+
+		top = p > top ? p : top;
+	}
+
+	printf("spectrum of the capture (%d frames of %d samples, left channel), dB to the strongest band:\n",
+		g_spec_frames, SPEC_N);
+
+	for (size_t i = 0; i + 1 < sizeof(C_EDGES) / sizeof(C_EDGES[0]); i++) {
+		double p = spec_band(C_EDGES[i], C_EDGES[i + 1]);
+
+		printf("  %5d - %5d Hz  %6.1f dB\n", C_EDGES[i], C_EDGES[i + 1], 10.0 * log10(p / top + 1e-12));
+	}
+
+	// Upper edge: the highest 100 Hz band within 20 dB of the strongest 100 Hz band (to 12 kHz)
+	for (int f = 100; f < 12000; f += 100) {
+		double p = spec_band(f, f + 100);
+
+		edge_ref = p > edge_ref ? p : edge_ref;
+	}
+
+	for (int f = 100; f < 12000; f += 100) {
+		if (spec_band(f, f + 100) >= edge_ref / 100.0)
+			edge = f + 100;
+	}
+
+	printf("  -20 dB upper edge: about %d Hz (speak or whistle the whole time for a fair reading)\n", edge);
+}
+
+//
 // 16-bit PCM WAV header (data size patched at the end)
 //
 
@@ -455,6 +587,9 @@ static int do_micrec(tx_t *tx, int seconds, const char *path)
 		}
 
 		fwrite(buf, 4, (size_t) got, wav);
+
+		for (ssize_t i = 0; i < got; i++)
+			spec_add(buf[2 * i]);
 		bytes += (uint32_t) got * 4;
 
 		for (ssize_t i = 0; i < got * 2; i++) {
@@ -506,6 +641,7 @@ static int do_micrec(tx_t *tx, int seconds, const char *path)
 	fclose(wav);
 	x6100_pcm_close(&pcm);
 	printf("PTT off; wrote %s (%u Hz, 2 ch, %.1f s)\n", path, RATE, bytes / (4.0 * RATE));
+	spec_report();
 
 	return result;
 }
