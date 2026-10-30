@@ -841,11 +841,6 @@ static int g_am_ofs = AM_OFS_DEF;	/* conf / console token am_offset, 0 = off; AG
 static int g_ifshift = IFSHIFT_DEF;	/* conf / console token ifshift, Hz, 0 = off */
 static int g_ifshift_tx = 1;	/* conf / console token ifshift_tx 0 / 1: keep the shift while keyed */
 
-// Register 21 [3:2] pttmode: written by no known GUI (always 0); console token pttmode
-// 0-3 to test whether it selects VOX (VOX on in register 22 keys nothing on BASE 1.1.9,
-// in IU1WXY neither, 2026-10-30). Not saved.
-static int g_pttmode;
-
 static bool bscan_running(void);
 
 static int lo_shift(const rx_t *rx)
@@ -1208,7 +1203,7 @@ static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 	// TX audio: mic gains (line in / out levels kept), mic select and squelch (charger,
 	// speaker and aux IQ bits of register 21 kept), VOX, compressor, monitor
 	x6100_ctl_update(ctl, X6100_REG_AUDIO_GAIN, 0xFFFF0000u, X6100_R20(0, 0, rx->imicg, rx->hmicg));
-	x6100_ctl_update(ctl, X6100_REG_MIC_PTT_SQL, 0x0000FF0Fu, X6100_R21(rx->micsel, g_pttmode, 0, 0, 0, rx->sql));
+	x6100_ctl_update(ctl, X6100_REG_MIC_PTT_SQL, 0x0000FF03u, X6100_R21(rx->micsel, 0, 0, 0, 0, rx->sql));
 	x6100_ctl_set(ctl, X6100_REG_VOX, X6100_R22(rx->voxg, rx->voxag, rx->voxdly, rx->vox));
 	x6100_ctl_set(ctl, X6100_REG_CMP, X6100_R25(rx->cmp_lvl, rx->cmp));
 	x6100_ctl_set(ctl, X6100_REG_MONILEVEL, rx->moni ? (uint32_t) rx->moni_lvl : 0);
@@ -1674,7 +1669,9 @@ static void xpar_text(const rx_t *rx, int i, char *s, size_t n)
 {
 	xpar_token(rx, i, s, n);
 
-	if (i == XP_VOXDLY)
+	if (i == XP_VOX)	/* register 22 is written, but BASE 1.1.9 keys nothing (2026-10-30) */
+		snprintf(s + strlen(s), n - strlen(s), " N/A");
+	else if (i == XP_VOXDLY)
 		snprintf(s + strlen(s), n - strlen(s), " MS");
 	else if (i == XP_TOT && *xpar_value((rx_t *) rx, i) > 0)
 		snprintf(s + strlen(s), n - strlen(s), " MIN");
@@ -7804,13 +7801,6 @@ static bool console_line(rx_t *rx, char *line)
 			want_lvl = &g_am_ofs;
 			lvl_min = 0;
 			lvl_max = AM_OFS_MAX;
-			continue;
-		}
-
-		if (strcasecmp(t, "pttmode") == 0) {	/* register 21 [3:2], test only */
-			want_lvl = &g_pttmode;
-			lvl_min = 0;
-			lvl_max = 3;
 			continue;
 		}
 

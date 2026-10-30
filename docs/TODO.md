@@ -102,8 +102,8 @@ Status: 2026-10-30 (v0.14.0). Summary and next steps: `STATUS.md`.
 - TX panel (F4 long): mic select and gains, compressor, VOX, monitor, squelch built;
   ranges and register 22 layout now from X6100Control v0.16.1 (VOX: [6:0] gain, [14:8]
   anti-VOX, [29:16] delay, [30] on; confirmed by the IU1WXY trace 2026-10-30). VOX keys
-  nothing, in IU1WXY neither: not on BASE 1.1.9. Left: console pttmode 1-3 (register 21
-  [3:2], never written by any GUI) with VOX on, dummy load. Test on the
+  nothing, in IU1WXY neither, nor with register 21 [3:2] (pttmode) at 1-3: not on BASE
+  1.1.9; the panel shows VOX N/A (the register is still written). Test the rest on the
   radio. Line in / out levels (register 20 [7:0] / [15:8]) still fixed at 10.
 - Messages and SWR scan (built 2026-10-27, not tried on the radio): CW message keying
   and level against ALC (USB tone, -10 dBFS), voice WAV in LSB / AM / NFM (codec TX is

@@ -478,7 +478,8 @@ nothing changes until a value is set. Ranges and register layout as in X6100Cont
 | TX TIMEOUT | OFF, 1, 3, 5 MIN (3) | none: x6100_trx |
 
 VOX does not key on BASE 1.1.9 (2026-10-30: the IU1WXY GUI writes the same register 22
-and does not key either). Were it to work: VOX keys the baseband itself, as the hand mic PTT: x6100_trx follows the TX flag, so
+and does not key either; register 21 [3:2] at 1-3 neither). The panel shows VOX N/A; the
+settings are still written, for a later baseband. Were it to work: VOX keys the baseband itself, as the hand mic PTT: x6100_trx follows the TX flag, so
 with split or duplex the first few ms go out on the RX frequency. Kept in the state
 file. Console: `mic int|hand|auto`, `imicg 30`, `hmicg 20`, `comp on|off`,
 `complvl 1:2|1:4|1:8`, `vox on|off`, `voxg 50`, `antivox 0`, `voxdly 500`,

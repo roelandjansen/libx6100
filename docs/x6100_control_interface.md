@@ -109,8 +109,8 @@ it stays off while the mic PTT is held.
   in [29:16], gain 67 in [6:0]), off `01F40043`; gain steps in [6:0], anti-VOX in
   [14:8]. Nothing else is written with it. VOX keys nothing in IU1WXY either (BASE
   1.1.9, "Base is not patched"), as in x6100_trx: VOX does not work on this baseband.
-  Register 21 [3:2] (pttmode) stays 0 in every GUI known; x6100_trx has a console
-  token `pttmode 0-3` to try it.
+  Register 21 [3:2] (pttmode) stays 0 in every GUI known; set to 1, 2 and 3 with VOX on
+  (2026-10-30): no TX either.
 - Register 35 = `01000000`: IF shift off (centre mode); IU1WXY runs zero-IF.
 - Register 12 `0x1000` (ATU enable), register 21 `0x12` (mic AUTO, charger on).
 
