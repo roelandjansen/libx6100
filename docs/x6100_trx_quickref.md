@@ -162,6 +162,11 @@ Values are kept in the last state (see Settings); defaults NR 20, NB 10 / 10, no
 - STEP and status fields right-aligned, fixed width
 - S-meter: S0-S9, then S9+10 .. S9+60 in rounded 10 dB steps; dBm line exact
 - AGC default AUTO; AM / FM SLOW (AUTO squashes AM)
+- AM snaps to the channel raster: the AM/FM key into AM sets the step to the raster
+  (LW / MW 9 kHz, MW in region r2 10 kHz, above MW 5 kHz: the ITU short-wave raster)
+  and moves the dial to the nearest channel; the VFO then stays on the raster. Off
+  the carrier the baseband AM detector gives a tone. FST still offers 100 Hz / 1 kHz
+  for a station off the raster. Leaving AM by a mode key gives back the old step.
 - AM receives 100 Hz above the dial (AM OFFSET in the AGC long panel, console / conf
   `am_offset`, 0-1000, 0 = off): the baseband is zero
   IF and its DC notch takes part of the carrier when tuned exactly on it, which sounds

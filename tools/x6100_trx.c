@@ -171,6 +171,7 @@ typedef struct
 	int vol;
 	int rfg;
 	int step;
+	int step_pre_am;		/* step before the AMFM key put us in AM, 0 = none (am_mode) */
 	int band;
 	bool pre;
 	bool att;
@@ -2559,6 +2560,46 @@ static bool am_broadcast(const rx_t *rx)
 }
 
 //
+// AM snaps to the broadcast raster: off the carrier the baseband AM detector gives a
+// tone (2026-10-30, v0.13.0 too), so the mode keys put AM on the channel raster: the
+// step becomes the raster (LW / MW 9 kHz, US MW 10 kHz in r2, else 5 kHz) and the dial
+// the nearest channel; the VFO then stays on it (it steps on multiples of the step).
+// FST still offers the fine steps for a station off the raster. Leaving AM by a mode
+// key gives back the step from before, unless FST changed it meanwhile.
+//
+
+static int am_raster(const rx_t *rx)
+{
+	bool lw = rx->freq >= 148500 && rx->freq <= 283500;
+	bool mw = rx->freq >= 520000 && rx->freq <= 1710000;
+
+	if (mw && strcmp(g_regions[g_region].name, "r2") == 0)
+		return 10000;
+
+	return lw || mw ? 9000 : 5000;
+}
+
+static void am_mode(rx_t *rx, x6100_mode_t mode)
+{
+	bool was_am = rx->mode == X6100_MODE_AM;
+
+	rx->mode = mode;
+
+	if (!was_am && mode == X6100_MODE_AM) {
+		int r = am_raster(rx);
+
+		rx->step_pre_am = rx->step;
+		rx->step = r;
+		set_freq(rx, ((int64_t) rx->freq + r / 2) / r * r);
+	} else if (was_am && mode != X6100_MODE_AM && rx->step_pre_am != 0) {
+		if (rx->step == am_raster(rx))
+			rx->step = rx->step_pre_am;
+
+		rx->step_pre_am = 0;
+	}
+}
+
+//
 // 60 m channels: on 60 m, FST also offers CH, and the VFO knob then steps through
 // the region's channel list (dial frequencies, USB).
 //   r2: the US channels (FCC; national, outside the WRC-15 segment the TX check
@@ -2941,13 +2982,13 @@ static bool on_key(rx_t *rx, int key)
 		band_step(rx, -1);
 		break;
 	case X6100_KEY_SSB:
-		rx->mode = rx->mode == X6100_MODE_USB ? X6100_MODE_LSB : X6100_MODE_USB;
+		am_mode(rx, rx->mode == X6100_MODE_USB ? X6100_MODE_LSB : X6100_MODE_USB);
 		break;
 	case X6100_KEY_CW:
-		rx->mode = rx->mode == X6100_MODE_CW ? X6100_MODE_CWR : X6100_MODE_CW;
+		am_mode(rx, rx->mode == X6100_MODE_CW ? X6100_MODE_CWR : X6100_MODE_CW);
 		break;
 	case X6100_KEY_AMFM:
-		rx->mode = rx->mode == X6100_MODE_AM ? X6100_MODE_NFM : X6100_MODE_AM;
+		am_mode(rx, rx->mode == X6100_MODE_AM ? X6100_MODE_NFM : X6100_MODE_AM);
 		break;
 	case X6100_KEY_PRE:
 		rx->pre = !rx->pre;

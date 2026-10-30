@@ -52,8 +52,8 @@ Status: 2026-10-30 (v0.14.0). Summary and next steps: `STATUS.md`.
   detector itself (a beat with what is left at the zero-IF receive frequency, or a
   synchronous detector out of lock). The AM offset puts the receiver that far off the
   carrier, so on a weak station 500 Hz was already enough: offset now 100 Hz. Open:
-  smooth onset or sudden (lock range), strong vs weak station; maybe an AM tuning step
-  that lands on the carrier (5 kHz SW, 9 kHz MW).
+  smooth onset or sudden (lock range), strong vs weak station. The mode key now puts AM
+  on the channel raster (5 kHz SW, 9 / 10 kHz MW), 2026-10-30: to check on the radio.
 - AM PBT and the filter panel PBT box (2026-10-29): to check on the radio (PBT in USB
   from wfview verified). AM passband now: upper edge at Icom's H, lower 2 x offset
   inside; the RF scope shows where it sits.
