@@ -1,6 +1,6 @@
 # libx6100 / x6100_trx — to do
 
-Status: 2026-10-27 (v0.13.0). Summary and next steps: `STATUS.md`.
+Status: 2026-10-30 (v0.14.0). Summary and next steps: `STATUS.md`.
 
 ## Display
 
@@ -46,6 +46,19 @@ Status: 2026-10-27 (v0.13.0). Summary and next steps: `STATUS.md`.
   - next: pick a strong birdie that is also clearly seen / heard on the radio, then
     tick on the scope line, its audio pitch on the audio scope, the notch and its
     tolerance (as for 14064726: USB dial 14.064.000 = 726 Hz)
+- AM tone at the receive offset (2026-10-29, weak SW station, FIL ±4.5 kHz): the pitch
+  follows the AM offset (500 -> 200 Hz: lower) and the dial; PBT -300 hid it. Likely the
+  leftover at the zero-IF receive frequency (DC / LO residue past the DC notch) beating
+  with the carrier; a lower offset distorts (the notch). Offset now 100 Hz. To check:
+  the same on a strong and a weak station (tone on every station, louder on weak ones =
+  the leftover); a separate peak on the RF scope or not. Ideas: a wider DC notch is not
+  ours to set; IQ DC removal before the baseband AM detector is not reachable either,
+  so maybe a register (DC / LO cancel) in the stock UI trace.
+- AM PBT and the filter panel PBT box (2026-10-29): to check on the radio (PBT in USB
+  from wfview verified). AM passband now: upper edge at Icom's H, lower 2 x offset
+  inside; the RF scope shows where it sits.
+- wfserver: CPU load and audio dropouts on the radio; why the combined scope mode
+  fails (WaterfallFormat 0 works).
 - S-meter calibration (signal generator): SMETER_CAL_DB is provisional (-21: -15 from
   an IC-7851 comparison, then 6 dB lower); also the overload point with PRE / ATT.
 - Codec level vs ALC test (x6100_tx codec at -40 / -30 / -20 dBFS).
@@ -152,8 +165,8 @@ under GEN until a better key turns up.
 - Now: the IU1WXY image (OS, kernel 6.1.82, stock baseband BASE 1.1.9) is the base;
   x6100_trx and its tools run on it (`build.sh deploy`). wfserver for the R16 is built
   as a self-contained bundle (`contrib/wfserver`, Ubuntu 24.04 armhf Qt, own glibc
-  loader; 2026-10-28), so it does not need the IU1WXY buildroot tree. To do: run it on
-  the radio (STATUS item 17); report
+  loader; 2026-10-28), so it does not need the IU1WXY buildroot tree. Runs on the radio
+  (2026-10-29: wfview RX / TX audio, scope, CAT verified). To do: report
   the no-audio-device crash to wfview (findInput -1). `build.sh deploy` installs the
   bundle (out/wfserver-armhf.tar.gz) when it changed; `x6100_ui.sh stop` starts it
   (watcher on the CI-V pty), `start` stops it.
