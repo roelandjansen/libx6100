@@ -827,20 +827,30 @@ static int g_am_ofs = AM_OFS_DEF;	/* conf / console token am_offset, 0 = off; AG
 // frequency minus the shift, the baseband receives that much above its LO, so the
 // DC / LO spike of the zero-IF receiver sits g_ifshift Hz away from the passband
 // instead of in it. In AM that spike beat with the carrier (a tone off the carrier,
-// 2026-10-30); with the shift the AM offset is not needed and stays 0. AM only for
-// now, not while keyed (TX on the real frequency) nor during a birdie scan.
+// 2026-10-30, gone with the shift); the AM offset is then not needed and stays 0. In
+// SSB / CW it keeps the spike off the receive line. All modes since 2026-10-30, not
+// during a birdie scan (it needs the IQ centre on the dial). While keyed the shift is
+// off (TX on the real frequency) unless g_ifshift_tx: whether the baseband applies the
+// shift in TX too (OpenX6X00 keeps it) is to be checked; if so it can stay on, and the
+// CW keyer / hand mic / VOX no longer cause a retune at every key down.
 //
 
 #define IFSHIFT_DEF	10000
 #define IFSHIFT_MAX	40000
 
 static int g_ifshift = IFSHIFT_DEF;	/* conf / console token ifshift, Hz, 0 = off */
+static int g_ifshift_tx;		/* conf / console token ifshift_tx 0 / 1: keep the shift while keyed */
 
 static bool bscan_running(void);
 
 static int lo_shift(const rx_t *rx)
 {
-	return rx->mode == X6100_MODE_AM && !bscan_running() ? g_ifshift : 0;
+	// CW: the baseband keys every element by itself (QSK); without ifshift_tx that
+	// would retune at every key down, so CW waits until the TX test is done
+	if (!g_ifshift_tx && (rx->mode == X6100_MODE_CW || rx->mode == X6100_MODE_CWR))
+		return 0;
+
+	return !bscan_running() ? g_ifshift : 0;
 }
 
 static int am_ofs(const rx_t *rx)
@@ -1136,7 +1146,7 @@ static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 
 	// IF shift: the LO below the receive frequency, the spike out of the passband
 	{
-		int shift = keyed ? 0 : lo_shift(rx);
+		int shift = keyed && !g_ifshift_tx ? 0 : lo_shift(rx);
 
 		x6100_set_freq(ctl, 0, (uint32_t) ((int64_t) hz - shift));
 		x6100_set_freq(ctl, 1, (uint32_t) ((int64_t) hz - shift));
@@ -7783,7 +7793,14 @@ static bool console_line(rx_t *rx, char *line)
 			continue;
 		}
 
-		if (strcasecmp(t, "ifshift") == 0) {	/* IF shift in AM, Hz, 0 = off (register 35) */
+		if (strcasecmp(t, "ifshift_tx") == 0) {	/* 1: keep the IF shift while keyed (to test) */
+			want_lvl = &g_ifshift_tx;
+			lvl_min = 0;
+			lvl_max = 1;
+			continue;
+		}
+
+		if (strcasecmp(t, "ifshift") == 0) {	/* IF shift, Hz, 0 = off (register 35) */
 			want_lvl = &g_ifshift;
 			lvl_min = -IFSHIFT_MAX;
 			lvl_max = IFSHIFT_MAX;
@@ -7906,7 +7923,7 @@ static void state_save(const rx_t *rx)
 	fprintf(fp, "vfob %u %s fil%d vfo %s\n", (unsigned) rx->b_freq, modes[rx->b_mode], rx->b_fil + 1, rx->on_b ? "b" : "a");
 	fprintf(fp, "%s %s %s ritofs %d pbtin %d pbtout %d\n", rx->split ? "txsplit" : "notxsplit", rx->rit ? "rit" : "norit",
 		rx->xit ? "xit" : "noxit", rx->rit_hz, rx->pbt_in, rx->pbt_out);
-	fprintf(fp, "%s dupshift %d am_offset %d ifshift %d\n", g_dup_tok[rx->dup], rx->dup_khz, g_am_ofs, g_ifshift);
+	fprintf(fp, "%s dupshift %d am_offset %d ifshift %d ifshift_tx %d\n", g_dup_tok[rx->dup], rx->dup_khz, g_am_ofs, g_ifshift, g_ifshift_tx);
 	fprintf(fp, "vol %d %s rfg %d pwr %.1f\n", rx->vol, rx->mute ? "mute" : "nomute", rx->rfg, rx->txpwr / 10.0);
 	fprintf(fp, "keytype %d wpm %d iambic %d cwpitch %d cwvol %d qsk %d ratio %d.%d\n", rx->keymode, rx->wpm, rx->iambic,
 		rx->cwtone, rx->cwvol, rx->qsk, rx->ratio / 10, rx->ratio % 10);

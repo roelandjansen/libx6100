@@ -167,7 +167,7 @@ Values are kept in the last state (see Settings); defaults NR 20, NB 10 / 10, no
   and moves the dial to the nearest channel; the VFO then stays on the raster. Off
   the carrier the baseband AM detector gives a tone. FST still offers 100 Hz / 1 kHz
   for a station off the raster. Leaving AM by a mode key gives back the old step.
-- AM uses the baseband IF shift (register 35, console / conf `ifshift`, Hz, default
+- The receiver uses the baseband IF shift (register 35, console / conf `ifshift`, Hz, default
   10000, 0 = off): the LO sits 10 kHz below the receive frequency, so the DC / LO
   spike of the zero-IF receiver (seen on the scope as a carrier at S3-4) lies outside
   the passband. It beat with the carrier as a tone off the carrier. With the shift the
@@ -178,6 +178,11 @@ Values are kept in the last state (see Settings); defaults NR 20, NB 10 / 10, no
   Off while transmitting and during a birdie scan. Verified 2026-10-30: the spike moved
   10 kHz left, the carrier sits on the receive line. If a
   station is heard 20 kHz off, the sign is the other way (`ifshift -10000`).
+  All modes since 2026-10-30 (SSB: the spike no longer adds to the S-meter), except CW
+  until the TX test: while keyed the shift is off (TX on the real frequency), so a
+  baseband-keyed TX (CW keyer, hand mic, VOX) retunes at key down. `ifshift_tx 1`
+  keeps the shift in TX and enables it in CW: only after checking on a dummy load that
+  the baseband then transmits on the dial frequency (not 10 kHz low).
 - With `ifshift 0`:
   AM receives 100 Hz above the dial (AM OFFSET in the AGC long panel, console / conf
   `am_offset`, 0-1000, 0 = off): the baseband is zero
@@ -305,7 +310,8 @@ The status line starts with the VFO in use (A / B); with split, RIT or XIT it ad
 | `pbtin -1250-1250`, `pbtout -1250-1250` | twin PBT shifts in Hz (0 = centre; CI-V 14 07 / 08, wfview); in AM as a receive offset plus symmetric narrowing (the baseband filter is symmetric), not in FM; the FIL label shows PBT while it acts; `pbtin 0 pbtout 0` resets |
 | `dupauto`, `dupoff`, `dup-`, `dup+`, `dupshift 10-10000` | repeater duplex, shift in kHz |
 | `am_offset 100` | AM receive offset above the dial, 0-1000 Hz (0 = off), only with `ifshift 0`; also AGC long, row AM OFFSET |
-| `ifshift 10000` | IF shift in AM, -40000 to 40000 Hz (0 = off): the LO that far below the receive frequency, the DC spike out of the passband |
+| `ifshift 10000` | IF shift, -40000 to 40000 Hz (0 = off): the LO that far below the receive frequency, the DC spike out of the passband (not CW without `ifshift_tx 1`) |
+| `ifshift_tx 0` | 1: keep the IF shift while transmitting, and use it in CW (after the dummy load test) |
 | `step ch` | 60 m channel steps |
 | `memr` | list the used memory channels |
 | `memr 5`, `memw 5`, `memc 5` | recall / write the VFO into / clear memory channel 5 |

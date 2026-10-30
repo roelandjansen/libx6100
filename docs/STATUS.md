@@ -173,7 +173,8 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     beating with the carrier. 2026-10-30: AM snaps to the channel raster on the mode
     keys, and AM uses the baseband IF shift (register 35, ifshift 10000; AM offset then
     0): verified (spike 10 kHz left, carrier on the receive line; the scope bridges
-    the spike); the tone off the carrier still to check.
+    the spike); the tone off the carrier is gone. Shift in SSB too; CW and the shift in
+    TX (ifshift_tx 1) wait for a dummy load test.
     Open: CPU load, dropouts, why combined scope mode fails.
 18. RADE in x6100_trx: the codec has one input and one output to the baseband, both
     switched by register 12 bit 0x8 (play mode). RX listening locally has no known path
