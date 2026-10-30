@@ -103,6 +103,17 @@ Running TX (2026-10-27, hand mic PTT, x6100_trx TOT): a new TX power (register 1
 written); clearing the TX enable bits (registers 0 / 6, "ham band") stops it at once, and
 it stays off while the mic PTT is held.
 
+### VOX and IF shift in the IU1WXY GUI (traced 2026-10-30, x6100_i2csniff)
+
+- VOX: register 22 exactly as x6100_trx writes it: on `41F40043` (bit 30, delay 500 ms
+  in [29:16], gain 67 in [6:0]), off `01F40043`; gain steps in [6:0], anti-VOX in
+  [14:8]. Nothing else is written with it. VOX keys nothing in IU1WXY either (BASE
+  1.1.9, "Base is not patched"), as in x6100_trx: VOX does not work on this baseband.
+  Register 21 [3:2] (pttmode) stays 0 in every GUI known; x6100_trx has a console
+  token `pttmode 0-3` to try it.
+- Register 35 = `01000000`: IF shift off (centre mode); IU1WXY runs zero-IF.
+- Register 12 `0x1000` (ATU enable), register 21 `0x12` (mic AUTO, charger on).
+
 ### SWR scan and voice record flags in R1CBU's x6100_gui (traced 2026-10-27)
 
 Read from x6100_gui (strijar/x6100_gui 3f009c4, LGPL-2.1, `radio.c`, `dialog_swrscan.c`,
