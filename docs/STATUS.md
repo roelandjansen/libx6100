@@ -172,7 +172,8 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     AM tone off the carrier (v0.13.0 too): the zero-IF DC / LO spike (S3-4 on the scope)
     beating with the carrier. 2026-10-30: AM snaps to the channel raster on the mode
     keys, and AM uses the baseband IF shift (register 35, ifshift 10000; AM offset then
-    0): to check on the radio.
+    0): verified (spike 10 kHz left, carrier on the receive line; the scope bridges
+    the spike); the tone off the carrier still to check.
     Open: CPU load, dropouts, why combined scope mode fails.
 18. RADE in x6100_trx: the codec has one input and one output to the baseband, both
     switched by register 12 bit 0x8 (play mode). RX listening locally has no known path

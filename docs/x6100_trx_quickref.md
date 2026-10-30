@@ -173,7 +173,10 @@ Values are kept in the last state (see Settings); defaults NR 20, NB 10 / 10, no
   the passband. It beat with the carrier as a tone off the carrier. With the shift the
   receiver sits on the carrier and the AM offset below is not used; the RF scope maps
   the IQ around the LO, so at the widest span the last 10 kHz on the right stay empty.
-  Off while transmitting and during a birdie scan. New on 2026-10-30, to check: if a
+  The spike itself (10 kHz left of the receive line) is not drawn: the scope bridges
+  +-375 Hz around the LO; the S-meter is not affected.
+  Off while transmitting and during a birdie scan. Verified 2026-10-30: the spike moved
+  10 kHz left, the carrier sits on the receive line. If a
   station is heard 20 kHz off, the sign is the other way (`ifshift -10000`).
 - With `ifshift 0`:
   AM receives 100 Hz above the dial (AM OFFSET in the AGC long panel, console / conf

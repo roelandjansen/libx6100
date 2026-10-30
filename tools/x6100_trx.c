@@ -1909,6 +1909,9 @@ static const kpar_t g_spar[SPARS] = {
 
 static int g_sp[SPARS];
 static uint32_t g_iq_hz;	/* IQ centre of the last spectrum (max hold starts again when it moves) */
+static bool g_dc_hide;		/* IF shift on: the DC / LO spike at the IQ centre is not drawn */
+
+#define DC_HIDE_BINS	2	/* IQ centre +- 2 bins (+- 375 Hz) interpolated over on the scope */
 static bool g_af_seen;		/* an AF scope row came from the state or settings file */
 
 //
@@ -3727,6 +3730,15 @@ static void spectrum_update(screen_t *scr, const x6100_flow_frame_t *f)
 
 		dbs[i] = p > 1e-20f ? 10.0f * log10f(p / (float) n) : -200.0f;
 		scr->pow[i] = p / (float) n;
+	}
+
+	// IF shift on: the receiver's own DC / LO spike sits at the IQ centre, away from the
+	// passband; drawn as the line between its neighbours (the scope only, not the meter)
+	if (g_dc_hide) {
+		const int a = n / 2 - DC_HIDE_BINS - 1, b = n / 2 + DC_HIDE_BINS + 1;
+
+		for (int i = a + 1; i < b; i++)
+			dbs[i] = dbs[a] + (dbs[b] - dbs[a]) * (float) (i - a) / (float) (b - a);
 	}
 
 	//
@@ -10078,6 +10090,7 @@ int main(int argc, char **argv)
 			// SCOPE DURING TX off: the scope and the waterfall keep the last RX picture
 			if (scr.on && (g_sp[SP_TXSCOPE] || !scr.tx)) {
 				g_iq_hz = iq_hz(&rx);	/* max hold starts again when the IQ centre moves */
+				g_dc_hide = lo_shift(&rx) != 0;
 				spectrum_update(&scr, &frame);
 				scr.sig_dbm = passband_dbm(&scr, &rx);
 				new_frame = true;
