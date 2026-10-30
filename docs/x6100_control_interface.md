@@ -401,7 +401,7 @@ are marked **new** / **changed**.
 | 29 | monilevel |
 | 33 | [7:0] ks, [9:8] km (0 straight, 1 paddle dash left, 2 paddle dot left: checked 2026-10-25), [11:10] kimb, [22:12] cwtone, [28:23] cwvol, [29] cwtrain |
 | 34 | [15:0] qsktime, [31:16] kr×10 |
-| 35 | **new:** [23:0] LO/cursor offset (from UI state), [24] center_mode. X6100Control: if_shift, [23:0] shift, [24] = IF shift off (centre mode); not tried on BASE 1.1.9 |
+| 35 | **new:** [23:0] LO/cursor offset (from UI state), [24] center_mode. X6100Control: if_shift, [23:0] shift, [24] = IF shift off (centre mode); OpenX6X00 sets the VFO to freq - shift. x6100_trx uses it in AM (ifshift, 10 kHz) since 2026-10-30: to check on BASE 1.1.9 |
 | 36 | X6100Control: cw_peak_cessb: [0] CW peak filter on, [7:1] CW peak Q, [8] CESSB on, [14:9] CESSB power-up x10 (start value 0x00004A02); not tried |
 | 41 | [15:0] bias_drive, [31:16] bias_final |
 | 42 / 43 | rit / xit |

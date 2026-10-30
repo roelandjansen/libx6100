@@ -821,11 +821,31 @@ static int dup_shift(const rx_t *rx)
 
 static int g_am_ofs = AM_OFS_DEF;	/* conf / console token am_offset, 0 = off; AGC long panel */
 
+//
+// IF shift (register 35, BASE 1.1.9; as OpenX6X00 and X6100Control use it): [23:0]
+// the shift in Hz, [24] set = off (centre mode). The VFO register gets the receive
+// frequency minus the shift, the baseband receives that much above its LO, so the
+// DC / LO spike of the zero-IF receiver sits g_ifshift Hz away from the passband
+// instead of in it. In AM that spike beat with the carrier (a tone off the carrier,
+// 2026-10-30); with the shift the AM offset is not needed and stays 0. AM only for
+// now, not while keyed (TX on the real frequency) nor during a birdie scan.
+//
+
+#define IFSHIFT_DEF	10000
+#define IFSHIFT_MAX	40000
+
+static int g_ifshift = IFSHIFT_DEF;	/* conf / console token ifshift, Hz, 0 = off */
+
 static bool bscan_running(void);
+
+static int lo_shift(const rx_t *rx)
+{
+	return rx->mode == X6100_MODE_AM && !bscan_running() ? g_ifshift : 0;
+}
 
 static int am_ofs(const rx_t *rx)
 {
-	return rx->mode == X6100_MODE_AM && !bscan_running() ? g_am_ofs : 0;
+	return rx->mode == X6100_MODE_AM && !bscan_running() && g_ifshift == 0 ? g_am_ofs : 0;
 }
 
 //
@@ -878,6 +898,22 @@ static uint32_t rx_hz(const rx_t *rx)
 	am_pass(rx, &centre, &half);	/* AM: the offset and PBT shift are a receive offset */
 
 	return (uint32_t) ((int64_t) rx->freq + (rx->rit ? rx->rit_hz : 0) + centre);
+}
+
+// Centre of the IQ (the baseband LO): the receive frequency less the IF shift
+static uint32_t iq_hz(const rx_t *rx)
+{
+	return (uint32_t) ((int64_t) rx_hz(rx) - lo_shift(rx));
+}
+
+// What passband() is relative to: the carrier in AM (rx_hz less the AM receive
+// offset and PBT shift), else the receive frequency
+static uint32_t pb_ref(const rx_t *rx)
+{
+	int centre, half;
+
+	am_pass(rx, &centre, &half);
+	return (uint32_t) ((int64_t) rx_hz(rx) - centre);
 }
 
 static uint32_t tx_hz(const rx_t *rx)
@@ -1098,8 +1134,14 @@ static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 		rx_filter(rx, &low, &high);	/* with twin PBT */
 	}
 
-	x6100_set_freq(ctl, 0, hz);
-	x6100_set_freq(ctl, 1, hz);
+	// IF shift: the LO below the receive frequency, the spike out of the passband
+	{
+		int shift = keyed ? 0 : lo_shift(rx);
+
+		x6100_set_freq(ctl, 0, (uint32_t) ((int64_t) hz - shift));
+		x6100_set_freq(ctl, 1, (uint32_t) ((int64_t) hz - shift));
+		x6100_ctl_set(ctl, X6100_REG_LO_CENTER, (uint32_t) shift & 0xFFFFFF);
+	}
 
 	//
 	// Registers 0 / 6: TX enable per VFO ("ham band"), normally set from the band
@@ -4011,7 +4053,7 @@ typedef struct
 
 static view_t scope_view(const rx_t *rx, int w)
 {
-	view_t v = { .span = scope_width(rx), .vfo = rx_hz(rx), .w = w };	/* vfo: the IQ centre (RIT, AM offset) */
+	view_t v = { .span = scope_width(rx), .vfo = iq_hz(rx), .w = w };	/* vfo: the IQ centre (RIT, AM offset, IF shift) */
 
 	// CENTER / SCROLL-C: the carrier in the middle, or the middle of the receive
 	// filter (scope panel CENTER TYPE)
@@ -4141,10 +4183,12 @@ static double passband_dbm(const screen_t *scr, const rx_t *rx)
 	int lo, hi;
 	double sum = 0.0;
 
+	int64_t ref = (int64_t) pb_ref(rx) - iq_hz(rx);	/* the passband's reference from the IQ centre */
+
 	passband(rx, &lo, &hi);
 
 	for (int hz = lo; hz <= hi; hz += (int) bw) {
-		int off = (int) lround(hz / bw);
+		int off = (int) lround((hz + ref) / bw);
 		int i = n / 2 + (X6100_FLOW_IQ_MIRRORED ? -off : off);
 
 		if (i >= 0 && i < n)
@@ -6339,8 +6383,8 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 	passband(rx, &pb_lo, &pb_hi);
 
 	{
-		int x0 = f_to_x(&v, (int64_t) rx_hz(rx) + pb_lo);	/* receive passband, RIT included */
-		int x1 = f_to_x(&v, (int64_t) rx_hz(rx) + pb_hi);
+		int x0 = f_to_x(&v, (int64_t) pb_ref(rx) + pb_lo);	/* receive passband, RIT included */
+		int x1 = f_to_x(&v, (int64_t) pb_ref(rx) + pb_hi);
 
 		x0 = x0 < 0 ? 0 : x0;
 		x1 = x1 >= SW ? SW - 1 : x1;
@@ -7727,6 +7771,13 @@ static bool console_line(rx_t *rx, char *line)
 			continue;
 		}
 
+		if (strcasecmp(t, "ifshift") == 0) {	/* IF shift in AM, Hz, 0 = off (register 35) */
+			want_lvl = &g_ifshift;
+			lvl_min = -IFSHIFT_MAX;
+			lvl_max = IFSHIFT_MAX;
+			continue;
+		}
+
 		if (strcasecmp(t, "rfg") == 0) {
 			want_lvl = &rx->rfg;
 			lvl_min = 0;
@@ -7843,7 +7894,7 @@ static void state_save(const rx_t *rx)
 	fprintf(fp, "vfob %u %s fil%d vfo %s\n", (unsigned) rx->b_freq, modes[rx->b_mode], rx->b_fil + 1, rx->on_b ? "b" : "a");
 	fprintf(fp, "%s %s %s ritofs %d pbtin %d pbtout %d\n", rx->split ? "txsplit" : "notxsplit", rx->rit ? "rit" : "norit",
 		rx->xit ? "xit" : "noxit", rx->rit_hz, rx->pbt_in, rx->pbt_out);
-	fprintf(fp, "%s dupshift %d am_offset %d\n", g_dup_tok[rx->dup], rx->dup_khz, g_am_ofs);
+	fprintf(fp, "%s dupshift %d am_offset %d ifshift %d\n", g_dup_tok[rx->dup], rx->dup_khz, g_am_ofs, g_ifshift);
 	fprintf(fp, "vol %d %s rfg %d pwr %.1f\n", rx->vol, rx->mute ? "mute" : "nomute", rx->rfg, rx->txpwr / 10.0);
 	fprintf(fp, "keytype %d wpm %d iambic %d cwpitch %d cwvol %d qsk %d ratio %d.%d\n", rx->keymode, rx->wpm, rx->iambic,
 		rx->cwtone, rx->cwvol, rx->qsk, rx->ratio / 10, rx->ratio % 10);
@@ -10026,7 +10077,7 @@ int main(int argc, char **argv)
 
 			// SCOPE DURING TX off: the scope and the waterfall keep the last RX picture
 			if (scr.on && (g_sp[SP_TXSCOPE] || !scr.tx)) {
-				g_iq_hz = rx_hz(&rx);	/* max hold starts again when the IQ centre moves */
+				g_iq_hz = iq_hz(&rx);	/* max hold starts again when the IQ centre moves */
 				spectrum_update(&scr, &frame);
 				scr.sig_dbm = passband_dbm(&scr, &rx);
 				new_frame = true;

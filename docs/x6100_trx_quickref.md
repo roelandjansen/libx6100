@@ -167,7 +167,16 @@ Values are kept in the last state (see Settings); defaults NR 20, NB 10 / 10, no
   and moves the dial to the nearest channel; the VFO then stays on the raster. Off
   the carrier the baseband AM detector gives a tone. FST still offers 100 Hz / 1 kHz
   for a station off the raster. Leaving AM by a mode key gives back the old step.
-- AM receives 100 Hz above the dial (AM OFFSET in the AGC long panel, console / conf
+- AM uses the baseband IF shift (register 35, console / conf `ifshift`, Hz, default
+  10000, 0 = off): the LO sits 10 kHz below the receive frequency, so the DC / LO
+  spike of the zero-IF receiver (seen on the scope as a carrier at S3-4) lies outside
+  the passband. It beat with the carrier as a tone off the carrier. With the shift the
+  receiver sits on the carrier and the AM offset below is not used; the RF scope maps
+  the IQ around the LO, so at the widest span the last 10 kHz on the right stay empty.
+  Off while transmitting and during a birdie scan. New on 2026-10-30, to check: if a
+  station is heard 20 kHz off, the sign is the other way (`ifshift -10000`).
+- With `ifshift 0`:
+  AM receives 100 Hz above the dial (AM OFFSET in the AGC long panel, console / conf
   `am_offset`, 0-1000, 0 = off): the baseband is zero
   IF and its DC notch takes part of the carrier when tuned exactly on it, which sounds
   distorted. The dial and TX stay on the carrier. The upper edge stays at the FIL
@@ -292,7 +301,8 @@ The status line starts with the VFO in use (A / B); with split, RIT or XIT it ad
 | `rit`, `norit`, `xit`, `noxit`, `ritofs -9990-9990` | RIT / XIT on / off, offset in Hz |
 | `pbtin -1250-1250`, `pbtout -1250-1250` | twin PBT shifts in Hz (0 = centre; CI-V 14 07 / 08, wfview); in AM as a receive offset plus symmetric narrowing (the baseband filter is symmetric), not in FM; the FIL label shows PBT while it acts; `pbtin 0 pbtout 0` resets |
 | `dupauto`, `dupoff`, `dup-`, `dup+`, `dupshift 10-10000` | repeater duplex, shift in kHz |
-| `am_offset 100` | AM receive offset above the dial, 0-1000 Hz (0 = off); also AGC long, row AM OFFSET |
+| `am_offset 100` | AM receive offset above the dial, 0-1000 Hz (0 = off), only with `ifshift 0`; also AGC long, row AM OFFSET |
+| `ifshift 10000` | IF shift in AM, -40000 to 40000 Hz (0 = off): the LO that far below the receive frequency, the DC spike out of the passband |
 | `step ch` | 60 m channel steps |
 | `memr` | list the used memory channels |
 | `memr 5`, `memw 5`, `memc 5` | recall / write the VFO into / clear memory channel 5 |

@@ -54,6 +54,11 @@ Status: 2026-10-30 (v0.14.0). Summary and next steps: `STATUS.md`.
   carrier, so on a weak station 500 Hz was already enough: offset now 100 Hz. Open:
   smooth onset or sudden (lock range), strong vs weak station. The mode key now puts AM
   on the channel raster (5 kHz SW, 9 / 10 kHz MW), 2026-10-30: to check on the radio.
+  The scope shows a spike (S3-4) at the receive frequency: the zero-IF DC / LO spike;
+  IU1WXY seems not to have it there. Built 2026-10-30: IF shift (register 35, ifshift
+  10000) in AM puts the LO 10 kHz below, the AM offset is then 0. To check: station on
+  the receive line (else the sign: ifshift -10000), no tone off the carrier, the spike
+  10 kHz left on the scope; then SSB / CW too.
 - AM PBT and the filter panel PBT box (2026-10-29): to check on the radio (PBT in USB
   from wfview verified). AM passband now: upper edge at Icom's H, lower 2 x offset
   inside; the RF scope shows where it sits.

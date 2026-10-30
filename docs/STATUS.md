@@ -1,6 +1,6 @@
 # libx6100 / x6100_trx — status
 
-Snapshot: 2026-10-29. Last tag: v0.14.0 (2026-10-29; wfserver for wfview, twin PBT
+Snapshot: 2026-10-30. Last tag: v0.14.0 (2026-10-29; wfserver for wfview, twin PBT
 Icom style incl. AM and the filter panel PBT box, AM upper edge kept and AM offset
 100 Hz, scope panel, MSG / APP keys, TOT and stuck-TX safety, RADE studies).
 Before: v0.13.0 (band edges, fixed edges, CI-V memories, wfview rig file on 61),
@@ -169,6 +169,10 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     narrowing, carrier kept inside): to check; not in FM. Filter panel (F5 long) has a
     PBT box: MFK push to it, turn shifts both 50 Hz, hold = PBT CLR; edges show the
     passband after PBT (host render checked; to check on the radio).
+    AM tone off the carrier (v0.13.0 too): the zero-IF DC / LO spike (S3-4 on the scope)
+    beating with the carrier. 2026-10-30: AM snaps to the channel raster on the mode
+    keys, and AM uses the baseband IF shift (register 35, ifshift 10000; AM offset then
+    0): to check on the radio.
     Open: CPU load, dropouts, why combined scope mode fails.
 18. RADE in x6100_trx: the codec has one input and one output to the baseband, both
     switched by register 12 bit 0x8 (play mode). RX listening locally has no known path
