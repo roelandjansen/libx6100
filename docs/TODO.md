@@ -59,9 +59,9 @@ Status: 2026-10-30 (v0.14.0). Summary and next steps: `STATUS.md`.
   10000) in AM puts the LO 10 kHz below, the AM offset is then 0. Verified: the spike
   moved 10 kHz left, carrier on the receive line; the scope bridges it. To check: station on
   the receive line (else the sign: ifshift -10000), no tone off the carrier (gone), the spike
-  10 kHz left on the scope. SSB too since 2026-10-30. Open: TX with ifshift_tx 1 on a
-  dummy load (CW / TUNE carrier on 7.030: heard on 7.030 or 7.020 on the IC-7851); if
-  on 7.030, ifshift_tx 1 as default and CW with the shift too.
+  10 kHz left on the scope. SSB too since 2026-10-30. TX with the shift kept (ifshift_tx
+  1): CW on 7.030 heard on 7.030 on the IC-7851 (verified); now the default, CW too. To
+  check: the TX scope on the TX frequency (was 10 kHz low), CW QSK, hand mic, VOX, split.
 - AM PBT and the filter panel PBT box (2026-10-29): to check on the radio (PBT in USB
   from wfview verified). AM passband now: upper edge at Icom's H, lower 2 x offset
   inside; the RF scope shows where it sits.

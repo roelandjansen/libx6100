@@ -178,11 +178,11 @@ Values are kept in the last state (see Settings); defaults NR 20, NB 10 / 10, no
   Off while transmitting and during a birdie scan. Verified 2026-10-30: the spike moved
   10 kHz left, the carrier sits on the receive line. If a
   station is heard 20 kHz off, the sign is the other way (`ifshift -10000`).
-  All modes since 2026-10-30 (SSB: the spike no longer adds to the S-meter), except CW
-  until the TX test: while keyed the shift is off (TX on the real frequency), so a
-  baseband-keyed TX (CW keyer, hand mic, VOX) retunes at key down. `ifshift_tx 1`
-  keeps the shift in TX and enables it in CW: only after checking on a dummy load that
-  the baseband then transmits on the dial frequency (not 10 kHz low).
+  All modes since 2026-10-30 (SSB: the spike no longer adds to the S-meter), also in TX
+  (`ifshift_tx 1`, default): the baseband transmits on the dial frequency with the
+  shift on (verified 2026-10-30: CW on 7.030 heard on 7.030), so nothing retunes at key
+  down (CW keyer, hand mic, VOX). While transmitting the scope maps the TX IQ around
+  the TX frequency. `ifshift_tx 0`: shift off in TX and in CW (the old way).
 - With `ifshift 0`:
   AM receives 100 Hz above the dial (AM OFFSET in the AGC long panel, console / conf
   `am_offset`, 0-1000, 0 = off): the baseband is zero
@@ -310,8 +310,8 @@ The status line starts with the VFO in use (A / B); with split, RIT or XIT it ad
 | `pbtin -1250-1250`, `pbtout -1250-1250` | twin PBT shifts in Hz (0 = centre; CI-V 14 07 / 08, wfview); in AM as a receive offset plus symmetric narrowing (the baseband filter is symmetric), not in FM; the FIL label shows PBT while it acts; `pbtin 0 pbtout 0` resets |
 | `dupauto`, `dupoff`, `dup-`, `dup+`, `dupshift 10-10000` | repeater duplex, shift in kHz |
 | `am_offset 100` | AM receive offset above the dial, 0-1000 Hz (0 = off), only with `ifshift 0`; also AGC long, row AM OFFSET |
-| `ifshift 10000` | IF shift, -40000 to 40000 Hz (0 = off): the LO that far below the receive frequency, the DC spike out of the passband (not CW without `ifshift_tx 1`) |
-| `ifshift_tx 0` | 1: keep the IF shift while transmitting, and use it in CW (after the dummy load test) |
+| `ifshift 10000` | IF shift, -40000 to 40000 Hz (0 = off): the LO that far below the receive frequency, the DC spike out of the passband |
+| `ifshift_tx 1` | keep the IF shift while transmitting (verified); 0: off in TX and in CW |
 | `step ch` | 60 m channel steps |
 | `memr` | list the used memory channels |
 | `memr 5`, `memw 5`, `memc 5` | recall / write the VFO into / clear memory channel 5 |

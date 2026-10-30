@@ -839,7 +839,7 @@ static int g_am_ofs = AM_OFS_DEF;	/* conf / console token am_offset, 0 = off; AG
 #define IFSHIFT_MAX	40000
 
 static int g_ifshift = IFSHIFT_DEF;	/* conf / console token ifshift, Hz, 0 = off */
-static int g_ifshift_tx;		/* conf / console token ifshift_tx 0 / 1: keep the shift while keyed */
+static int g_ifshift_tx = 1;	/* conf / console token ifshift_tx 0 / 1: keep the shift while keyed */
 
 static bool bscan_running(void);
 
@@ -910,9 +910,16 @@ static uint32_t rx_hz(const rx_t *rx)
 	return (uint32_t) ((int64_t) rx->freq + (rx->rit ? rx->rit_hz : 0) + centre);
 }
 
+// TX frequency while keyed (apply), else 0: the TX IQ is centred on it, the shift
+// applied after it (2026-10-30: with the shift kept the scope showed TX 10 kHz low)
+static uint32_t g_keyed_hz;
+
 // Centre of the IQ (the baseband LO): the receive frequency less the IF shift
 static uint32_t iq_hz(const rx_t *rx)
 {
+	if (g_keyed_hz != 0)
+		return g_keyed_hz;
+
 	return (uint32_t) ((int64_t) rx_hz(rx) - lo_shift(rx));
 }
 
@@ -1131,6 +1138,8 @@ static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 		|| (ctl->sent[X6100_REG_FLAGS] & (X6100_FLAG_IPTT | X6100_FLAG_ATU_TUNE | X6100_FLAG_CODEC_TX | X6100_FLAG_SWRSCAN));
 	uint32_t hz = keyed ? (rx->tx_hz_ovr != 0 ? rx->tx_hz_ovr : tx_hz(rx)) : rx_hz(rx);
 	x6100_mode_t mode = keyed ? (rx->tx_mode_ovr >= 0 ? (x6100_mode_t) rx->tx_mode_ovr : tx_mode(rx)) : rx->mode;
+
+	g_keyed_hz = keyed ? hz : 0;
 
 	if (keyed) {
 		mode_filter(mode, rx->split ? rx->b_fil : rx->fil, &low, &high);
@@ -10107,7 +10116,7 @@ int main(int argc, char **argv)
 			// SCOPE DURING TX off: the scope and the waterfall keep the last RX picture
 			if (scr.on && (g_sp[SP_TXSCOPE] || !scr.tx)) {
 				g_iq_hz = iq_hz(&rx);	/* max hold starts again when the IQ centre moves */
-				g_dc_hide = lo_shift(&rx) != 0;
+				g_dc_hide = lo_shift(&rx) != 0 && g_keyed_hz == 0;	/* TX: the carrier is there */
 				spectrum_update(&scr, &frame);
 				scr.sig_dbm = passband_dbm(&scr, &rx);
 				new_frame = true;
