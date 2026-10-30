@@ -60,8 +60,8 @@ Status: 2026-10-30 (v0.14.0). Summary and next steps: `STATUS.md`.
   moved 10 kHz left, carrier on the receive line; the scope bridges it. To check: station on
   the receive line (else the sign: ifshift -10000), no tone off the carrier (gone), the spike
   10 kHz left on the scope. SSB too since 2026-10-30. TX with the shift kept (ifshift_tx
-  1): CW on 7.030 heard on 7.030 on the IC-7851 (verified); now the default, CW too. To
-  check: the TX scope on the TX frequency (was 10 kHz low), CW QSK, hand mic, VOX, split.
+  1): CW on 7.030 heard on 7.030 on the IC-7851 (verified); now the default, CW too. TX
+  scope on the TX line and CW keying clean (verified). To check: hand mic, VOX, split.
 - AM PBT and the filter panel PBT box (2026-10-29): to check on the radio (PBT in USB
   from wfview verified). AM passband now: upper edge at Icom's H, lower 2 x offset
   inside; the RF scope shows where it sits.

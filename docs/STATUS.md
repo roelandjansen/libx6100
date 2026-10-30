@@ -174,7 +174,8 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     keys, and AM uses the baseband IF shift (register 35, ifshift 10000; AM offset then
     0): verified (spike 10 kHz left, carrier on the receive line; the scope bridges
     the spike); the tone off the carrier is gone. Shift in all modes, kept in TX: the
-    baseband transmits on the dial frequency (CW on 7.030 verified).
+    baseband transmits on the dial frequency (CW on 7.030 verified), the TX scope on the
+    TX line, CW keying clean. Open: hand mic, VOX, split with the shift.
     Open: CPU load, dropouts, why combined scope mode fails.
 18. RADE in x6100_trx: the codec has one input and one output to the baseband, both
     switched by register 12 bit 0x8 (play mode). RX listening locally has no known path

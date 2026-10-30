@@ -182,7 +182,8 @@ Values are kept in the last state (see Settings); defaults NR 20, NB 10 / 10, no
   (`ifshift_tx 1`, default): the baseband transmits on the dial frequency with the
   shift on (verified 2026-10-30: CW on 7.030 heard on 7.030), so nothing retunes at key
   down (CW keyer, hand mic, VOX). While transmitting the scope maps the TX IQ around
-  the TX frequency. `ifshift_tx 0`: shift off in TX and in CW (the old way).
+  the TX frequency (verified, CW keying clean). `ifshift_tx 0`: shift off in TX and in
+  CW (the old way).
 - With `ifshift 0`:
   AM receives 100 Hz above the dial (AM OFFSET in the AGC long panel, console / conf
   `am_offset`, 0-1000, 0 = off): the baseband is zero
