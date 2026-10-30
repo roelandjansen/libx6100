@@ -46,14 +46,14 @@ Status: 2026-10-30 (v0.14.0). Summary and next steps: `STATUS.md`.
   - next: pick a strong birdie that is also clearly seen / heard on the radio, then
     tick on the scope line, its audio pitch on the audio scope, the notch and its
     tolerance (as for 14064726: USB dial 14.064.000 = 726 Hz)
-- AM tone at the receive offset (2026-10-29, weak SW station, FIL ±4.5 kHz): the pitch
-  follows the AM offset (500 -> 200 Hz: lower) and the dial; PBT -300 hid it. Likely the
-  leftover at the zero-IF receive frequency (DC / LO residue past the DC notch) beating
-  with the carrier; a lower offset distorts (the notch). Offset now 100 Hz. To check:
-  the same on a strong and a weak station (tone on every station, louder on weak ones =
-  the leftover); a separate peak on the RF scope or not. Ideas: a wider DC notch is not
-  ours to set; IQ DC removal before the baseband AM detector is not reachable either,
-  so maybe a register (DC / LO cancel) in the stock UI trace.
+- AM tone off the carrier (2026-10-29/30): not a regression, v0.13.0 does the same (no
+  PBT code). Tuned on the carrier (7.205) clean; 1 kHz either side a tone whose pitch
+  follows the tuning step; not a birdie, not an adjacent station. The baseband AM
+  detector itself (a beat with what is left at the zero-IF receive frequency, or a
+  synchronous detector out of lock). The AM offset puts the receiver that far off the
+  carrier, so on a weak station 500 Hz was already enough: offset now 100 Hz. Open:
+  smooth onset or sudden (lock range), strong vs weak station; maybe an AM tuning step
+  that lands on the carrier (5 kHz SW, 9 kHz MW).
 - AM PBT and the filter panel PBT box (2026-10-29): to check on the radio (PBT in USB
   from wfview verified). AM passband now: upper edge at Icom's H, lower 2 x offset
   inside; the RF scope shows where it sits.
