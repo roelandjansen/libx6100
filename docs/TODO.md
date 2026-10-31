@@ -89,7 +89,8 @@ Status: 2026-10-31 (v0.16.0). Summary and next steps: `STATUS.md`.
 - Register 35 LO for FIX / SCROLL-F (built 2026-10-31; SCROLL-F showed a black right
   part on 6.920-6.976 with the VFO at 6.933): the LO goes as near the window centre as
   the shift allows (10-40 kHz either way), the IQ then covers the window: a 56 kHz
-  window always, a 96 kHz one 89-100 % (only the LO right in the middle covers it all).
+  window always, a 96 kHz one 89-100 %: edges now at most 75 kHz (default too), always
+  covered with the shift 10-37.5 kHz (with ifshift 0 still 96).
   To check on the radio: the window painted; a VFO left in the window uses a negative
   shift (LO above), not yet verified: is the station heard the one on the cursor? TX
   keeps the plain shift (a key-down in FIX / SCROLL-F moves the LO back).

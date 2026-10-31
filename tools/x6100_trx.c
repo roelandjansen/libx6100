@@ -1964,12 +1964,14 @@ static void band_step(rx_t *rx, int dir)
 // and SCROLL-F. The ranges are the IC-705's as wfview numbers them for 27 1E (from the
 // Range values in its IC-705 rig file): 01 below 1.6 MHz, 02 1.6-2, 03 2-6, 04 6-8,
 // 05 8-11, 06 11-15, 07 15-20, 08 20-22, 09 22-26, 10 26-30, 11 30-45, 12 45-60 MHz.
-// An edge is at most 96 kHz wide (the IQ width); defaults: four 96 kHz windows from the
-// bottom of the ham band in the range (the last one at its top), or of the range itself.
+// An edge is at most 96 kHz wide (the IQ width), 75 kHz with the IF shift (edge_max);
+// defaults: four windows that wide from the bottom of the ham band in the range (the last
+// one at its top), or of the range itself.
 //
 
 #define EDGE_RANGES	12
 #define EDGE_MAX_HZ	96000		/* the IQ width */
+#define EDGE_IFS_MAX_HZ	75000		/* with the IF shift: (96 - w) / 2 >= 10 kHz, see rx_lo */
 
 typedef struct
 {
@@ -1982,6 +1984,22 @@ static const uint32_t g_edge_bound[EDGE_RANGES + 1] = {
 };
 
 static edge_t g_edge[EDGE_RANGES][4];
+
+// The widest window the IQ covers whole: with the IF shift the LO cannot sit in the middle
+// of the window while the VFO is there (the spike), so 75 kHz (2026-10-31; 96 left up
+// to 10 kHz unpainted)
+static uint32_t edge_max(void)
+{
+	return g_ifshift != 0 ? EDGE_IFS_MAX_HZ : EDGE_MAX_HZ;
+}
+
+// Width of edge e in range r as used: a wider one stored before is cut to edge_max
+static int edge_w(int r, int e)
+{
+	uint32_t w = g_edge[r][e].hi - g_edge[r][e].lo;
+
+	return (int) (w < edge_max() ? w : edge_max());
+}
 
 // Range index 0-11 of a frequency, -1 outside
 static int edge_range(uint32_t hz)
@@ -2005,8 +2023,8 @@ static void edge_default(int r, int e, edge_t *out)
 		}
 	}
 
-	uint32_t w = hi - lo < EDGE_MAX_HZ ? hi - lo : EDGE_MAX_HZ;
-	uint32_t from = e < 3 ? lo + (uint32_t) e * EDGE_MAX_HZ : hi - w;
+	uint32_t w = hi - lo < edge_max() ? hi - lo : edge_max();
+	uint32_t from = e < 3 ? lo + (uint32_t) e * w : hi - w;
 
 	out->lo = from + w > hi ? hi - w : from;
 	out->hi = out->lo + w;
@@ -2044,13 +2062,13 @@ static void scope_fix_start(rx_t *rx)
 	rx->fix_edge = rx->edge;
 
 	if (r < 0) {
-		rx->fix_w = rx->span;
-		rx->fix_lo = ((int64_t) rx->freq - rx->span / 2) / 1000 * 1000;
+		rx->fix_w = rx->span < (int) edge_max() ? rx->span : (int) edge_max();
+		rx->fix_lo = ((int64_t) rx->freq - rx->fix_w / 2) / 1000 * 1000;
 		return;
 	}
 
 	rx->fix_lo = g_edge[r][e].lo;
-	rx->fix_w = (int) (g_edge[r][e].hi - g_edge[r][e].lo);
+	rx->fix_w = edge_w(r, e);
 }
 
 // Every pass: a new range or edge moves the window, SCROLL-F follows the VFO
@@ -2063,7 +2081,7 @@ static void scope_follow(rx_t *rx)
 
 	if (r != rx->fix_range || rx->edge != rx->fix_edge
 		|| (r >= 0 && rx->scope == SCOPE_FIX && (rx->fix_lo != (int64_t) g_edge[r][e].lo
-		|| rx->fix_w != (int) (g_edge[r][e].hi - g_edge[r][e].lo))))
+		|| rx->fix_w != edge_w(r, e))))
 		scope_fix_start(rx);
 
 	if (rx->scope != SCOPE_FIX_S || rx->fix_w <= 0)
@@ -2081,7 +2099,7 @@ static void scope_follow(rx_t *rx)
 }
 
 // F2 long in FIX / SCROLL-F: the selected edge becomes the window centred on the VFO, as
-// wide as the CENTER span (F2 in CENTER), on 1 kHz
+// wide as the CENTER span (F2 in CENTER) up to edge_max, on 1 kHz
 static bool edge_store(rx_t *rx)
 {
 	int r = edge_range(rx->freq), e = clampi(rx->edge, 1, 4) - 1;
@@ -2089,8 +2107,10 @@ static bool edge_store(rx_t *rx)
 	if (r < 0)
 		return false;
 
-	g_edge[r][e].lo = (uint32_t) (((int64_t) rx->freq - rx->span / 2) / 1000 * 1000);
-	g_edge[r][e].hi = g_edge[r][e].lo + (uint32_t) rx->span;
+	int w = rx->span < (int) edge_max() ? rx->span : (int) edge_max();
+
+	g_edge[r][e].lo = (uint32_t) (((int64_t) rx->freq - w / 2) / 1000 * 1000);
+	g_edge[r][e].hi = g_edge[r][e].lo + (uint32_t) w;
 	scope_fix_start(rx);
 
 	return true;
@@ -9040,14 +9060,14 @@ static bool cat_set(void *ctx, x6100_civ_item_t item, int vfo, int32_t v)
 		cat->fedge_lo = (uint32_t) v;
 		break;
 	case X6100_CIV_SCOPE_FEDGE_HI: {
-		// Wider than the IQ: cut to 96 kHz from the lower end
+		// Wider than edge_max (96 kHz, 75 with the IF shift): cut from the lower end
 		if (vfo < 0 || vfo >= EDGE_RANGES * 4 || (uint32_t) v <= cat->fedge_lo)
 			return false;
 
 		edge_t *ed = &g_edge[vfo / 4][vfo % 4];
 
 		ed->lo = cat->fedge_lo;
-		ed->hi = (uint32_t) v - cat->fedge_lo > EDGE_MAX_HZ ? cat->fedge_lo + EDGE_MAX_HZ : (uint32_t) v;
+		ed->hi = (uint32_t) v - cat->fedge_lo > edge_max() ? cat->fedge_lo + edge_max() : (uint32_t) v;
 		break;
 	}
 	case X6100_CIV_SCOPE_HOLD:
