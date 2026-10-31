@@ -52,8 +52,11 @@ Status: 2026-10-30 (v0.15.0). Summary and next steps: `STATUS.md`.
 - AM PBT and the filter panel PBT box (2026-10-29): to check on the radio (PBT in USB
   from wfview verified). AM passband now: upper edge at Icom's H, lower 2 x offset
   inside; the RF scope shows where it sits.
-- wfserver: CPU load and audio dropouts on the radio; why the combined scope mode
-  fails (WaterfallFormat 0 works).
+- wfserver load measured 2026-10-31 (wfview connected, scope Fast, 20 m): wfserver 33 %
+  of the CPU (about 1.3 of the 4 cores), x6100_trx 13 %, 52 % idle, load 1.6-1.8,
+  1008 MHz; no dropouts that day. Watch for dropouts again; if they come: top -H per
+  thread, wfview RX codec / rate / latency, scope Speed. Open: why the combined scope
+  mode fails (WaterfallFormat 0 works).
   GEN row WFSERVER (on / off / start, 2026-10-31) and CI-V on the DEV port and the pty
   at once (wfserver no longer needs CAT on PTY): to check on the radio.
 - S-meter calibration (signal generator): SMETER_CAL_DB is provisional (-21: -15 from
@@ -160,6 +163,9 @@ under GEN until a better key turns up.
 
 ## Image and distribution
 
+- Seen on the IU1WXY image (top, 2026-10-31): pulseaudio --system with btaudio-ctl and
+  btcat (Bluetooth audio: the way for RADE on the radio with a headset, RX and TX), gpsd
+  (a GPS as time source in the field), ntpd -g running (the clock stays synced).
 - Now: the IU1WXY image (OS, kernel 6.1.82, stock baseband BASE 1.1.9) is the base;
   x6100_trx and its tools run on it (`build.sh deploy`). wfserver for the R16 is built
   as a self-contained bundle (`contrib/wfserver`, Ubuntu 24.04 armhf Qt, own glibc
