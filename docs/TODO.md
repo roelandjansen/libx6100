@@ -82,8 +82,9 @@ Status: 2026-10-31 (v0.16.0). Summary and next steps: `STATUS.md`.
 - Fixed scope edges (IC-705 style, built 2026-10-27; work well on the radio, 2026-10-31): F2 / F2
   long in FIX and SCROLL-F, the scope label, a band change moves the window, edges kept
   over a restart; wfview fixed edge window (27 16 / 27 1E set and read), a 200 kHz edge
-  from wfview cut to 96 kHz. Then: a panel to edit an edge on the radio (MFK lower /
-  upper), and whether wfview sends 27 1E for a range we do not cover (above 60 MHz).
+  from wfview cut to 96 kHz (75 with the IF shift). Edge panel (F2 long: lower / upper,
+  1 kHz steps, as an Icom; built 2026-10-31, to check on the radio). Open: whether
+  wfview sends 27 1E for a range we do not cover (above 60 MHz).
   SCROLL-F now pages by the window width on the edge grid, as an Icom (2026-10-31,
   was a sliding window): to check on the radio.
 - Register 35 LO for FIX / SCROLL-F (built 2026-10-31; SCROLL-F showed a black right

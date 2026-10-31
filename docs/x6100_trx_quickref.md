@@ -43,7 +43,7 @@ Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
 | AGC | off / slow / fast / auto, per mode group | RIT / XIT panel |
 | V/M | memory mode with the memory panel / back to the VFO (Icom style) | split on / off: RX on the VFO in use, TX on the other |
 | F1 | next scope mode: CENTER -> SCROLL-C -> FIX -> SCROLL-F -> CENTER | scope panel: mode, VBW, averaging, waveform, colours, waterfall (see Scope panel) |
-| F2 | span ±48 / 24 / 12 / 6 / 3 / 1.5 kHz; FIX / SCROLL-F: next fixed edge 1-4; audio scope: 0-3 / 0-6 kHz | FIX / SCROLL-F: store the edge in use (see Fixed edges); else reference level: MFK turn = ±1 dB (±30), MFK push = RF <-> AF scope; F2 long, other key or 10 s idle closes |
+| F2 | span ±48 / 24 / 12 / 6 / 3 / 1.5 kHz; FIX / SCROLL-F: next fixed edge 1-4; audio scope: 0-3 / 0-6 kHz | FIX / SCROLL-F: edge panel, lower and upper of the edge in use (see Fixed edges); else reference level: MFK turn = ±1 dB (±30), MFK push = RF <-> AF scope; F2 long, other key or 10 s idle closes |
 | F3 | audio scope on / off (RF <-> AF) | RF scope left (5/8) + audio scope right (3/8), on / off |
 | F4 | TX meter: PO / SWR / ALC | TX panel: mic, compressor, VOX, monitor, squelch, TX timeout |
 | F5 | filter FIL1 / FIL2 / FIL3 | filter panel |
@@ -73,9 +73,12 @@ Four edges per range, the IC-705 ranges (MHz): 01 below 1.6, 02 1.6-2, 03 2-6, 0
 05 8-11, 06 11-15, 07 15-20, 08 20-22, 09 22-26, 10 26-30, 11 30-45, 12 45-60.
 
 - F2 in FIX / SCROLL-F: next edge (1 -> 2 -> 3 -> 4 -> 1); the scope label shows
-  `FIX E2 14096-14192`. The edge number holds for every range.
-- F2 long in FIX / SCROLL-F: the edge in use becomes the window centred on the VFO, as
-  wide as the CENTER span (at most 75 kHz), on 1 kHz (set the span in CENTER first).
+  `FIX E2 14075-14150`. The edge number holds for every range.
+- F2 long in FIX / SCROLL-F: the edge panel (as an Icom's fixed edge menu): LOWER and
+  UPPER of the edge in use. MFK turn: 1 kHz steps (the window shows the edge while you
+  set it); MFK push: lower <-> upper; MFK long: this edge back to its default; F2: the
+  next edge, the panel stays; F2 long, another key or 10 s idle closes. The other end
+  follows when the width would pass the maximum; the edge stays inside its range.
 - An edge is at most 75 kHz wide with the IF shift (96 kHz, the IQ width, with `ifshift 0`):
   then the IQ covers it whole with the DC spike out of the passband (2026-10-31). A wider
   one (CI-V, or stored before) is cut from its lower end.

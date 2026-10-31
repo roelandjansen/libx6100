@@ -226,6 +226,9 @@ typedef struct
 	bool xit;
 	int dup;		/* repeater duplex: DUP_AUTO, DUP_OFF, DUP_MINUS, DUP_PLUS */
 	int dup_khz;		/* duplex shift for DUP_MINUS / DUP_PLUS, kHz */
+	bool eedit;		/* fixed edge panel (F2 long in FIX / SCROLL-F) */
+	int eedit_par;		/* 0 lower, 1 upper */
+	uint64_t eedit_since;
 	bool tedit;		/* RIT / XIT / duplex panel (AGC long) */
 	int tedit_par;		/* 0 offset, 1 RIT, 2 XIT, 3 duplex, 4 shift, 5 AM offset */
 	uint64_t tedit_since;
@@ -2084,7 +2087,7 @@ static void scope_follow(rx_t *rx)
 		|| rx->fix_w != edge_w(r, e))))
 		scope_fix_start(rx);
 
-	if (rx->scope != SCOPE_FIX_S || rx->fix_w <= 0)
+	if (rx->scope != SCOPE_FIX_S || rx->fix_w <= 0 || rx->eedit)	/* editing: the edge itself */
 		return;
 
 	// SCROLL-F, as an Icom: the VFO out of the window moves it by whole windows on the
@@ -2098,22 +2101,36 @@ static void scope_follow(rx_t *rx)
 	}
 }
 
-// F2 long in FIX / SCROLL-F: the selected edge becomes the window centred on the VFO, as
-// wide as the CENTER span (F2 in CENTER) up to edge_max, on 1 kHz
-static bool edge_store(rx_t *rx)
+// Edge panel (F2 long in FIX / SCROLL-F), as an Icom's fixed edge menu: the lower or upper
+// end of the edge in use in 1 kHz steps, inside its range; the other end follows when
+// the width would pass edge_max, at least 1 kHz apart. The window shows the edge.
+static void edge_adjust(rx_t *rx, int steps)
 {
 	int r = edge_range(rx->freq), e = clampi(rx->edge, 1, 4) - 1;
+	int64_t lo, hi, mx = edge_max(), blo, bhi;
 
 	if (r < 0)
-		return false;
+		return;
 
-	int w = rx->span < (int) edge_max() ? rx->span : (int) edge_max();
+	lo = g_edge[r][e].lo;
+	hi = g_edge[r][e].hi;
+	blo = g_edge_bound[r];
+	bhi = g_edge_bound[r + 1];
+	hi = hi - lo > mx ? lo + mx : hi;	/* a wider one stored before: as it is used */
 
-	g_edge[r][e].lo = (uint32_t) (((int64_t) rx->freq - w / 2) / 1000 * 1000);
-	g_edge[r][e].hi = g_edge[r][e].lo + (uint32_t) w;
+	if (rx->eedit_par == 0) {
+		lo += (int64_t) steps * 1000;
+		lo = lo < blo ? blo : lo > bhi - 1000 ? bhi - 1000 : lo;
+		hi = hi < lo + 1000 ? lo + 1000 : hi > lo + mx ? lo + mx : hi;
+	} else {
+		hi += (int64_t) steps * 1000;
+		hi = hi < blo + 1000 ? blo + 1000 : hi > bhi ? bhi : hi;
+		lo = lo > hi - 1000 ? hi - 1000 : lo < hi - mx ? hi - mx : lo;
+	}
+
+	g_edge[r][e].lo = (uint32_t) lo;
+	g_edge[r][e].hi = (uint32_t) hi;
 	scope_fix_start(rx);
-
-	return true;
 }
 
 //
@@ -3167,6 +3184,22 @@ static bool on_key(rx_t *rx, int key)
 	}
 
 	//
+	// Edge panel open: MFK push lower <-> upper, F2 the next edge (the panel stays);
+	// any other key closes it and does its normal job
+	//
+	if (rx->eedit) {
+		rx->eedit_since = now_ms();
+
+		if (key == X6100_KEY_MFK_PUSH) {
+			rx->eedit_par ^= 1;
+			return true;
+		}
+
+		if (key != X6100_KEY_F2)
+			rx->eedit = false;
+	}
+
+	//
 	// RIT / XIT panel open: MFK push selects the next row; any other key
 	// closes it and does its normal job (AGC long closes it too)
 	//
@@ -3448,6 +3481,18 @@ static bool on_long_key(rx_t *rx, int key)
 			return true;
 		}
 
+		if (rx->eedit) {	/* the edge back to its default */
+			int r = edge_range(rx->freq), e = clampi(rx->edge, 1, 4) - 1;
+
+			if (r >= 0) {
+				edge_default(r, e, &g_edge[r][e]);
+				scope_fix_start(rx);
+			}
+
+			rx->eedit_since = now_ms();
+			return true;
+		}
+
 		if (rx->tedit) {
 			if (rx->tedit_par == 3)
 				rx->dup = DUP_AUTO;
@@ -3498,19 +3543,18 @@ static bool on_long_key(rx_t *rx, int key)
 		rx->warn = NULL;
 		return true;
 	case X6100_KEY_F2:
-		// Long in FIX / SCROLL-F (RF scope): store the edge (the window centred on the VFO,
-		// as wide as the CENTER span); otherwise the reference level edit
+		// Long in FIX / SCROLL-F (RF scope): the edge panel, lower / upper of the edge in
+		// use (F2 long again closes it); otherwise the reference level edit
 		if (!rx->redit && !rx->ascope && scope_fixed(rx)) {
-			if (!edge_store(rx)) {
+			if (edge_range(rx->freq) < 0) {
 				toast("NO EDGE HERE");
 				return true;
 			}
 
-			char s[24];
-
-			snprintf(s, sizeof(s), "EDGE %d SET %u-%u", rx->edge, (unsigned) (rx->fix_lo / 1000) % 100000u,
-				(unsigned) ((rx->fix_lo + rx->fix_w) / 1000) % 100000u);
-			toast(s);
+			rx->eedit = !rx->eedit;
+			rx->eedit_par = 0;
+			rx->eedit_since = now_ms();
+			scope_fix_start(rx);	/* the edge itself, not a SCROLL-F page */
 			return true;
 		}
 
@@ -3704,6 +3748,12 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 				mem_mode_on(rx, rx->medit_ch);
 			rx->medit_since = now_ms();
 			rx->mclear_at = 0;
+			return true;
+		}
+
+		if (rx->eedit) {
+			edge_adjust(rx, value * X6100_DIR_MFK);
+			rx->eedit_since = now_ms();
 			return true;
 		}
 
@@ -6032,6 +6082,51 @@ static void draw_rit_panel(x6100_lcd_t *lcd, const rx_t *rx)
 	}
 }
 
+//
+// Edge panel (F2 long in FIX / SCROLL-F): lower and upper of the edge in use, its range
+// and width. Blue, as the scope label it belongs to.
+//
+
+static void draw_edge_panel(x6100_lcd_t *lcd, const rx_t *rx)
+{
+	static const char *hint = "MFK: 1 KHZ  PUSH: LOWER / UPPER  HOLD: DEFAULT  F2: NEXT EDGE";
+	const int px = LBL_W + 8, py = SPEC_Y + 16, pw = 560, ph = 96;
+	const uint32_t bg = 0x0C1622, blue = 0x40C0FF, sel = 0x1E4A7A, dim = 0x7A8494, white = 0xF0F0F0;
+	int r = edge_range(rx->freq), e = clampi(rx->edge, 1, 4) - 1;
+	char title[16], v[2][24], info[48];
+
+	if (r < 0)
+		return;
+
+	uint32_t lo = g_edge[r][e].lo, hi = lo + (uint32_t) edge_w(r, e);
+
+	snprintf(title, sizeof(title), "EDGE %d", e + 1);
+	snprintf(v[0], sizeof(v[0]), "%u.%03u MHZ", lo / 1000000u, lo / 1000u % 1000u);
+	snprintf(v[1], sizeof(v[1]), "%u.%03u MHZ", hi / 1000000u, hi / 1000u % 1000u);
+	snprintf(info, sizeof(info), "RANGE %d %u-%u MHZ   WIDTH %u OF AT MOST %u KHZ", r + 1, g_edge_bound[r] / 1000000u,
+		g_edge_bound[r + 1] / 1000000u, (hi - lo) / 1000u, edge_max() / 1000u);
+
+	x6100_lcd_fill(lcd, px, py, pw, ph, bg);
+	x6100_lcd_fill(lcd, px, py, 3, ph, blue);
+	x6100_lcd_hline(lcd, px, px + pw - 1, py, 0x204060);
+	x6100_lcd_hline(lcd, px, px + pw - 1, py + ph - 1, 0x204060);
+	x6100_lcd_vline(lcd, px + pw - 1, py, py + ph - 1, 0x204060);
+	x6100_lcd_text(lcd, px + 14, py + 7, 2, title, blue);
+	x6100_lcd_text(lcd, px + 14 + x6100_lcd_text_width(title, 2) + 16, py + 11, 1, hint, dim);
+
+	for (int i = 0; i < 2; i++) {
+		int y = py + 30 + i * 21;
+
+		if (i == rx->eedit_par)
+			x6100_lcd_fill(lcd, px + 6, y - 3, pw - 12, 19, sel);
+
+		x6100_lcd_text(lcd, px + 14, y, 2, i == 0 ? "LOWER" : "UPPER", i == rx->eedit_par ? white : dim);
+		x6100_lcd_text(lcd, px + pw - 12 - x6100_lcd_text_width(v[i], 2), y, 2, v[i], white);
+	}
+
+	x6100_lcd_text(lcd, px + 14, py + 78, 1, info, dim);
+}
+
 static void draw_dsp_panel(x6100_lcd_t *lcd, const rx_t *rx)
 {
 	const int px = LBL_W + 8, py = SPEC_Y + 16, pw = 500, ph = 132;
@@ -7074,6 +7169,9 @@ overlays:
 
 	if (rx->tedit)
 		draw_rit_panel(lcd, rx);
+
+	if (rx->eedit)
+		draw_edge_panel(lcd, rx);
 
 	if (rx->medit)
 		draw_mem_panel(lcd, rx);
@@ -10273,6 +10371,11 @@ int main(int argc, char **argv)
 		}
 
 		// RIT / XIT panel after 10 s
+		if (rx.eedit && t - rx.eedit_since >= 10000) {
+			rx.eedit = false;
+			dirty = true;
+		}
+
 		if (rx.tedit && t - rx.tedit_since >= 10000) {
 			rx.tedit = false;
 			dirty = true;
