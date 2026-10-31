@@ -163,6 +163,20 @@ typedef enum
 
 enum { SEND_NONE, SEND_MSG, SEND_SCAN };	/* rx_t.send: our TX without the PTT key */
 
+// The VFO as it was before memory mode (V/M, CI-V 08): back on V/M or CI-V 07
+typedef struct
+{
+	uint32_t freq;
+	uint32_t b_freq;
+	x6100_mode_t mode;
+	x6100_mode_t b_mode;
+	int fil;
+	int b_fil;
+	int dup;
+	int dup_khz;
+	bool split;
+} vfo_keep_t;
+
 typedef struct
 {
 	uint32_t freq;
@@ -219,6 +233,8 @@ typedef struct
 	int medit_ch;		/* selected channel 1-99 */
 	uint64_t medit_since;
 	uint64_t mclear_at;	/* MFK push asked to clear: a second push within 3 s clears */
+	bool mem_mode;		/* memory mode: a channel is in use, the VFO kept in mem_vfo */
+	vfo_keep_t mem_vfo;
 
 	//
 	// CW keyer (registers 33 / 34): KEY short = key type, KEY long = keyer panel
@@ -1385,7 +1401,7 @@ static void show(const rx_t *rx)
 	int cols = ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0 ? ws.ws_col : 80;
 
 	snprintf(line, sizeof(line), "%c %9.3f kHz %-5s %-4s step %s  vol %3d%s  rfg %3d  pre %s  agc %-4s%s%s",
-		rx->on_b ? 'B' : 'A', rx->freq / 1000.0, rx->band >= 0 ? g_bands[rx->band].name : "-",
+		rx->mem_mode ? 'M' : rx->on_b ? 'B' : 'A', rx->freq / 1000.0, rx->band >= 0 ? g_bands[rx->band].name : "-",
 		mode_name(rx->mode), st, rx->vol, rx->mute ? " (mute)" : "", rx->rfg, rx->pre ? "on " : "off",
 		agc_name(rx->agc), sp, rx->lock ? "  LOCK" : "");
 
@@ -1448,11 +1464,18 @@ static void set_freq(rx_t *rx, int64_t freq)
 // rx->b_*; swapping exchanges them (A/B key, CI-V 07 00 / 01 / B0)
 //
 
+static void mem_mode_off(rx_t *rx);
+
 static void vfo_swap(rx_t *rx)
 {
-	uint32_t f = rx->freq;
-	x6100_mode_t m = rx->mode;
-	int fil = rx->fil;
+	uint32_t f;
+	x6100_mode_t m;
+	int fil;
+
+	mem_mode_off(rx);	/* the VFOs, not a memory channel */
+	f = rx->freq;
+	m = rx->mode;
+	fil = rx->fil;
 
 	set_freq(rx, rx->b_freq);
 	rx->mode = rx->b_mode;
@@ -1467,6 +1490,7 @@ static void vfo_swap(rx_t *rx)
 // The other VFO takes over the one in use (A/B long, CI-V 07 A0)
 static void vfo_equal(rx_t *rx)
 {
+	mem_mode_off(rx);	/* the VFOs, not a memory channel */
 	rx->b_freq = rx->freq;
 	rx->b_mode = rx->mode;
 	rx->b_fil = rx->fil;
@@ -1587,6 +1611,96 @@ static bool mem_recall(rx_t *rx, int n)
 	}
 
 	return true;
+}
+
+//
+// Memory mode, as an Icom: V/M (or CI-V 08) keeps the VFO and tunes a channel; V/M
+// again (or CI-V 07) puts the VFO back as it was. Tuning in memory mode changes the
+// frequency only, not the channel (write it with 09 / the panel to keep it).
+//
+
+// The first stored channel from n on (wrapping), 0 when there is none
+static int mem_used_from(int n)
+{
+	for (int i = 0; i < MEM_COUNT; i++) {
+		int c = (n - 1 + i + MEM_COUNT) % MEM_COUNT + 1;
+
+		if (g_mem[c].used)
+			return c;
+	}
+
+	return 0;
+}
+
+// Into memory mode on channel n (an empty one: the next stored); false when no
+// channel is stored
+static bool mem_mode_on(rx_t *rx, int n)
+{
+	int c = mem_used_from(n >= 1 && n <= MEM_COUNT ? n : 1);
+	vfo_keep_t *k = &rx->mem_vfo;
+
+	if (c == 0)
+		return false;
+
+	if (!rx->mem_mode) {
+		k->freq = rx->freq;
+		k->b_freq = rx->b_freq;
+		k->mode = rx->mode;
+		k->b_mode = rx->b_mode;
+		k->fil = rx->fil;
+		k->b_fil = rx->b_fil;
+		k->dup = rx->dup;
+		k->dup_khz = rx->dup_khz;
+		k->split = rx->split;
+		rx->mem_mode = true;
+	}
+
+	rx->medit_ch = c;
+	return mem_recall(rx, c);
+}
+
+// The VFO into channel n: in memory mode the one kept (where V/M came from)
+static void mem_write_vfo(const rx_t *rx, int n)
+{
+	static rx_t t;
+	const vfo_keep_t *k = &rx->mem_vfo;
+
+	if (!rx->mem_mode) {
+		mem_write(rx, n);
+		return;
+	}
+
+	t = *rx;
+	t.freq = k->freq;
+	t.b_freq = k->b_freq;
+	t.mode = k->mode;
+	t.b_mode = k->b_mode;
+	t.fil = k->fil;
+	t.b_fil = k->b_fil;
+	t.dup = k->dup;
+	t.dup_khz = k->dup_khz;
+	t.split = k->split;
+	mem_write(&t, n);
+}
+
+// Back to the VFO as it was before memory mode
+static void mem_mode_off(rx_t *rx)
+{
+	const vfo_keep_t *k = &rx->mem_vfo;
+
+	if (!rx->mem_mode)
+		return;
+
+	set_freq(rx, k->freq);
+	rx->b_freq = k->b_freq;
+	rx->mode = k->mode;
+	rx->b_mode = k->b_mode;
+	rx->fil = k->fil;
+	rx->b_fil = k->b_fil;
+	rx->dup = k->dup;
+	rx->dup_khz = k->dup_khz;
+	rx->split = k->split;
+	rx->mem_mode = false;
 }
 
 static void mem_clear(int n)
@@ -1788,6 +1902,8 @@ static void xpar_defaults(rx_t *rx)
 static void band_step(rx_t *rx, int dir)
 {
 	int band = rx->band < 0 ? BAND_COUNT : rx->band;	/* BAND_COUNT: GEN */
+
+	rx->mem_mode = false;	/* a band key leaves memory mode on that band, as an Icom */
 
 	if (rx->band < 0)
 		rx->gen_mode = rx->mode;			/* leaving GEN: keep its mode */
@@ -3069,11 +3185,21 @@ static bool on_key(rx_t *rx, int key)
 		rx->keymode = (rx->keymode + 1) % 3;
 		toast(rx->keymode == 0 ? "STRAIGHT KEY" : rx->keymode == 1 ? "PADDLE" : "PADDLE REVERSED");
 		break;
-	case X6100_KEY_VM:	/* short: memory panel; long: split */
-		rx->medit = !rx->medit;
+	case X6100_KEY_VM:	/* short: memory mode with its panel / back to the VFO; long: split */
 		rx->medit_ch = rx->medit_ch < 1 ? 1 : rx->medit_ch;
 		rx->medit_since = now_ms();
 		rx->mclear_at = 0;
+
+		if (rx->mem_mode) {
+			mem_mode_off(rx);
+			rx->medit = false;
+			toast("VFO");
+		} else {
+			rx->medit = true;	/* with no channel stored: the panel, to write one */
+
+			if (!mem_mode_on(rx, rx->medit_ch))
+				toast("NO MEMORIES");
+		}
 		break;
 	case X6100_KEY_AB:	/* short: VFO A <-> B; long: A=B (the other VFO takes this one) */
 		vfo_swap(rx);
@@ -3255,7 +3381,8 @@ static bool on_long_key(rx_t *rx, int key)
 		}
 
 		if (rx->medit) {
-			mem_write(rx, rx->medit_ch);
+			mem_write_vfo(rx, rx->medit_ch);	/* in memory mode: the VFO it came from */
+			mem_mode_on(rx, rx->medit_ch);		/* and on it, as written */
 			toast("WRITTEN TO MEMORY");
 			rx->medit_since = now_ms();
 			return true;
@@ -3512,7 +3639,9 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 
 		if (rx->medit) {
 			rx->medit_ch = (rx->medit_ch - 1 + (value * X6100_DIR_MFK > 0 ? 1 : MEM_COUNT - 1)) % MEM_COUNT + 1;
-			mem_recall(rx, rx->medit_ch);	/* listen while scrolling; empty channels leave the VFO */
+
+			if (g_mem[rx->medit_ch].used)	/* listen while scrolling; an empty channel is passed over */
+				mem_mode_on(rx, rx->medit_ch);
 			rx->medit_since = now_ms();
 			rx->mclear_at = 0;
 			return true;
@@ -6338,8 +6467,16 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 		x6100_lcd_text(lcd, bx + (bw - x6100_lcd_text_width(s, 2)) / 2, by + bh + 6, 2, s, SCR_FG);
 	}
 
-	// VFO in use: A or B right of the TX box
-	x6100_lcd_text(lcd, 72, FREQ_Y + 12, 3, rx->on_b ? "B" : "A", SCR_ACCENT);
+	// VFO in use: A or B right of the TX box; in memory mode M and the channel (amber)
+	if (rx->mem_mode) {
+		char mc[8];
+
+		snprintf(mc, sizeof(mc), "M%d", rx->medit_ch);
+		x6100_lcd_text(lcd, 72, FREQ_Y + 12, 3, "M", SCR_WARN);
+		x6100_lcd_text(lcd, 72 + x6100_lcd_text_width("M", 3) + 2, FREQ_Y + 24, 2, mc + 1, SCR_WARN);
+	} else {
+		x6100_lcd_text(lcd, 72, FREQ_Y + 12, 3, rx->on_b ? "B" : "A", SCR_ACCENT);
+	}
 
 	//
 	// Indicators in fixed slots, two rows, so nothing shifts when one changes
@@ -8104,7 +8241,7 @@ static void conf_load(rx_t *rx, const char *path, bool quiet)
 		fprintf(stderr, "settings: %s\n", path);
 }
 
-static void state_save(const rx_t *rx)
+static void state_write(const rx_t *rx)
 {
 	static const char *modes[] = { [X6100_MODE_LSB] = "lsb", [X6100_MODE_USB] = "usb", [X6100_MODE_CW] = "cw",
 		[X6100_MODE_CWR] = "cwr", [X6100_MODE_AM] = "am", [X6100_MODE_NFM] = "nfm" };
@@ -8203,6 +8340,22 @@ static void state_save(const rx_t *rx)
 
 	if (fclose(fp) != 0 || !ok || rename(tmp, STATE_PATH) != 0)
 		fprintf(stderr, "\nstate: cannot save %s: %s\n", STATE_PATH, strerror(errno));
+}
+
+// In memory mode the state keeps the VFO it came from: a restart comes back in VFO
+// mode, where V/M left off
+static void state_save(const rx_t *rx)
+{
+	static rx_t t;
+
+	if (!rx->mem_mode) {
+		state_write(rx);
+		return;
+	}
+
+	t = *rx;
+	mem_mode_off(&t);
+	state_write(&t);
 }
 
 static bool console_read(rx_t *rx, char *buf, size_t size, size_t *len)
@@ -8634,12 +8787,21 @@ static bool cat_set(void *ctx, x6100_civ_item_t item, int vfo, int32_t v)
 
 		rx->medit_ch = v;
 		break;
-	case X6100_CIV_MEM_WRITE:	/* 09 */
-		mem_write(rx, v);
+	case X6100_CIV_MEM_WRITE:	/* 09: the VFO (in memory mode the one kept), as the panel */
+		mem_write_vfo(rx, v);
 		break;
-	case X6100_CIV_MEM_TO_VFO:	/* 08 / 0A: an empty channel is refused, as on the panel */
+	case X6100_CIV_MEM_MODE:	/* 08: memory mode on channel v (empty: the next stored) */
+		if (!mem_mode_on(rx, v))
+			return false;
+		break;
+	case X6100_CIV_VFO_MODE:	/* 07: back to the VFO as it was */
+		mem_mode_off(rx);
+		break;
+	case X6100_CIV_MEM_TO_VFO:	/* 0A: the channel into the VFO, VFO mode (the kept VFO dropped) */
 		if (!mem_recall(rx, v))
 			return false;
+
+		rx->mem_mode = false;
 		break;
 	case X6100_CIV_MEM_CLEAR:	/* 0B */
 		mem_clear(v);

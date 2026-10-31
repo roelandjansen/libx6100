@@ -46,6 +46,11 @@ Status: 2026-10-31 (v0.16.0). Summary and next steps: `STATUS.md`.
   - next: pick a strong birdie that is also clearly seen / heard on the radio, then
     tick on the scope line, its audio pitch on the audio scope, the notch and its
     tolerance (as for 14064726: USB dial 14.064.000 = 726 Hz)
+- Memory mode, Icom style (2026-10-31, for wfview's V/M button, which did nothing):
+  V/M key and CI-V 08 keep the VFO and tune a channel (empty: the next stored), V/M
+  again and CI-V 07 / 07 00 / 01 put the VFO back; M and the channel on the dial; 0A
+  copies the channel into the VFO; the panel and 09 write the kept VFO; the state keeps
+  the VFO. Host test of the flow passes; to check on the radio and with wfview.
 - AM snaps to the channel raster on the mode keys (5 kHz SW, 9 / 10 kHz MW; built
   2026-10-30): to check on the radio. (The AM tone off the carrier is solved by the IF
   shift: STATUS.)

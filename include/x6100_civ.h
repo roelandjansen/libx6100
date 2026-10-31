@@ -143,6 +143,8 @@ typedef enum
 	X6100_CIV_SCOPE_TX,
 	X6100_CIV_SCOPE_CTYPE,
 	X6100_CIV_MOD_IN,
+	X6100_CIV_MEM_MODE,		/* 08: memory mode on the channel given */
+	X6100_CIV_VFO_MODE,		/* 07: back to VFO mode */
 	X6100_CIV_ITEM_COUNT
 } x6100_civ_item_t;
 

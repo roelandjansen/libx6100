@@ -41,7 +41,7 @@ Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
 | DFN | NR (noise reduction) on / off | NB (noise blanker) on / off |
 | DFL | notch on / off | DSP panel (NR, NB, notch levels) |
 | AGC | off / slow / fast / auto, per mode group | RIT / XIT panel |
-| V/M | memory panel (channels 1-99) | split on / off: RX on the VFO in use, TX on the other |
+| V/M | memory mode with the memory panel / back to the VFO (Icom style) | split on / off: RX on the VFO in use, TX on the other |
 | F1 | next scope mode: CENTER -> SCROLL-C -> FIX -> SCROLL-F -> CENTER | scope panel: mode, VBW, averaging, waveform, colours, waterfall (see Scope panel) |
 | F2 | span ±48 / 24 / 12 / 6 / 3 / 1.5 kHz; FIX / SCROLL-F: next fixed edge 1-4; audio scope: 0-3 / 0-6 kHz | FIX / SCROLL-F: store the edge in use (see Fixed edges); else reference level: MFK turn = ±1 dB (±30), MFK push = RF <-> AF scope; F2 long, other key or 10 s idle closes |
 | F3 | audio scope on / off (RF <-> AF) | RF scope left (5/8) + audio scope right (3/8), on / off |
@@ -502,11 +502,11 @@ mic gain, compressor level, monitor, VOX gain, anti-VOX), 16 44 / 45 / 46
 
 | Control | Action |
 |---|---|
-| V/M | open / close the memory panel |
-| MFK turn | channel 1-99; a used channel is tuned at once (listen while scrolling) |
-| MFK long | write the VFO in use into the channel (frequency, mode, filter; with split also the TX side; duplex unless AUTO); a rewrite keeps the name |
+| V/M | memory mode: the VFO is kept, the selected channel tuned (empty: the next stored), the panel opens; V/M again: back to the VFO as it was. The dial shows M and the channel (amber) instead of A / B |
+| MFK turn | channel 1-99; a stored channel is tuned at once (listen while scrolling), an empty one passed over |
+| MFK long | write the VFO into the channel: the one kept, where V/M came from (frequency, mode, filter; with split also the TX side; duplex unless AUTO); a rewrite keeps the name |
 | MFK push, twice within 3 s | clear the channel |
-| other key, 10 s idle | close; the VFO stays on the last channel tuned |
+| other key, 10 s idle | close the panel; memory mode stays until V/M. Tuning in memory mode changes the frequency only, not the channel; A/B, A=B and the band keys leave memory mode (a band key without restoring the VFO, as an Icom) |
 
 Kept in `/etc/x6100/memories.conf`, one channel per line, written on every change and
 included in `build.sh backup`:
@@ -518,7 +518,8 @@ mem 5 29620000 nfm fil2 tx 29520000 nfm name RPT 10m
 
 Names are set in that file, from the console (`mem ...`) or over CI-V (1A 00, e.g. a
 memory editor in the CAT program); the radio has no keyboard. CI-V also selects and
-tunes (08), writes the VFO (09), recalls (0A) and clears (0B) channels: see
+tunes in memory mode (08; 07 back to the VFO), writes the VFO (09), copies a channel into
+the VFO (0A) and clears (0B) channels: see
 `x6100_civ.md`.
 `build.sh deploy` installs `docs/x6100_memories.conf.example` (FT8 on 160-6 m, a 60 m
 spot, a 10 m repeater as a split channel) when the radio has no memories.conf and

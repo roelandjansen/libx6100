@@ -430,12 +430,12 @@ static size_t cmd_mode(req_t *r)
 static size_t cmd_vfo(req_t *r)
 {
 	if (r->n == 0)
-		return reply_ok(r, true);	/* "VFO mode": we are always in VFO mode */
+		return reply_ok(r, set(r, X6100_CIV_VFO_MODE, 0, 1));	/* VFO mode: out of memory mode */
 
 	switch (r->d[0]) {
 	case 0x00:
-	case 0x01:
-		return reply_ok(r, set(r, X6100_CIV_VFO, 0, r->d[0]));
+	case 0x01:	/* VFO A / B: also out of memory mode, as an Icom */
+		return reply_ok(r, set(r, X6100_CIV_VFO_MODE, 0, 1) && set(r, X6100_CIV_VFO, 0, r->d[0]));
 	case 0xA0:
 		return reply_ok(r, set(r, X6100_CIV_VFO_EQUAL, 0, 1));
 	case 0xB0:
@@ -741,17 +741,18 @@ static int mem_ch_bcd(const uint8_t *d)
 	return hi < 0 || lo < 0 || hi * 100 + lo < 1 || hi * 100 + lo > 99 ? -1 : hi * 100 + lo;
 }
 
-// 08: memory mode (no data: the selected channel), or select channel 0001-0099
+// 08: memory mode (no data: on the selected channel), or select channel 0001-0099 and
+// go to memory mode on it, as an Icom; 07 goes back to the VFO as it was
 static size_t cmd_mem_select(req_t *r)
 {
 	int32_t ch;
 
 	if (r->n == 0)
-		return reply_ok(r, get(r, X6100_CIV_MEM_CH, 0, &ch) && set(r, X6100_CIV_MEM_TO_VFO, 0, ch));
+		return reply_ok(r, get(r, X6100_CIV_MEM_CH, 0, &ch) && set(r, X6100_CIV_MEM_MODE, 0, ch));
 
 	int c = r->n == 2 ? mem_ch_bcd(r->d) : -1;
 
-	return reply_ok(r, c > 0 && set(r, X6100_CIV_MEM_CH, 0, c) && set(r, X6100_CIV_MEM_TO_VFO, 0, c));
+	return reply_ok(r, c > 0 && set(r, X6100_CIV_MEM_CH, 0, c) && set(r, X6100_CIV_MEM_MODE, 0, c));
 }
 
 // 09 / 0A / 0B: write / to VFO / clear, on the selected channel
