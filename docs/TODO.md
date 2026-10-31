@@ -54,6 +54,7 @@ Status: 2026-10-30 (v0.15.0). Summary and next steps: `STATUS.md`.
   inside; the RF scope shows where it sits.
 - wfserver: CPU load and audio dropouts on the radio; why the combined scope mode
   fails (WaterfallFormat 0 works).
+  GEN row WFSERVER (on / off / start, 2026-10-31): to check on the radio.
 - S-meter calibration (signal generator): SMETER_CAL_DB is provisional (-21: -15 from
   an IC-7851 comparison, then 6 dB lower); also the overload point with PRE / ATT.
 - Codec level vs ALC test (x6100_tx codec at -40 / -30 / -20 dBFS).

@@ -495,7 +495,7 @@ static bool time_set(const char *v)
 	return true;
 }
 
-enum { GEN_BRIGHT, GEN_CAT, GEN_CIVADDR, GEN_MODOFF, GEN_MODDATA, GEN_NTP, GEN_WIFI, GEN_WNET, GEN_BT, GEN_BTPAIR,
+enum { GEN_BRIGHT, GEN_CAT, GEN_CIVADDR, GEN_MODOFF, GEN_MODDATA, GEN_WFS, GEN_NTP, GEN_WIFI, GEN_WNET, GEN_BT, GEN_BTPAIR,
 	GEN_BTDEV, GEN_BSCAN, GEN_BMARK, GEN_BNOTCH, GEN_ROWS };	/* GEN rows */
 
 static void gen_adjust(int row, int dir, bool def);
@@ -4830,7 +4830,7 @@ static void draw_filter_panel(x6100_lcd_t *lcd, const rx_t *rx)
 //
 
 static const char *g_gen_name[GEN_ROWS] = {
-	"BRIGHTNESS", "CAT CI-V", "CI-V ADDRESS", "DATA OFF MOD", "DATA MOD", "NTP SYNC", "WIFI", "WIFI NETWORK",
+	"BRIGHTNESS", "CAT CI-V", "CI-V ADDRESS", "DATA OFF MOD", "DATA MOD", "WFSERVER", "NTP SYNC", "WIFI", "WIFI NETWORK",
 	"BLUETOOTH", "BT PAIRING", "BT DEVICE", "BIRDIE SCAN", "BIRDIE MARKS", "BIRDIE NOTCH",
 };
 static const int g_cat_rates[] = { 0, 4800, 9600, 19200, CAT_PTY };	/* the DEV port carries no more than 19200 */
@@ -5107,6 +5107,37 @@ static void bt_cmd(char *a1, char *a2)
 	g_sys.at = 0;
 }
 
+//
+// wfserver (contrib/wfserver) is run by x6100_ui.sh: a watcher starts it while CAT is on
+// the pty; /etc/x6100/wfserver.off switches the autostart off. The GEN row WFSERVER
+// calls x6100_ui.sh wfserver on / off, as on the shell.
+//
+
+#define WFS_SH		"/opt/wfserver/wfserver.sh"
+#define WFS_OFF		"/etc/x6100/wfserver.off"
+#define WFS_PID		"/var/run/x6100_wfserver.pid"	/* the watcher */
+#define UI_SH		"/root/x6100_ui.sh"		/* where build.sh deploy puts it */
+
+static bool wfs_installed(void)
+{
+	return access(WFS_SH, X_OK) == 0;
+}
+
+static bool wfs_watching(void)
+{
+	FILE *fp = fopen(WFS_PID, "r");
+	int pid = 0;
+
+	if (fp != NULL) {
+		if (fscanf(fp, "%d", &pid) != 1)
+			pid = 0;
+
+		fclose(fp);
+	}
+
+	return pid > 0 && kill(pid, 0) == 0;
+}
+
 static void gen_value(int row, char *s, size_t n)
 {
 	switch (row) {
@@ -5130,6 +5161,9 @@ static void gen_value(int row, char *s, size_t n)
 	case GEN_MODOFF:
 	case GEN_MODDATA:
 		snprintf(s, n, "%s", g_modin[row == GEN_MODDATA] ? "USB" : "MIC");
+		break;
+	case GEN_WFS:
+		snprintf(s, n, "%s", !wfs_installed() ? "N/A" : access(WFS_OFF, F_OK) == 0 ? "OFF" : "ON");
 		break;
 	case GEN_NTP:
 		snprintf(s, n, "%s", strcmp(g_ntp_server, "off") == 0 ? "OFF" : "AT START");
@@ -5183,6 +5217,16 @@ static void gen_hint(int row, char *s, size_t n)
 	case GEN_MODOFF:	/* the TX audio a PTT key or CAT PTT uses; the hand mic PTT is always MIC */
 	case GEN_MODDATA:
 		snprintf(s, n, "%s  USB: AUDIO FROM LINUX (WFSERVER)", row == GEN_MODDATA ? "USB-D LSB-D" : "SSB AM FM");
+		break;
+	case GEN_WFS:
+		if (!wfs_installed())
+			snprintf(s, n, "NOT INSTALLED: BUILD.SH DEPLOY");
+		else if (access(WFS_OFF, F_OK) == 0)
+			snprintf(s, n, "%s", wfs_watching() ? "STOPPING" : "TURN: ON");
+		else if (g_cat_baud != CAT_PTY)
+			snprintf(s, n, "NEEDS CAT CI-V PTY");
+		else
+			snprintf(s, n, "%s", wfs_watching() ? "RUNNING, WFVIEW PORT 50001" : "NOT RUNNING, HOLD MFK: START");
 		break;
 	case GEN_WIFI:
 		if (g_sys.ssid[0] != '\0')
@@ -5245,6 +5289,14 @@ static void gen_adjust(int row, int dir, bool def)
 	case GEN_MODDATA:
 		g_modin[row == GEN_MODDATA] = def ? row == GEN_MODDATA : !g_modin[row == GEN_MODDATA];
 		break;
+	case GEN_WFS: {	/* turn: on / off; hold: on (the default) */
+		char on[] = "on", off[] = "off", sh[] = "sh", ui[] = UI_SH, wfs[] = "wfserver";
+		char *cmd[] = { sh, ui, wfs, def || dir > 0 ? on : off, NULL };
+
+		if (wfs_installed() && access(UI_SH, R_OK) == 0)
+			sys_spawn(cmd);	/* off waits up to 10 s for wfserver to end */
+		break;
+	}
 	case GEN_NTP:
 		snprintf(g_ntp_server, sizeof(g_ntp_server), "%s", def || strcmp(g_ntp_server, "off") == 0 ? "" : "off");
 		break;

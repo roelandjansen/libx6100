@@ -51,7 +51,7 @@ Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
 | ATU | tuner in / out | tune (keys TX at tune power); the result becomes a tuner memory |
 | LOCK | lock knobs and keys (PTT still works) | |
 | PWR | display on / off | release after 1.5-4 s: quit; hold 4 s: power off (as the stock UI). TX is dropped and filters saved first |
-| GEN | settings panel: brightness, CAT, NTP (MFK turn = change, push = next row, long = default; GEN, other key or 10 s idle closes) | status page: IP, uptime, battery, CAT, NTP result, build (any key or 30 s closes) |
+| GEN | settings panel: brightness, CAT, wfserver, NTP (MFK turn = change, push = next row, long = default; GEN, other key or 10 s idle closes) | status page: IP, uptime, battery, CAT, NTP result, build (any key or 30 s closes) |
 | KEY | key type: straight / paddle / paddle reversed | keyer panel |
 | MSG | message panel: M1-M8, MFK push sends (see Messages) | send the selected message again every `msgrepeat` s |
 | APP | app panel: SWR SCAN, MFK push starts | SWR scan of the band segment the VFO is in |
@@ -217,6 +217,7 @@ Values are kept in the last state (see Settings); defaults NR 20, NB 10 / 10, no
 | CI-V ADDRESS | IC-705 A4 (default) / X6100 61 (wfview with `contrib/wfview/X6100.rig`); `civaddr` in the conf fixes it | at once |
 | DATA OFF MOD | TX audio in SSB / AM / FM: MIC (default) / USB (the codec: audio from Linux, wfserver); PTT key and CAT PTT, the hand mic is always MIC; also CI-V 1A 05 0118; `modin` in the conf fixes both rows | at once |
 | DATA MOD | the same for USB-D / LSB-D: USB (default) / MIC; CI-V 1A 05 0119 | at once |
+| WFSERVER | ON / OFF (ON), N/A when not installed: runs `x6100_ui.sh wfserver on\|off` (autostart while CAT is on the pty); MFK hold starts it (also when x6100_trx was not started by `x6100_ui.sh stop`); the second column shows RUNNING, NOT RUNNING, STOPPING or NEEDS CAT CI-V PTY | at once (off: up to 10 s) |
 | NTP SYNC | AT START / OFF | next start |
 | WIFI | ON / OFF (NetworkManager); shows network, IP and signal | at once |
 | WIFI NETWORK | turn: choose a saved network, hold MFK: connect. New networks: `nmtui` over ssh | at once |
