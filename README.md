@@ -94,6 +94,13 @@ curve over the RF scope with the lowest point marked (render with a dip at 7.110
 
 RF and audio scope (F3 long), the audio scope with colours of its own (AF rows).
 
+![wfview connected to the X6100 over the network](docs/images/x6100_wfview.webp)
+
+wfview on a PC, connected over the LAN to wfserver on the radio (`contrib/wfserver`),
+which talks CI-V to x6100_trx on its pty: 20 m USB, scope and waterfall, meters, PBT
+inner / outer, band buttons; RX audio with 109 ms latency and no lost packets
+(2026-10-31, rig file `contrib/wfview/X6100.rig`, address 61).
+
 ## Status
 
 Verified on hardware (BASE 1.1.9), see `docs/x6100_control_interface.md` §9:
