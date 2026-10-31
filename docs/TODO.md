@@ -199,8 +199,9 @@ under GEN until a better key turns up.
   discover module live aborts it): the XM2 gets handsfree_head_unit, an eSCO link
   and a 16 kHz (mSBC) source, but no samples arrive (15 s: 44 bytes, the WAV header):
   the voice data does not cross USB, as IU1WXY found (MUSB host, isochronous). WiFi
-  stayed up. Next: the same with CVSD (8 kHz, enable_msbc=false: x6100_bt_hfp_test.sh
-  MAC 15 cvsd).
+  stayed up. CVSD (8 kHz, enable_msbc=false: x6100_bt_hfp_test.sh MAC 15 cvsd): also
+  44 bytes. Confirmed for ourselves: no Bluetooth headset mic on this radio, neither
+  wideband nor narrowband. RADE TX on the radio is out; RX to the headset (A2DP) stays.
 - Now: the IU1WXY image (OS, kernel 6.1.82, stock baseband BASE 1.1.9) is the base;
   x6100_trx and its tools run on it (`build.sh deploy`). wfserver for the R16 is built
   as a self-contained bundle (`contrib/wfserver`, Ubuntu 24.04 armhf Qt, own glibc
