@@ -19,9 +19,6 @@ Status: 2026-10-30 (v0.15.0). Summary and next steps: `STATUS.md`.
   goes to the baseband directly (PTT + codec audio does not mix). To look for: an
   unmapped bit in registers 21 / 36 / 38 (stock UI / IU1WXY trace in FM), or a
   baseband with a sub-audible tone; else codec TX with Linux mic capture (none yet).
-- Hand mic PTT with split: x6100_trx follows the baseband TX flag (verified), the first
-  ms go out on the RX side; the baseband split flag (register 12 b1, VFO A RX / VFO B TX)
-  could make that clean: to test.
 - Birdies: scan, store, scope ticks and automatic notch built (2026-10-25, own design;
   the idea from the IU1WXY v0.128 release notes: their software is closed and its
   terms forbid reproducing or imitating its screens). Host simulation of 80 m with the
@@ -49,23 +46,9 @@ Status: 2026-10-30 (v0.15.0). Summary and next steps: `STATUS.md`.
   - next: pick a strong birdie that is also clearly seen / heard on the radio, then
     tick on the scope line, its audio pitch on the audio scope, the notch and its
     tolerance (as for 14064726: USB dial 14.064.000 = 726 Hz)
-- AM tone off the carrier (2026-10-29/30): not a regression, v0.13.0 does the same (no
-  PBT code). Tuned on the carrier (7.205) clean; 1 kHz either side a tone whose pitch
-  follows the tuning step; not a birdie, not an adjacent station. The baseband AM
-  detector itself (a beat with what is left at the zero-IF receive frequency, or a
-  synchronous detector out of lock). The AM offset puts the receiver that far off the
-  carrier, so on a weak station 500 Hz was already enough: offset now 100 Hz. Open:
-  smooth onset or sudden (lock range), strong vs weak station. The mode key now puts AM
-  on the channel raster (5 kHz SW, 9 / 10 kHz MW), 2026-10-30: to check on the radio.
-  The scope shows a spike (S3-4) at the receive frequency: the zero-IF DC / LO spike;
-  IU1WXY seems not to have it there. Built 2026-10-30: IF shift (register 35, ifshift
-  10000) in AM puts the LO 10 kHz below, the AM offset is then 0. Verified: the spike
-  moved 10 kHz left, carrier on the receive line; the scope bridges it. To check: station on
-  the receive line (else the sign: ifshift -10000), no tone off the carrier (gone), the spike
-  10 kHz left on the scope. SSB too since 2026-10-30. TX with the shift kept (ifshift_tx
-  1): CW on 7.030 heard on 7.030 on the IC-7851 (verified); now the default, CW too. TX
-  scope on the TX line and CW keying clean, split TX on VFO B and hand mic PTT work
-  (verified). To check: VOX.
+- AM snaps to the channel raster on the mode keys (5 kHz SW, 9 / 10 kHz MW; built
+  2026-10-30): to check on the radio. (The AM tone off the carrier is solved by the IF
+  shift: STATUS.)
 - AM PBT and the filter panel PBT box (2026-10-29): to check on the radio (PBT in USB
   from wfview verified). AM passband now: upper edge at Icom's H, lower 2 x offset
   inside; the RF scope shows where it sits.

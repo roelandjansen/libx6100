@@ -176,7 +176,8 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     0): verified (spike 10 kHz left, carrier on the receive line; the scope bridges
     the spike); the tone off the carrier is gone. Shift in all modes, kept in TX: the
     baseband transmits on the dial frequency (CW on 7.030 verified), the TX scope on the
-    TX line, CW keying clean, split (VFO B) and hand mic PTT work. VOX: not on BASE
+    TX line, CW keying clean, split (VFO B) and hand mic PTT work, also together (the
+    hand mic TX follows the split shown, 2026-10-31). VOX: not on BASE
     1.1.9 (IU1WXY neither, same register 22); the TX panel shows VOX N/A.
     Open: CPU load, dropouts, why combined scope mode fails.
 18. RADE in x6100_trx: the codec has one input and one output to the baseband, both
