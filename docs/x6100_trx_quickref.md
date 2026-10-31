@@ -204,7 +204,7 @@ Values are kept in the last state (see Settings); defaults NR 20, NB 10 / 10, no
 - OOB (red, under OVF): band check off (`--oob` or `oob` in the conf) and tuned outside the region's allocations; where you transmit is your responsibility
 - NB / NR / MN (blue, top right of the dial) in fixed places, e.g. `NB    MN`, `   NR   `, `NB NR MN`; MN = manual notch, as on Icom radios
 - Tune panel (ATU long press / CAT): amber TUNING with live PO and SWR bars (SWR green / yellow / red), then green TUNED for 4 s with the time taken and the network (L, C, S in decimal, relay bits and hex)
-- Clock under the filter label: system time, UTC, ISO 8601 (`2026-10-24T10:08:27Z`); hidden behind the filter panel while that is open. At start x6100_trx runs one NTP sync with the image's busybox `ntpd -q` (server: `ntp` in the conf, else /etc/ntp.conf, else pool.ntp.org) and reports the result on the console (a failure as a warning); skipped when the image syncs itself (init.d S48sntp / S49ntp, as on IU1WXY), when a time daemon runs, or with `ntp off`
+- Clock under the filter label: system time, UTC, ISO 8601 (`2026-10-24T10:08:27Z`); hidden behind the filter panel while that is open. At start x6100_trx runs one NTP sync with the image's busybox `ntpd -q` (server: `ntp` in the conf, else /etc/ntp.conf, else pool.ntp.org) and reports the result on the console (a failure as a warning); skipped when the image syncs itself (init.d S48sntp / S49ntp, as on IU1WXY), when a time daemon runs, or with `ntp off`. The clock is grey once the time is known (NTP synced, synced by the OS, or set by hand) and amber while not (NTP failed, off or still running, or a time before 2026: a clock never set, e.g. no network in the field). Set it by hand on the console: `time 2026-10-31T10:15:00Z` (UTC; the Z may be left out) or `time 10:15[:00]` for today; not from the settings or state file
 
 ## Settings panel (GEN)
 
@@ -304,6 +304,7 @@ The status line starts with the VFO in use (A / B); with split, RIT or XIT it ad
 | `civaddr a4`, `civaddr 61` | CI-V address: a4 IC-705 (default), 61 X6100 with `contrib/wfview/X6100.rig`; also the GEN row CI-V ADDRESS (state); in the settings file it fixes that row |
 | `modin mic usb` | TX audio input DATA OFF MOD, DATA MOD: mic or usb (the codec, a Linux program such as wfserver); also the GEN rows (state); in the settings file it fixes them |
 | `ntp <server>`, `ntp on`, `ntp off` | NTP sync at start (settings file) |
+| `time 2026-10-31T10:15:00Z`, `time 10:15` | set the clock by hand, UTC (console only); the clock turns grey |
 | `bright 5-100` | display brightness in % |
 | `ab`, `a=b` | VFO A <-> B, A=B |
 | `txsplit`, `notxsplit` | split on / off |

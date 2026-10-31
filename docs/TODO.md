@@ -4,7 +4,9 @@ Status: 2026-10-30 (v0.15.0). Summary and next steps: `STATUS.md`.
 
 ## Display
 
-- Clock: own time source / sync check (now: system time, one `ntpd -q` at start).
+- Clock: amber while the time is not known (NTP failed / off / running, or before 2026),
+  console `time` to set it by hand (built 2026-10-31, to check on the radio). Later
+  maybe: a GPS (NMEA on USB) as time source in the field.
 
 ## Radio
 

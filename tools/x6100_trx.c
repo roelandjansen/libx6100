@@ -440,6 +440,61 @@ static char g_ntp_msg[64] = "not run";	/* last NTP result, for the status page *
 static char g_toast[24];		/* short confirmation over the scope (VFO A / B, A=B) */
 static uint64_t g_toast_until;	/* ms; shown while now_ms() is before this */
 
+//
+// Where the clock comes from: unknown until an NTP sync succeeds, the OS syncs it (the
+// IU1WXY image at boot, a time daemon) or it is set by hand (console time). The clock
+// under the FIL label is amber while unknown, or when it reads before TIME_MIN (a
+// clock never set: no network in the field). FT8 and logging need it right.
+//
+
+enum { TS_UNKNOWN, TS_NTP, TS_OS, TS_HAND };
+
+#define TIME_MIN	1767225600	/* 2026-01-01T00:00:00Z */
+
+static int g_time_src = TS_UNKNOWN;
+
+static bool time_ok(void)
+{
+	return g_time_src != TS_UNKNOWN && time(NULL) >= TIME_MIN;
+}
+
+// Console time <UTC>: 2026-10-31T10:15:00Z (the Z may be left out) or 10:15[:00]
+// today; sets the system clock (x6100_trx runs as root). False when it does not parse
+static bool time_set(const char *v)
+{
+	time_t now = time(NULL);
+	struct tm tm;
+	struct timespec ts = { 0 };
+	int y, mo, d, h, mi, s = 0, n;
+
+	if (v == NULL || gmtime_r(&now, &tm) == NULL)
+		return false;
+
+	if ((n = sscanf(v, "%4d-%2d-%2dT%2d:%2d:%2d", &y, &mo, &d, &h, &mi, &s)) >= 5) {
+		tm.tm_year = y - 1900;
+		tm.tm_mon = mo - 1;
+		tm.tm_mday = d;
+	} else if ((n = sscanf(v, "%2d:%2d:%2d", &h, &mi, &s)) < 2) {
+		return false;
+	}
+
+	if (tm.tm_year < 126 || tm.tm_mon < 0 || tm.tm_mon > 11 || tm.tm_mday < 1 || tm.tm_mday > 31
+		|| h < 0 || h > 23 || mi < 0 || mi > 59 || s < 0 || s > 59)
+		return false;
+
+	tm.tm_hour = h;
+	tm.tm_min = mi;
+	tm.tm_sec = s;
+	ts.tv_sec = timegm(&tm);
+
+	if (ts.tv_sec < TIME_MIN || clock_settime(CLOCK_REALTIME, &ts) != 0)
+		return false;
+
+	g_time_src = TS_HAND;
+	snprintf(g_ntp_msg, sizeof(g_ntp_msg), "set by hand");
+	return true;
+}
+
 enum { GEN_BRIGHT, GEN_CAT, GEN_CIVADDR, GEN_MODOFF, GEN_MODDATA, GEN_NTP, GEN_WIFI, GEN_WNET, GEN_BT, GEN_BTPAIR,
 	GEN_BTDEV, GEN_BSCAN, GEN_BMARK, GEN_BNOTCH, GEN_ROWS };	/* GEN rows */
 
@@ -6690,8 +6745,8 @@ overlays:
 	}
 
 	//
-	// Clock under the filter label: system time (kept by the OS / network for
-	// now), UTC, ISO 8601. Drawn before the panels, which cover it while open.
+	// Clock under the filter label: system time, UTC, ISO 8601; amber while not known
+	// to be right (time_ok). Drawn before the panels, which cover it while open.
 	//
 	{
 		time_t now = time(NULL);
@@ -6702,7 +6757,7 @@ overlays:
 		if (gmtime_r(&now, &tm) != NULL && strftime(m, sizeof(m), "%Y-%m-%dT%H:%M:%SZ", &tm) > 0) {
 			tw = x6100_lcd_text_width(m, 2);
 			x6100_lcd_fill(lcd, W - tw - 10, SPEC_Y + 60, tw + 8, 18, 0x000000);
-			x6100_lcd_text(lcd, W - tw - 6, SPEC_Y + 62, 2, m, SCR_DIM);
+			x6100_lcd_text(lcd, W - tw - 6, SPEC_Y + 62, 2, m, time_ok() ? SCR_DIM : SCR_WARN);
 		}
 	}
 
@@ -7233,6 +7288,21 @@ static bool console_line(rx_t *rx, char *line)
 			} else {
 				fprintf(stderr, "\nmodin: <mic|usb> <mic|usb> (data off, data)\n");
 			}
+
+			continue;
+		}
+
+		// time <UTC>: set the clock by hand (console only, not from the conf or state)
+		if (strcasecmp(t, "time") == 0) {
+			const char *v = strtok(NULL, " \t\r\n");
+
+			if (g_conf_loading)
+				continue;
+
+			if (time_set(v))
+				fprintf(stderr, "\ntime: set\n");
+			else
+				fprintf(stderr, "\ntime: 2026-10-31T10:15:00Z or 10:15[:00] (UTC), from 2026 on\n");
 
 			continue;
 		}
@@ -9282,12 +9352,14 @@ static void ntp_start(void)
 	// The IU1WXY image syncs at boot itself (S48sntp, S49ntp): leave the clock to it
 	if (access("/etc/init.d/S48sntp", X_OK) == 0 || access("/etc/init.d/S49ntp", X_OK) == 0) {
 		snprintf(g_ntp_msg, sizeof(g_ntp_msg), "by the OS at boot");
+		g_time_src = TS_OS;
 		printf("ntp: %s\n", g_ntp_msg);
 		return;
 	}
 
 	if (proc_running(daemons)) {
 		snprintf(g_ntp_msg, sizeof(g_ntp_msg), "by the OS time daemon");
+		g_time_src = TS_OS;
 		printf("ntp: the OS runs a time daemon; clock as the OS has it\n");
 		return;
 	}
@@ -9328,9 +9400,10 @@ static void ntp_poll(void)
 
 	g_ntp_pid = -1;
 
-	if (WIFEXITED(st) && WEXITSTATUS(st) == 0)
+	if (WIFEXITED(st) && WEXITSTATUS(st) == 0) {
 		snprintf(g_ntp_msg, sizeof(g_ntp_msg), "synced");
-	else if (WIFEXITED(st) && WEXITSTATUS(st) == 127)
+		g_time_src = TS_NTP;
+	} else if (WIFEXITED(st) && WEXITSTATUS(st) == 127)
 		snprintf(g_ntp_msg, sizeof(g_ntp_msg), "no ntpd on this image");
 	else
 		snprintf(g_ntp_msg, sizeof(g_ntp_msg), "failed (status %d)", WIFEXITED(st) ? WEXITSTATUS(st) : -1);
