@@ -50,7 +50,7 @@ Status: 2026-10-31 (v0.16.0). Summary and next steps: `STATUS.md`.
   V/M key and CI-V 08 keep the VFO and tune a channel (empty: the next stored), V/M
   again and CI-V 07 / 07 00 / 01 put the VFO back; M and the channel on the dial; 0A
   copies the channel into the VFO; the panel and 09 write the kept VFO; the state keeps
-  the VFO. Host test of the flow passes; to check on the radio and with wfview.
+  the VFO. Verified 2026-10-31: V/M goes to M1 and back to the VFO.
 - AM snaps to the channel raster on the mode keys (5 kHz SW, 9 / 10 kHz MW; built
   2026-10-30): to check on the radio. (The AM tone off the carrier is solved by the IF
   shift: STATUS.)
