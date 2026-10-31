@@ -76,8 +76,8 @@ Verified on the radio:
     (16 kHz) nor CVSD (8 kHz) (scripts/x6100_bt_hfp_test.sh): RADE TX stays on the PC
   - Bluetooth headset: connect / disconnect on the GEN row BT DEVICE and autoconnect
     (`btauto`: after Bluetooth off / on, the headset off / on, a restart) work
-- built 2026-10-31, to check on the radio: CI-V on the DEV port next to the pty (a
-  logger on the cable while wfview runs).
+  - CI-V on the DEV port next to the pty: rigctl (IC-705 model 3085, 19200, civaddr 61)
+    on the USB cable sets and reads the frequency while wfview runs over wfserver
 
 Built, not yet tried on the radio (2026-10-25 .. 28):
 

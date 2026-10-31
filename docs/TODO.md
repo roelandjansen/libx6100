@@ -60,8 +60,8 @@ Status: 2026-10-30 (v0.15.0). Summary and next steps: `STATUS.md`.
   GEN row WFSERVER (2026-10-31): off works; on / start brings wfserver up, but wfview
   sometimes needs up to three connects before it works, with nothing changed on the
   X6100: a wfview reconnect / recovery matter, for the wfview project (Phil, Elliott,
-  Roeland). To test: CI-V on the DEV port next to the pty (a logger on the USB cable
-  while wfview is connected over the network).
+  Roeland). CI-V on the DEV port next to the pty verified (rigctl on the USB cable
+  while wfview is connected over the network, 2026-10-31).
 - S-meter calibration (signal generator): SMETER_CAL_DB is provisional (-21: -15 from
   an IC-7851 comparison, then 6 dB lower); also the overload point with PRE / ATT.
 - Codec level vs ALC test (x6100_tx codec at -40 / -30 / -20 dBFS).
@@ -92,7 +92,7 @@ Status: 2026-10-30 (v0.15.0). Summary and next steps: `STATUS.md`.
 - CI-V rate: 19200 is the limit of the DEV port (9600 / 19200 work, 38400 and up do
   not, with the divisor written and the PC side checked); faster CAT goes over the
   network: the CI-V pty (/tmp/x6100-civ, any speed; since 2026-10-31 served next to the
-  DEV port, so wfserver and a logger on the cable work at once: to check on the radio), or
+  DEV port, so wfserver and a logger on the cable work at once: verified with rigctl), or
   the own LAN server (`x6100_netaudio_design.md`, option A vs B reopened).
 - TX panel (F4 long): mic select and gains, compressor, VOX, monitor, squelch built;
   ranges and register 22 layout now from X6100Control v0.16.1 (VOX: [6:0] gain, [14:8]
