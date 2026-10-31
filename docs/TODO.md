@@ -67,6 +67,10 @@ Status: 2026-10-31 (v0.16.0). Summary and next steps: `STATUS.md`.
   X6100: a wfview reconnect / recovery matter, for the wfview project (Phil, Elliott,
   Roeland). CI-V on the DEV port next to the pty verified (rigctl on the USB cable
   while wfview is connected over the network, 2026-10-31).
+  wfview v3 (v3-initial): the NR and NB level sliders send nothing (no 14 06 / 14 12 in
+  the x6100_trx --cat-log; NR / NB on / off do arrive); the rig file has both as the
+  IC-705 file. To split: rigctl L NR / L NB on the cable (our side), wfview's debug log
+  (queued or not), else lost in wfserver. For the wfview project.
 - S-meter calibration (signal generator): SMETER_CAL_DB is provisional (-21: -15 from
   an IC-7851 comparison, then 6 dB lower); also the overload point with PRE / ATT.
 - Codec level vs ALC test (x6100_tx codec at -40 / -30 / -20 dBFS).
