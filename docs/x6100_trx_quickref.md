@@ -62,7 +62,7 @@ Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
 |---|---|
 | CENTER | tuned frequency in the middle, spectrum moves with tuning |
 | SCROLL-C | as CENTER, waterfall shifts with tuning |
-| FIX | fixed window: the edge in use (1-4) of the range the VFO is in; a new range moves it |
+| FIX | fixed window: the edge in use (1-4) of the range the VFO is in; a new range moves it. With the VFO outside the window: `<< SCOPE OUT OF RANGE` or `SCOPE OUT OF RANGE >>` (amber, the arrows on the side of the VFO), as an Icom |
 | SCROLL-F | as FIX; tuning past an edge moves the window by its own width, on the grid of the edge (Icom style: 7.000-7.075, at 7.075 and up 7.075-7.150), the waterfall with it. In FIX and SCROLL-F the baseband LO goes near the window centre (the IF shift 10-40 kHz either way), so the IQ covers the whole window (edges are at most 75 kHz for that) |
 
 ## Fixed edges (FIX / SCROLL-F, IC-705 style)

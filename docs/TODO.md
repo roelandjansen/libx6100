@@ -93,6 +93,8 @@ Status: 2026-10-31 (v0.16.0). Summary and next steps: `STATUS.md`.
   SCROLL-F now pages by the window width on the edge grid, as an Icom (2026-10-31,
   was a sliding window): to check on the radio. At start SCROLL-F showed no scope
   until the VFO moved (the window not yet on the VFO page): fixed, the page set at start.
+  FIX with the VFO outside the window: SCOPE OUT OF RANGE with << / >> on the VFO side,
+  as an Icom (2026-10-31; the font has < and > now): to check on the radio.
 - Register 35 LO for FIX / SCROLL-F (built 2026-10-31; SCROLL-F showed a black right
   part on 6.920-6.976 with the VFO at 6.933): the LO goes as near the window centre as
   the shift allows (10-40 kHz either way), the IQ then covers the window: a 56 kHz

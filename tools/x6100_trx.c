@@ -7129,6 +7129,23 @@ overlays:
 	}
 
 	//
+	// FIX with the receive frequency outside the window, as an Icom: SCOPE OUT OF RANGE,
+	// the arrows on the side the VFO is (the window then has no IQ: the LO is near the
+	// VFO). SCROLL-F moves the window along, so never there.
+	//
+	if (view != 1 && rx->scope == SCOPE_FIX && rx->fix_w > 0) {
+		int64_t f = rx_hz(rx);
+
+		if (f < rx->fix_lo || f >= rx->fix_lo + rx->fix_w) {
+			const char *m = f < rx->fix_lo ? "<< SCOPE OUT OF RANGE" : "SCOPE OUT OF RANGE >>";
+			int tw = x6100_lcd_text_width(m, 2), y = SPEC_Y + SPEC_H / 2 - 8;
+
+			x6100_lcd_fill(lcd, (SW - tw) / 2 - 6, y - 4, tw + 12, 22, 0x000000);
+			x6100_lcd_text(lcd, (SW - tw) / 2, y, 2, m, SCR_WARN);
+		}
+	}
+
+	//
 	// Filter label under the scope mode: FILn and its width
 	//
 	{
