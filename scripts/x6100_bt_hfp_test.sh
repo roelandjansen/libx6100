@@ -131,7 +131,7 @@ restore() {
 
 	if [[ "${G_MON_STOPPED}" -eq 1 && -x "${C_BTAUDIO}" ]]; then
 		setsid "${C_BTAUDIO}" monitor </dev/null >/dev/null 2>&1 &
-		printf '%s\n' 'restore: btaudio-ctl monitor started again'
+		printf '%s\n' 'restore: btaudio-ctl monitor started again (a reboot gives its boot instance back)'
 	fi
 
 	if ! ip -4 addr show wlan0 | grep -q inet; then
@@ -149,20 +149,39 @@ restore() {
 }
 
 #
-# Stop the btaudio-ctl monitor: it puts every headset card back on A2DP
+# Stop every btaudio-ctl (boot / monitor, with or without a pid file) and its pactl
+# subscribe: on each pulseaudio event it puts headset cards back on A2DP and loads its
+# RX loopback again (2026-10-31: the profile switch was undone at once)
 #
 
 monitor_stop() {
+	local L_PIDS
+
+	L_PIDS="$(ps w | awk '/btaudio-ctl (boot|monitor)|pactl subscribe/ && !/awk/ {print $1}')"
+
+	if [[ -n "${L_PIDS}" ]]; then
+		# shellcheck disable=SC2086	# one PID per word
+		kill ${L_PIDS} || true	# gone meanwhile: fine
+		G_MON_STOPPED=1
+		printf 'btaudio-ctl stopped: %s\n' "$(printf '%s ' ${L_PIDS})"
+		rm -f "${C_MON_PID}"
+	else
+		printf '%s\n' 'no btaudio-ctl running'
+	fi
+}
+
+#
+# Record G_SECS seconds from G_SRC (no timeout(1) on the image)
+#
+
+record() {
 	local L_PID
 
-	L_PID="$(cat "${C_MON_PID}" 2>/dev/null || true)"	# no pid file: no monitor
-
-	if [[ -n "${L_PID}" ]] && kill "${L_PID}" 2>/dev/null; then
-		G_MON_STOPPED=1
-		printf 'btaudio-ctl monitor %s stopped\n' "${L_PID}"
-	else
-		printf '%s\n' 'no btaudio-ctl monitor running'
-	fi
+	parecord -d "${G_SRC}" --file-format=wav "${C_WAV}" &
+	L_PID=$!
+	sleep "${G_SECS}"
+	kill "${L_PID}" 2>/dev/null || printf '%s\n' 'parecord ended by itself (the source refused?)'
+	wait "${L_PID}" 2>/dev/null || true	# ended by the kill
 }
 
 #
@@ -267,6 +286,7 @@ fi
 step "profile ${G_PROFILE}"
 pactl set-card-profile "${G_CARD}" "${G_PROFILE}" || true	# refused: the log says why
 sleep 3
+pactl list cards | awk -v c="${G_CARD}" '$1 == "Name:" { on = ($2 == c) } on && /Active Profile:/ { print }'
 hcitool con || true	# SCO / eSCO link listed when the audio channel is up
 pactl list short sources | grep -i bluez || printf '%s\n' 'no bluez source'
 
@@ -274,7 +294,8 @@ G_SRC="bluez_source.${G_MAC//:/_}.${G_PROFILE}"
 
 step "recording ${G_SECS} s from ${G_SRC}: speak into the headset"
 rm -f "${C_WAV}"
-timeout "${G_SECS}" parecord -d "${G_SRC}" --file-format=wav "${C_WAV}" || true	# timeout ends it
+record
+hcitool con || true	# the SCO link again, after the recording
 wav_stats
 
 step 'WiFi after SCO'
