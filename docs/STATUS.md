@@ -75,8 +75,9 @@ Verified on the radio:
     pulseaudio backend sets up eSCO and a source, but no samples arrive, neither mSBC
     (16 kHz) nor CVSD (8 kHz) (scripts/x6100_bt_hfp_test.sh): RADE TX stays on the PC
 - built 2026-10-31, to check on the radio: CI-V on the DEV port next to the pty (a
-  logger on the cable while wfview runs), Bluetooth headset autoconnect (`btauto`).
-  GEN row BT DEVICE connect / disconnect of the headset works (2026-10-31)
+  logger on the cable while wfview runs).
+  Bluetooth headset: connect / disconnect on the GEN row BT DEVICE and autoconnect
+  (`btauto`) work (2026-10-31)
 
 Built, not yet tried on the radio (2026-10-25 .. 28):
 

@@ -193,7 +193,7 @@ under GEN until a better key turns up.
   So no headset mic: RADE TX on the radio over Bluetooth is out, RADE RX to the
   headset (A2DP) is in.
   Autoconnect built 2026-10-31 (btauto: the headset connected again every 20 s while
-  not, detached check-then-connect): to check on the radio (connect / disconnect on the
+  not, detached check-then-connect): verified on the radio, as connect / disconnect on the
   GEN row works). HFP mic test: scripts/
   x6100_bt_hfp_test.sh (we test ourselves what IU1WXY states).
   HFP test 2026-10-31 (pulseaudio 16.1 restarted with headset=native; reloading the
