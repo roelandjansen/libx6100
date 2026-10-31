@@ -104,6 +104,10 @@ pa_config() {
 		printf '.include %s\n' "${G_DIR}/system.pa.d" >> "${G_DIR}/system.pa"
 	fi
 
+	# pulseaudio --system reads it as the pulse user: mktemp -d made the directory 0700
+	chmod 0755 "${G_DIR}" "${G_DIR}/system.pa.d"
+	chmod 0644 "${G_DIR}/system.pa" "${G_DIR}/system.pa.d/"*
+
 	grep -h 'bluetooth-discover' "${G_DIR}/system.pa" "${G_DIR}/system.pa.d/"* || true	# shown for the log
 }
 
