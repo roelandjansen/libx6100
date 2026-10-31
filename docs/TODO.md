@@ -83,7 +83,7 @@ Status: 2026-10-31 (v0.16.0). Summary and next steps: `STATUS.md`.
   long in FIX and SCROLL-F, the scope label, a band change moves the window, edges kept
   over a restart; wfview fixed edge window (27 16 / 27 1E set and read), a 200 kHz edge
   from wfview cut to 96 kHz (75 with the IF shift). Edge panel (F2 long: lower / upper,
-  1 kHz steps, as an Icom; built 2026-10-31, to check on the radio). Open: whether
+  1 kHz steps, as an Icom; verified 2026-10-31). Open: whether
   wfview sends 27 1E for a range we do not cover (above 60 MHz).
   SCROLL-F now pages by the window width on the edge grid, as an Icom (2026-10-31,
   was a sliding window): to check on the radio.
@@ -92,8 +92,8 @@ Status: 2026-10-31 (v0.16.0). Summary and next steps: `STATUS.md`.
   the shift allows (10-40 kHz either way), the IQ then covers the window: a 56 kHz
   window always, a 96 kHz one 89-100 %: edges now at most 75 kHz (default too), always
   covered with the shift 10-37.5 kHz (with ifshift 0 still 96).
-  To check on the radio: the window painted; a VFO left in the window uses a negative
-  shift (LO above), not yet verified: is the station heard the one on the cursor? TX
+  Verified 2026-10-31: the window painted; a VFO left in the window uses a negative
+  shift (LO above): works, the station heard is the one on the cursor. TX
   keeps the plain shift (a key-down in FIX / SCROLL-F moves the LO back).
 - liquid-dsp: built static (v1.8.3, `third_party/liquid-dsp`, `x6100_liquid` check), not
   linked into x6100_trx yet. Use per function where audio passes through Linux anyway:
