@@ -177,6 +177,14 @@ under GEN until a better key turns up.
 - Seen on the IU1WXY image (top, 2026-10-31): pulseaudio --system with btaudio-ctl and
   btcat (Bluetooth audio: the way for RADE on the radio with a headset, RX and TX), gpsd
   (a GPS as time source in the field), ntpd -g running (the clock stays synced).
+- Bluetooth headset (2026-10-31, Sony WH-1000XM2): with WiFi connected the scan finds
+  nothing (the rtl8723bu vendor WiFi driver's BT coexistence); with wlan0 down it finds
+  the headset at once. Paired with WiFi off, in one bluetoothctl session (scan on, scan
+  off, pair, trust, connect; separate bluetoothctl calls lose the unpaired device):
+  A2DP connects and plays, also with WiFi back on. The XM2 offers Handsfree / Headset
+  (111E / 1108); the radio advertises A2DP / AVRCP only, no HFP / HSP gateway: the
+  headset mic (RADE TX) needs HFP in pulseaudio first, then SCO over USB on the chip.
+  To find out: what btaudio-ctl / btcat route (the sound heard), the pulse config.
 - Now: the IU1WXY image (OS, kernel 6.1.82, stock baseband BASE 1.1.9) is the base;
   x6100_trx and its tools run on it (`build.sh deploy`). wfserver for the R16 is built
   as a self-contained bundle (`contrib/wfserver`, Ubuntu 24.04 armhf Qt, own glibc
