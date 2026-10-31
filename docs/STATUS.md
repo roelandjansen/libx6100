@@ -1,6 +1,6 @@
 # libx6100 / x6100_trx — status
 
-Snapshot: 2026-10-30. Last tag: v0.15.0 (2026-10-30; baseband IF shift in all modes and
+Snapshot: 2026-10-31. Last tag: v0.15.0 (2026-10-30; baseband IF shift in all modes and
 TX, AM tone gone, AM snaps to the channel raster, scope bridges the DC spike, VOX N/A on
 BASE 1.1.9). Before: v0.14.0 (2026-10-29, on d8fc40c from before the history rewrite;
 wfserver for wfview, twin PBT incl. AM and the filter panel PBT box, scope panel,
@@ -27,7 +27,8 @@ Verified on the radio:
 - CI-V as IC-705 on the DEV USB-C (ttyS2; 19200 is the port's limit: 9600 / 19200 work,
   38400 and up do not, checked 2026-10-25 with the divisor written), wfview:
   frequency, mode, filters, gains, power, ATU, tune, meters, scope, band buttons (1A 01)
-- CAT on a pseudo-terminal (`cat pty`): /tmp/x6100-civ, served over the LAN with socat
+- CAT on a pseudo-terminal: /tmp/x6100-civ (since 2026-10-31 always served next to the DEV
+  port, `catpty off` turns it off), served over the LAN with socat
   (TCP 4532, one client) to a virtual port on the PC; wfview works through it (2026-10-26)
 - memory channels (V/M), `memr` list; console with own line editing
 - liquid-dsp v1.8.3 static build, `x6100_liquid` runs on the radio
@@ -61,6 +62,20 @@ Verified on the radio:
   - messages: CW message in CW mode at zero beat on the IC-7851, clean keying, ALC fine
     at -10 dBFS; MSG long repeats every 10 s with the countdown; any key and the PTT key
     stop it
+- radio test of 2026-10-31 (after v0.15.0):
+  - clock: grey when the time is known, amber when not; console `time` sets it
+  - hand mic PTT with split: TX follows the split shown
+  - wfserver: about 33 % of the CPU (1.3 of 4 cores), x6100_trx 13 %, 52 % idle at
+    1008 MHz; no dropouts, no errors in its log. GEN row WFSERVER: off works; wfview
+    sometimes needs up to three connects (a wfview reconnect matter, for the wfview
+    project). Screenshot in the README
+  - Bluetooth headset (Sony WH-1000XM2): with WiFi connected the scan finds nothing
+    (rtl8723bu coexistence); paired with WiFi briefly off, then A2DP plays the RX audio
+    (IU1WXY's btaudio-ctl loopback) with WiFi on. No headset mic: HFP with the native
+    pulseaudio backend sets up eSCO and a source, but no samples arrive, neither mSBC
+    (16 kHz) nor CVSD (8 kHz) (scripts/x6100_bt_hfp_test.sh): RADE TX stays on the PC
+- built 2026-10-31, to check on the radio: CI-V on the DEV port next to the pty (a
+  logger on the cable while wfview runs), Bluetooth headset autoconnect (`btauto`)
 
 Built, not yet tried on the radio (2026-10-25 .. 28):
 

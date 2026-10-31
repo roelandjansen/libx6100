@@ -228,6 +228,11 @@ Values are kept in the last state (see Settings); defaults NR 20, NB 10 / 10, no
 | BIRDIE MARKS | ON / OFF (ON): yellow ticks on the scope | at once |
 | BIRDIE NOTCH | ON / OFF (OFF): automatic notch on a birdie in USB / LSB / AM | at once |
 
+Bluetooth headset: music audio (A2DP) only. On the IU1WXY image a connected headset
+plays the RX audio (the image's btaudio-ctl loopback, about 400 ms behind). There is no
+headset microphone on this radio: HFP sets up the voice link but no audio crosses USB,
+neither mSBC nor CVSD (tested 2026-10-31, `scripts/x6100_bt_hfp_test.sh`).
+
 The panel shows five rows and scrolls with the selection (position top right). WiFi and
 Bluetooth are the image's own (NetworkManager, bluez) and keep their state themselves;
 brightness, CAT, NTP and the birdie switches go to `x6100_trx.state` at exit. A row set in `x6100_trx.conf` shows CONF and

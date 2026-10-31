@@ -177,3 +177,16 @@ ARM board, at the price of about 1.4 MB per receiver.
 Published figures: the FreeDV team gives a Pi 4 as the smallest
 comfortable machine (RADE V1 FlexRadio waveform about 30 % of one core with the C port);
 one user reports a Pi Zero 2 W (4x Cortex-A53, 1 GHz) at about 35 % over 4 cores.
+
+## Audio paths on the radio (2026-10-31)
+
+The CPU is enough (see Results); the audio paths decide what can run on the radio:
+
+- TX: no microphone reaches Linux while receiving. The built-in and hand mic go to the
+  baseband directly (Linux sees them only in the monitor while really transmitting), and
+  a Bluetooth headset mic does not work on this radio: HFP sets up an eSCO link and a
+  source, but no samples cross USB, neither mSBC nor CVSD
+  (`scripts/x6100_bt_hfp_test.sh`). RADE TX stays on the PC, over the network (wfview).
+- RX: the codec capture carries the RX audio, but the speaker cannot play Linux audio
+  at the same time. A Bluetooth headset (A2DP) can: RADE RX on the radio to the headset
+  is the plan (an APP entry, `rade_rx_mt` as a helper process), see `docs/TODO.md`.
