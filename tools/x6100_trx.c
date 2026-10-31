@@ -995,13 +995,46 @@ static uint32_t rx_hz(const rx_t *rx)
 // applied after it (2026-10-30: with the shift kept the scope showed TX 10 kHz low)
 static uint32_t g_keyed_hz;
 
-// Centre of the IQ (the baseband LO): the receive frequency less the IF shift
+//
+// The LO for receiving. Normally the receive frequency less the IF shift. In FIX /
+// SCROLL-F the LO is put where the IQ (LO +- 48 kHz) covers the whole window, and the
+// shift (register 35) makes up the difference to the receive frequency: at least the
+// IF shift (the DC spike out of the passband), at most IFSHIFT_DYN_MAX, either way (a
+// negative shift: LO above, for a VFO left in the window). Of the LOs allowed the one
+// nearest the window centre: the window covered when that can be, else as much of it
+// as can (a 96 kHz window is covered only with the LO right in its middle).
+// 2026-10-31: SCROLL-F on 6.920-6.976 with the VFO at 6.933 left the right part black.
+//
+
+#define IQ_HALF_HZ	48000	/* half the IQ span (SPAN_HZ) */
+#define IFSHIFT_DYN_MAX	40000	/* largest shift used (OpenX6X00's range) */
+
+static bool scope_fixed(const rx_t *rx);
+
+static int64_t rx_lo(const rx_t *rx)
+{
+	int64_t f = rx_hz(rx), s = lo_shift(rx), c, p, n;
+
+	if (s <= 0 || !scope_fixed(rx) || rx->fix_w <= 0)
+		return f - s;
+
+	c = rx->fix_lo + rx->fix_w / 2;
+
+	// Nearest the centre with a positive shift (LO in [f - max, f - s]) and with a
+	// negative one (LO in [f + s, f + max]); the positive one on a tie (verified)
+	p = c < f - IFSHIFT_DYN_MAX ? f - IFSHIFT_DYN_MAX : c > f - s ? f - s : c;
+	n = c < f + s ? f + s : c > f + IFSHIFT_DYN_MAX ? f + IFSHIFT_DYN_MAX : c;
+
+	return llabs(p - c) <= llabs(n - c) ? p : n;
+}
+
+// Centre of the IQ (the baseband LO)
 static uint32_t iq_hz(const rx_t *rx)
 {
 	if (g_keyed_hz != 0)
 		return g_keyed_hz;
 
-	return (uint32_t) ((int64_t) rx_hz(rx) - lo_shift(rx));
+	return (uint32_t) rx_lo(rx);
 }
 
 // What passband() is relative to: the carrier in AM (rx_hz less the AM receive
@@ -1236,7 +1269,9 @@ static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 
 	// IF shift: the LO below the receive frequency, the spike out of the passband
 	{
-		int shift = keyed && !g_ifshift_tx ? 0 : lo_shift(rx);
+		// RX: the LO rx_lo picks (FIX / SCROLL-F: the window covered); TX: the plain
+		// shift, verified (a key-down in FIX / SCROLL-F moves the LO back to it)
+		int shift = keyed ? (g_ifshift_tx ? lo_shift(rx) : 0) : (int) ((int64_t) hz - rx_lo(rx));
 
 		x6100_set_freq(ctl, 0, (uint32_t) ((int64_t) hz - shift));
 		x6100_set_freq(ctl, 1, (uint32_t) ((int64_t) hz - shift));

@@ -86,8 +86,13 @@ Status: 2026-10-31 (v0.16.0). Summary and next steps: `STATUS.md`.
   upper), and whether wfview sends 27 1E for a range we do not cover (above 60 MHz).
   SCROLL-F now pages by the window width on the edge grid, as an Icom (2026-10-31,
   was a sliding window): to check on the radio.
-- Register 35 LO offset for FIX mode: an edge off the IQ centre now shows only the part
-  of the 96 kHz IQ it covers; moving the LO would fill the whole window.
+- Register 35 LO for FIX / SCROLL-F (built 2026-10-31; SCROLL-F showed a black right
+  part on 6.920-6.976 with the VFO at 6.933): the LO goes as near the window centre as
+  the shift allows (10-40 kHz either way), the IQ then covers the window: a 56 kHz
+  window always, a 96 kHz one 89-100 % (only the LO right in the middle covers it all).
+  To check on the radio: the window painted; a VFO left in the window uses a negative
+  shift (LO above), not yet verified: is the station heard the one on the cursor? TX
+  keeps the plain shift (a key-down in FIX / SCROLL-F moves the LO back).
 - liquid-dsp: built static (v1.8.3, `third_party/liquid-dsp`, `x6100_liquid` check), not
   linked into x6100_trx yet. Use per function where audio passes through Linux anyway:
   RADE / network audio (resampling, TX audio shaping), recordings (image lowpass),
