@@ -24,7 +24,9 @@
 # then speak into the headset from about 20 s on for the record time, log in again,
 # read the log.
 #
-#   x6100_bt_hfp_test.sh MAC [seconds]     record seconds (default 15)
+#   x6100_bt_hfp_test.sh MAC [seconds] [msbc|cvsd]   record seconds (default 15); the
+#                                   voice codec: msbc (16 kHz, default) or cvsd (8 kHz:
+#                                   2026-10-31 msbc gave an eSCO link but no samples)
 #
 
 set -euo pipefail
@@ -41,6 +43,7 @@ export PULSE_SERVER="${PULSE_SERVER:-unix:/var/run/pulse/native}"
 G_MAC=""
 G_CARD=""
 G_SECS=15
+G_CODEC="msbc"
 G_PROFILE=""
 G_SRC=""
 G_MON_STOPPED=0
@@ -97,7 +100,11 @@ pa_stop() {
 pa_config() {
 	mkdir -p "${G_DIR}/system.pa.d"
 	cp -- "${C_PA_ETC}/system.pa.d/"* "${G_DIR}/system.pa.d/"
-	sed -i 's/headset=ofono/headset=native/' "${G_DIR}/system.pa.d/btaudio.pa"
+	if [[ "${G_CODEC}" == "cvsd" ]]; then
+		sed -i 's/headset=ofono/headset=native enable_msbc=false/' "${G_DIR}/system.pa.d/btaudio.pa"
+	else
+		sed -i 's/headset=ofono/headset=native/' "${G_DIR}/system.pa.d/btaudio.pa"
+	fi
 	sed "s|${C_PA_ETC}/system.pa.d|${G_DIR}/system.pa.d|" "${C_PA_ETC}/system.pa" > "${G_DIR}/system.pa"
 
 	if ! grep -q "${G_DIR}/system.pa.d" "${G_DIR}/system.pa"; then
@@ -220,7 +227,7 @@ if [[ "${EUID}" -ne 0 ]]; then
 fi
 
 if [[ $# -lt 1 || ! "$1" =~ ^([[:xdigit:]]{2}:){5}[[:xdigit:]]{2}$ ]]; then
-	printf 'usage: %s MAC [seconds]\n' "$0" >&2
+	printf 'usage: %s MAC [seconds] [msbc|cvsd]\n' "$0" >&2
 	exit 1
 fi
 
@@ -231,6 +238,12 @@ fi
 
 G_MAC="$1"
 G_SECS="${2:-15}"
+G_CODEC="${3:-msbc}"
+
+if [[ "${G_CODEC}" != "msbc" && "${G_CODEC}" != "cvsd" ]]; then
+	printf '%s\n' "error: codec msbc or cvsd" >&2
+	exit 1
+fi
 G_CARD="bluez_card.${G_MAC//:/_}"
 G_DIR="$(mktemp -d /tmp/x6100_pa.XXXXXX)"
 
