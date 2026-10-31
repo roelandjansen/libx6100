@@ -4,22 +4,27 @@
 #
 # The IU1WXY image runs Bluetooth audio as A2DP only (btaudio-ctl, btaudio.pa:
 # headset=ofono without ofono): per IU1WXY, HFP / HSP (SCO) gives no audio on this
-# radio and drops the WiFi. This script checks it for ourselves: it stops the
-# btaudio-ctl monitor (it forces every headset back to A2DP), switches pulseaudio's
-# Bluetooth module to its native headset backend, reconnects the headset, puts it
-# on the headset / handsfree profile and records its microphone. Then it puts
-# everything back as the image has it. Everything goes to the log too.
+# radio (RTL8723BU on the MUSB host: SCO needs isochronous USB) and drops the WiFi.
+# This script checks it for ourselves.
+#
+# Loading module-bluetooth-discover again while pulseaudio runs aborts pulseaudio
+# 16.1 (bluez5-util.c assertion, 2026-10-31), so the native headset backend is set
+# at start instead: the image's pulseaudio is stopped (its init script) and a copy
+# started from /tmp with the same configuration, headset=native in place of ofono.
+# Nothing in /etc changes. Then the headset is reconnected, put on the headset /
+# handsfree profile and its microphone recorded. At the end the copy is stopped and
+# the image's pulseaudio and btaudio-ctl monitor started again; a reboot does the
+# same. Everything goes to the log too.
 #
 # WiFi may drop while SCO runs: run it on the USB console (DEV USB-C, first port,
 # 115200), or detached:
 #
 #   nohup ./x6100_bt_hfp_test.sh 70:26:05:C0:19:7B >/dev/null 2>&1 &
 #
-# then speak into the headset for the record time, log in again, read the log.
+# then speak into the headset from about 20 s on for the record time, log in again,
+# read the log.
 #
 #   x6100_bt_hfp_test.sh MAC [seconds]     record seconds (default 15)
-#
-# A reboot also restores the image's Bluetooth audio, should anything be left over.
 #
 
 set -euo pipefail
@@ -28,6 +33,8 @@ readonly C_LOG="/tmp/x6100_bt_hfp.log"
 readonly C_WAV="/tmp/x6100_bt_hfp.wav"
 readonly C_MON_PID="/tmp/btaudio-monitor.pid"
 readonly C_BTAUDIO="/usr/sbin/btaudio-ctl"
+readonly C_PA_INIT="/etc/init.d/S50pulseaudio"
+readonly C_PA_ETC="/etc/pulse"
 
 export PULSE_SERVER="${PULSE_SERVER:-unix:/var/run/pulse/native}"
 
@@ -37,6 +44,8 @@ G_SECS=15
 G_PROFILE=""
 G_SRC=""
 G_MON_STOPPED=0
+G_PA_OURS=0
+G_DIR=""
 
 #
 # Print a step header
@@ -47,39 +56,89 @@ step() {
 }
 
 #
-# Unload every module-bluetooth-discover instance
+# Wait until pulseaudio answers (up to 10 s); false when it does not
 #
 
-discover_unload() {
-	local L_ID
+pa_wait() {
+	local L_N=0
 
-	while IFS= read -r L_ID; do
-		pactl unload-module "${L_ID}" || true	# already gone: nothing to do
-	done < <(pactl list short modules | awk '$2 == "module-bluetooth-discover" {print $1}')
+	while ! pactl info >/dev/null 2>&1; do
+		if [[ "${L_N}" -ge 10 ]]; then
+			return 1
+		fi
+
+		sleep 1
+		L_N=$((L_N + 1))
+	done
 }
 
 #
-# Put the image's Bluetooth audio back: A2DP, the ofono setting, the btaudio monitor
+# Stop whatever pulseaudio runs: the init script, then any copy left
+#
+
+pa_stop() {
+	local L_PIDS
+
+	"${C_PA_INIT}" stop || true	# not running: nothing to stop
+	sleep 1
+	L_PIDS="$(pidof pulseaudio || true)"	# none left: empty
+
+	if [[ -n "${L_PIDS}" ]]; then
+		# shellcheck disable=SC2086	# one PID per word
+		kill ${L_PIDS} || true	# gone meanwhile: fine
+		sleep 1
+	fi
+}
+
+#
+# The image's configuration, copied to G_DIR, with headset=native in btaudio.pa
+#
+
+pa_config() {
+	mkdir -p "${G_DIR}/system.pa.d"
+	cp -- "${C_PA_ETC}/system.pa.d/"* "${G_DIR}/system.pa.d/"
+	sed -i 's/headset=ofono/headset=native/' "${G_DIR}/system.pa.d/btaudio.pa"
+	sed "s|${C_PA_ETC}/system.pa.d|${G_DIR}/system.pa.d|" "${C_PA_ETC}/system.pa" > "${G_DIR}/system.pa"
+
+	if ! grep -q "${G_DIR}/system.pa.d" "${G_DIR}/system.pa"; then
+		printf '.include %s\n' "${G_DIR}/system.pa.d" >> "${G_DIR}/system.pa"
+	fi
+
+	grep -h 'bluetooth-discover' "${G_DIR}/system.pa" "${G_DIR}/system.pa.d/"* || true	# shown for the log
+}
+
+#
+# Put the image's Bluetooth audio back: its own pulseaudio, the btaudio monitor
 #
 
 restore() {
 	step 'restore'
 
-	if [[ -n "${G_CARD}" ]]; then
-		pactl set-card-profile "${G_CARD}" a2dp_sink || printf '%s\n' 'restore: a2dp_sink not set (reconnect the headset)'
-	fi
+	if [[ "${G_PA_OURS}" -eq 1 ]]; then
+		pa_stop
+		"${C_PA_INIT}" start || printf '%s\n' 'restore: pulseaudio not started: reboot'
 
-	discover_unload
-	pactl load-module module-bluetooth-discover headset=ofono >/dev/null || printf '%s\n' 'restore: discover module not loaded: reboot'
+		if pa_wait; then
+			printf '%s\n' 'restore: the image pulseaudio runs again'
+		else
+			printf '%s\n' 'restore: pulseaudio does not answer: reboot'
+		fi
+	fi
 
 	if [[ "${G_MON_STOPPED}" -eq 1 && -x "${C_BTAUDIO}" ]]; then
 		setsid "${C_BTAUDIO}" monitor </dev/null >/dev/null 2>&1 &
 		printf '%s\n' 'restore: btaudio-ctl monitor started again'
 	fi
 
-	if ! ip link show wlan0 2>/dev/null | grep -q 'state UP'; then
+	if ! ip -4 addr show wlan0 | grep -q inet; then
 		ip link set wlan0 up || true	# NetworkManager reconnects
-		printf '%s\n' 'restore: wlan0 set up again'
+		printf '%s\n' 'restore: wlan0 had no address, set up again'
+	fi
+
+	bluetoothctl connect "${G_MAC}" >/dev/null 2>&1 || printf '%s\n' 'restore: headset not connected again'
+
+	if [[ -n "${G_DIR}" ]]; then
+		rm -rf -- "${G_DIR}"
 	fi
 
 	printf '%s\n' "log: ${C_LOG}, recording: ${C_WAV}"
@@ -142,9 +201,15 @@ if [[ $# -lt 1 || ! "$1" =~ ^([[:xdigit:]]{2}:){5}[[:xdigit:]]{2}$ ]]; then
 	exit 1
 fi
 
+if [[ ! -x "${C_PA_INIT}" ]]; then
+	printf 'error: %s not found: not the IU1WXY image?\n' "${C_PA_INIT}" >&2
+	exit 1
+fi
+
 G_MAC="$1"
 G_SECS="${2:-15}"
 G_CARD="bluez_card.${G_MAC//:/_}"
+G_DIR="$(mktemp -d /tmp/x6100_pa.XXXXXX)"
 
 exec > >(tee "${C_LOG}") 2>&1
 trap restore EXIT
@@ -157,15 +222,24 @@ ip -4 addr show wlan0 | grep inet || printf '%s\n' 'wlan0: no IPv4 address'
 step 'btaudio monitor'
 monitor_stop
 
-step 'pulseaudio: native headset backend'
-discover_unload
-pactl load-module module-bluetooth-discover headset=native
-sleep 1
+step 'pulseaudio with the native headset backend'
+pa_config
+pa_stop
+G_PA_OURS=1
+pulseaudio --system --daemonize=yes --disallow-exit --exit-idle-time=-1 -n -F "${G_DIR}/system.pa"
+
+if ! pa_wait; then
+	printf '%s\n' 'our pulseaudio does not answer'
+	grep -i pulseaudio /var/log/messages | tail -n 10 || true	# why, if it says
+	exit 0
+fi
+
+pactl list short modules | grep -i bluetooth || true	# the headset= setting in use
 
 step 'reconnect the headset'
 bluetoothctl disconnect "${G_MAC}" || true	# not connected: fine
 sleep 3
-bluetoothctl connect "${G_MAC}"
+bluetoothctl connect "${G_MAC}" || true	# shown in the log; the profiles below tell
 sleep 6
 
 step 'card profiles'
@@ -187,7 +261,7 @@ if [[ -z "${G_PROFILE}" ]]; then
 fi
 
 step "profile ${G_PROFILE}"
-pactl set-card-profile "${G_CARD}" "${G_PROFILE}"
+pactl set-card-profile "${G_CARD}" "${G_PROFILE}" || true	# refused: the log says why
 sleep 3
 hcitool con || true	# SCO / eSCO link listed when the audio channel is up
 pactl list short sources | grep -i bluez || printf '%s\n' 'no bluez source'
@@ -202,3 +276,4 @@ wav_stats
 step 'WiFi after SCO'
 ip -4 addr show wlan0 | grep inet || printf '%s\n' 'wlan0: no IPv4 address (WiFi dropped)'
 dmesg | tail -n 15
+grep -i -E 'pulseaudio|sco' /var/log/messages | tail -n 10 || true	# none: shown as nothing
