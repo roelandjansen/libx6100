@@ -1527,6 +1527,37 @@ size_t x6100_civ_announce_mode(const x6100_civ_t *civ, int mode, int fil, uint8_
 	return out_end(&o);
 }
 
+// Transceive for any read command: the engine's own reply to it, sent to all (00), as an
+// Icom reports a level or switch changed on the radio. 0 when the command reads nothing.
+size_t x6100_civ_announce_read(x6100_civ_t *civ, const uint8_t *cmd, size_t n, uint8_t *out, size_t max)
+{
+	uint8_t req[16];
+	uint8_t ctrl = civ->ctrl;	/* the client's address: our own query must not take its place */
+	size_t len = 0, rn;
+
+	if (n == 0 || n + 5 > sizeof(req))
+		return 0;
+
+	req[len++] = CIV_PRE;
+	req[len++] = CIV_PRE;
+	req[len++] = civ->addr;
+	req[len++] = X6100_CIV_ADDR_CTRL;
+
+	for (size_t i = 0; i < n; i++)
+		req[len++] = cmd[i];
+
+	req[len++] = CIV_END;
+	rn = x6100_civ_process(civ, req, len, out, max);
+	civ->ctrl = ctrl;
+
+	// A data reply only: OK / NG (6 bytes, FB / FA) is no value
+	if (rn < 7 || out[4] == CIV_OK || out[4] == CIV_NG)
+		return 0;
+
+	out[2] = X6100_CIV_ADDR_ALL;
+	return rn;
+}
+
 void x6100_civ_framer_reset(x6100_civ_framer_t *f)
 {
 	f->len = 0;

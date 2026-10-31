@@ -215,6 +215,7 @@ size_t x6100_civ_process(x6100_civ_t *civ, const uint8_t *frame, size_t len, uin
 
 size_t x6100_civ_announce_freq(const x6100_civ_t *civ, uint32_t hz, uint8_t *out, size_t max);
 size_t x6100_civ_announce_mode(const x6100_civ_t *civ, int mode, int fil, uint8_t *out, size_t max);
+size_t x6100_civ_announce_read(x6100_civ_t *civ, const uint8_t *cmd, size_t n, uint8_t *out, size_t max);
 
 //
 // Framer

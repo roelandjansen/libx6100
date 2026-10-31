@@ -8604,6 +8604,29 @@ static void console_raw(void)
 #define CAT_BAUD_DEF	19200	/* stock / IU1WXY default and the most the DEV port carries */
 #define CAT_PTY_LINK	"/tmp/x6100-civ"	/* link to the pty for clients (wfserver, rigctld, socat) */
 
+//
+// Transceive beyond frequency and mode, as an Icom: these levels and switches are
+// reported unasked (to 00) when they change, on the radio or from the other client
+// (2026-10-31: wfview did not follow NR / NB set on the radio). A client's own change is
+// not echoed back to it (cat_levels after its poll), so a dragged slider does not jump.
+//
+
+static const struct
+{
+	uint8_t cmd[2];
+	uint8_t n;		/* 1: no subcommand (11 ATT, 0F split) */
+} g_cat_ann[] = {
+	{ { 0x14, 0x01 }, 2 }, { { 0x14, 0x02 }, 2 }, { { 0x14, 0x03 }, 2 }, { { 0x14, 0x06 }, 2 },
+	{ { 0x14, 0x07 }, 2 }, { { 0x14, 0x08 }, 2 }, { { 0x14, 0x09 }, 2 }, { { 0x14, 0x0A }, 2 },
+	{ { 0x14, 0x0B }, 2 }, { { 0x14, 0x0C }, 2 }, { { 0x14, 0x0E }, 2 }, { { 0x14, 0x12 }, 2 },
+	{ { 0x14, 0x15 }, 2 }, { { 0x16, 0x02 }, 2 }, { { 0x16, 0x12 }, 2 }, { { 0x16, 0x22 }, 2 },
+	{ { 0x16, 0x40 }, 2 }, { { 0x16, 0x41 }, 2 }, { { 0x16, 0x44 }, 2 }, { { 0x16, 0x45 }, 2 },
+	{ { 0x11 }, 1 }, { { 0x0F }, 1 },
+};
+
+#define CAT_ANN_N	((int) (sizeof(g_cat_ann) / sizeof(g_cat_ann[0])))
+#define CAT_ANN_MAX	24	/* bytes of one report */
+
 typedef struct
 {
 	rx_t *rx;
@@ -8626,6 +8649,9 @@ typedef struct
 	int ann_mode;
 	int ann_fil;
 	bool no_transceive;	/* 1A 05 0131 set to 00 by the client: no unasked 00 / 01 */
+	uint8_t ann_val[CAT_ANN_N][CAT_ANN_MAX];	/* the last report of each g_cat_ann item */
+	uint8_t ann_len[CAT_ANN_N];
+	bool ann_ready;		/* the first pass only records */
 
 	//
 	// Scope data (27): client settings and pacing
@@ -9563,6 +9589,8 @@ static void cat_log(const char *dir, const uint8_t *b, size_t n)
 	fputc('\n', stderr);
 }
 
+static void cat_levels(cat_t *cat, bool send);
+
 // Read what is pending, answer each frame; true when the radio state changed
 static bool cat_poll(cat_t *cat)
 {
@@ -9591,7 +9619,32 @@ static bool cat_poll(cat_t *cat)
 		}
 	}
 
+	if (cat->changed)
+		cat_levels(cat, false);	/* its own change: recorded, not echoed back to it */
+
 	return cat->changed;
+}
+
+// The g_cat_ann levels and switches as the engine reads them now: a changed one is
+// recorded, and with send (and transceive on, past the first pass) reported to all
+static void cat_levels(cat_t *cat, bool send)
+{
+	uint8_t out[X6100_CIV_FRAME_MAX];
+
+	for (int i = 0; i < CAT_ANN_N; i++) {
+		size_t n = x6100_civ_announce_read(&cat->civ, g_cat_ann[i].cmd, g_cat_ann[i].n, out, sizeof(out));
+
+		if (n == 0 || n > CAT_ANN_MAX || (n == cat->ann_len[i] && memcmp(out, cat->ann_val[i], n) == 0))
+			continue;
+
+		memcpy(cat->ann_val[i], out, n);
+		cat->ann_len[i] = (uint8_t) n;
+
+		if (send && cat->ann_ready && !cat->no_transceive)
+			cat_write(cat, out, n);
+	}
+
+	cat->ann_ready = true;
 }
 
 // Transceive: announce frequency and mode changes, whatever made them; with
@@ -9615,6 +9668,8 @@ static void cat_announce(cat_t *cat)
 		if (!cat->no_transceive)
 			cat_write(cat, out, x6100_civ_announce_mode(&cat->civ, rx->mode, rx->fil + 1, out, sizeof(out)));
 	}
+
+	cat_levels(cat, true);
 }
 
 //
