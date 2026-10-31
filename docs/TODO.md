@@ -112,6 +112,14 @@ Status: 2026-10-30 (v0.15.0). Summary and next steps: `STATUS.md`.
   flag: traced 2026-10-27 (x6100_control_interface.md), the scan now uses it.
 - RX / TX equaliser (baseband or liquid-dsp; GEN TX panel).
 - Digital modes on the radio (FT8, CW / RTTY decoder) as APP entries; a recorder.
+- RADE on the radio, once Bluetooth audio works (headset; pulseaudio on the IU1WXY
+  image). Plan (2026-10-31): RX: the codec capture (0x8 off) -> RADE decoder -> the BT
+  headset (the speaker cannot play Linux audio while the capture carries RX); TX: the
+  BT headset mic -> RADE encoder -> codec playback keyed with the codec TX flag, only
+  when a BT headset is connected. A selection for it in x6100_trx (an APP entry or a
+  mode); the RADE code (contrib/rade, rade_rx_mt and the FFT pilot search patch) as a
+  helper process started by x6100_trx, not linked into it. RADE inside wfview is out
+  of scope (over the network RADE stays on the PC).
 - x6100_tx micrec: the power / ALC telemetry reads 0.0 W / 100 while transmitting (seen
   2026-10-29, the IC-7851 heard the mic): read the flow in its own non-blocking step or
   thread instead of between blocking capture reads.
