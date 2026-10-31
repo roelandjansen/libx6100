@@ -70,8 +70,8 @@ Status: 2026-10-31 (v0.16.0). Summary and next steps: `STATUS.md`.
   wfview NR / NB sliders: they do send (14 06 / 14 12 in the --cat-log, accepted; the
   first test missed the connection after an x6100_trx restart). On the radio the NR
   level sounds almost like on / off: the baseband's NR. wfview did not follow NR / NB set
-  on the radio: transceive now also reports levels and switches (2026-10-31, host test
-  with two endpoints passes): to check with wfview.
+  on the radio: transceive now also reports levels and switches (2026-10-31): wfview
+  follows now (verified).
 - S-meter calibration (signal generator): SMETER_CAL_DB is provisional (-21: -15 from
   an IC-7851 comparison, then 6 dB lower); also the overload point with PRE / ATT.
 - Codec level vs ALC test (x6100_tx codec at -40 / -30 / -20 dBFS).
