@@ -1986,7 +1986,7 @@ static void edge_defaults(void)
 
 //
 // Scope window. CENTER / SCROLL-C: the VFO in the middle, rx->span wide. FIX / SCROLL-F:
-// the selected edge of the VFO's range; SCROLL-F slides the window along when the VFO
+// the selected edge of the VFO's range; SCROLL-F moves the window by whole windows when the VFO
 // leaves it. Outside every range (below 0.5 MHz) the fixed window starts at the VFO.
 //
 
@@ -2031,13 +2031,18 @@ static void scope_follow(rx_t *rx)
 		|| rx->fix_w != (int) (g_edge[r][e].hi - g_edge[r][e].lo))))
 		scope_fix_start(rx);
 
-	if (rx->scope != SCOPE_FIX_S)
+	if (rx->scope != SCOPE_FIX_S || rx->fix_w <= 0)
 		return;
 
-	if ((int64_t) rx->freq < rx->fix_lo)
-		rx->fix_lo = rx->freq;
-	else if ((int64_t) rx->freq > rx->fix_lo + rx->fix_w)
-		rx->fix_lo = (int64_t) rx->freq - rx->fix_w;
+	// SCROLL-F, as an Icom: the VFO out of the window moves it by whole windows on the
+	// grid of the edge (7.000-7.100, at 7.100 and up 7.100-7.200), not along with the VFO
+	if ((int64_t) rx->freq < rx->fix_lo || (int64_t) rx->freq >= rx->fix_lo + rx->fix_w) {
+		int64_t base = r >= 0 ? (int64_t) g_edge[r][e].lo : rx->fix_lo;
+		int64_t d = (int64_t) rx->freq - base;
+		int64_t k = d >= 0 ? d / rx->fix_w : -((-d + rx->fix_w - 1) / rx->fix_w);
+
+		rx->fix_lo = base + k * rx->fix_w;
+	}
 }
 
 // F2 long in FIX / SCROLL-F: the selected edge becomes the window centred on the VFO, as

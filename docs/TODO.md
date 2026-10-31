@@ -79,11 +79,13 @@ Status: 2026-10-31 (v0.16.0). Summary and next steps: `STATUS.md`.
   Since 2026-10-27 evening (not tried): power to the minimum when the baseband stays in
   TX 2 s into a watch armed by a write error (OpenX6X00 tx_watch_power); after 2 s of
   I2C failures TX drops and is refused, x6100_trx keeps trying instead of quitting.
-- Fixed scope edges (IC-705 style, built 2026-10-27, not tried on the radio): F2 / F2
+- Fixed scope edges (IC-705 style, built 2026-10-27; work well on the radio, 2026-10-31): F2 / F2
   long in FIX and SCROLL-F, the scope label, a band change moves the window, edges kept
   over a restart; wfview fixed edge window (27 16 / 27 1E set and read), a 200 kHz edge
   from wfview cut to 96 kHz. Then: a panel to edit an edge on the radio (MFK lower /
   upper), and whether wfview sends 27 1E for a range we do not cover (above 60 MHz).
+  SCROLL-F now pages by the window width on the edge grid, as an Icom (2026-10-31,
+  was a sliding window): to check on the radio.
 - Register 35 LO offset for FIX mode: an edge off the IQ centre now shows only the part
   of the 96 kHz IQ it covers; moving the LO would fill the whole window.
 - liquid-dsp: built static (v1.8.3, `third_party/liquid-dsp`, `x6100_liquid` check), not
