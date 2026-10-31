@@ -425,9 +425,19 @@ static double g_tx_pwr, g_tx_swr;
 static int g_tx_alc;
 static int g_batcap;		/* battery %, and external supply present, for the status line */
 static bool g_ext;
-static int g_cat_baud;		/* CI-V baud, 0 = no CAT, CAT_PTY: conf token cat, or --cat */
+static int g_cat_baud;		/* CI-V on the DEV port: baud, 0 = off; conf token cat, or --cat */
+static bool g_cat_pty = true;	/* CI-V on the pty (CAT_PTY_LINK) as well: conf token catpty */
 
-#define CAT_PTY		(-1)		/* g_cat_baud: CI-V on a pseudo-terminal instead, at any speed */
+//
+// Two CI-V endpoints at once, each with its own engine state (scope, transceive): the
+// DEV port for a PC on the USB cable, the pty for a client on the radio (wfserver).
+// Before 2026-10-31 it was one or the other, so wfserver needed CAT on PTY.
+//
+
+#define CAT_PTY		(-1)		/* cat_open: the pty instead of the DEV port */
+
+enum { CAT_EP_DEV, CAT_EP_PTY, CAT_N };
+
 static bool g_i2c_down;		/* 2 s of failed I2C writes: TX dropped and refused, still trying */
 static int g_civ_addr = X6100_CIV_ADDR_IC705;	/* conf token civaddr: a4 (IC-705) or 61 (X6100 rig file) */
 static int g_modin[2] = { 0, 1 };	/* TX audio input, DATA OFF MOD / DATA MOD (1A 05 0118 / 0119): 0 MIC, 1 USB (codec) */
@@ -4833,7 +4843,7 @@ static const char *g_gen_name[GEN_ROWS] = {
 	"BRIGHTNESS", "CAT CI-V", "CI-V ADDRESS", "DATA OFF MOD", "DATA MOD", "WFSERVER", "NTP SYNC", "WIFI", "WIFI NETWORK",
 	"BLUETOOTH", "BT PAIRING", "BT DEVICE", "BIRDIE SCAN", "BIRDIE MARKS", "BIRDIE NOTCH",
 };
-static const int g_cat_rates[] = { 0, 4800, 9600, 19200, CAT_PTY };	/* the DEV port carries no more than 19200 */
+static const int g_cat_rates[] = { 0, 4800, 9600, 19200 };	/* the DEV port carries no more than 19200 */
 
 #define CAT_RATES	((int) (sizeof(g_cat_rates) / sizeof(g_cat_rates[0])))
 
@@ -5150,8 +5160,6 @@ static void gen_value(int row, char *s, size_t n)
 	case GEN_CAT:
 		if (g_cat_baud > 0)
 			snprintf(s, n, "%d", g_cat_baud);
-		else if (g_cat_baud == CAT_PTY)
-			snprintf(s, n, "PTY");
 		else
 			snprintf(s, n, "OFF");
 		break;
@@ -5208,6 +5216,8 @@ static void gen_hint(int row, char *s, size_t n)
 
 	switch (row) {
 	case GEN_CAT:
+		snprintf(s, n, "DEV PORT, NEXT START; PTY %s", g_cat_pty ? "ALWAYS ON" : "OFF");
+		break;
 	case GEN_NTP:
 		snprintf(s, n, "APPLIES AT NEXT START");
 		break;
@@ -5223,8 +5233,8 @@ static void gen_hint(int row, char *s, size_t n)
 			snprintf(s, n, "NOT INSTALLED: BUILD.SH DEPLOY");
 		else if (access(WFS_OFF, F_OK) == 0)
 			snprintf(s, n, "%s", wfs_watching() ? "STOPPING" : "TURN: ON");
-		else if (g_cat_baud != CAT_PTY)
-			snprintf(s, n, "NEEDS CAT CI-V PTY");
+		else if (!g_cat_pty)
+			snprintf(s, n, "NEEDS THE CI-V PTY: CATPTY OFF IN THE CONF");
 		else
 			snprintf(s, n, "%s", wfs_watching() ? "RUNNING, WFVIEW PORT 50001" : "NOT RUNNING, HOLD MFK: START");
 		break;
@@ -5466,12 +5476,15 @@ static void draw_gen_info(x6100_lcd_t *lcd, const screen_t *scr)
 	else
 		snprintf(lines[n++], sizeof(lines[0]), "BATTERY %.1f V %d %%", scr->vbat, scr->batcap);
 
-	if (g_cat_baud > 0)
-		snprintf(lines[n++], sizeof(lines[0]), "CAT     %d BAUD, %s, ADDRESS %02XH", g_cat_baud, civ_ident(), g_civ_addr);
-	else if (g_cat_baud == CAT_PTY)
-		snprintf(lines[n++], sizeof(lines[0]), "CAT     PTY /TMP/X6100-CIV, %s, ADDRESS %02XH", civ_ident(), g_civ_addr);	/* CAT_PTY_LINK */
-	else
-		snprintf(lines[n++], sizeof(lines[0]), "CAT     OFF");
+	{
+		char dev[16] = "OFF";
+
+		if (g_cat_baud > 0)
+			snprintf(dev, sizeof(dev), "%d BAUD", g_cat_baud);
+
+		snprintf(lines[n++], sizeof(lines[0]), "CAT     DEV %s, PTY %s, %s %02XH", dev, g_cat_pty ? "ON" : "OFF",
+			civ_ident(), g_civ_addr);	/* pty: CAT_PTY_LINK */
+	}
 
 	snprintf(lines[n++], sizeof(lines[0]), "NTP     %s", g_ntp_msg);
 	snprintf(lines[n++], sizeof(lines[0]), "REGION  %s   UPTIME %dh%02dm   BUILD %s", g_regions[g_region].name,
@@ -7292,18 +7305,30 @@ static bool console_line(rx_t *rx, char *line)
 			continue;
 		}
 
-		// cat 19200 | cat pty | cat off: CI-V on ttyS2 (4800-19200: the most the DEV port
-		// carries) or on a pseudo-terminal (read at start only)
+		// cat 19200 | cat off: CI-V on ttyS2 (4800-19200: the most the DEV port carries;
+		// read at start only). cat pty: the old one-or-the-other choice, now the DEV port off
 		if (strcasecmp(t, "cat") == 0) {
 			const char *v = strtok(NULL, " \t\r\n");
-			int b = v == NULL ? 1 : strcasecmp(v, "off") == 0 ? 0 : strcasecmp(v, "pty") == 0 ? CAT_PTY : atoi(v);
+			int b = v == NULL ? 1 : strcasecmp(v, "off") == 0 || strcasecmp(v, "pty") == 0 ? 0 : atoi(v);
 
-			if (b == 0 || b == CAT_PTY || b == 4800 || b == 9600 || b == 19200) {
+			if (b == 0 || b == 4800 || b == 9600 || b == 19200) {
 				g_cat_baud = b;
 				g_conf_set |= g_conf_reading ? 1u << GEN_CAT : 0;
 			} else {
-				fprintf(stderr, "\ncat: off, 4800, 9600, 19200 or pty\n");
+				fprintf(stderr, "\ncat: off, 4800, 9600 or 19200 (the pty is catpty)\n");
 			}
+
+			continue;
+		}
+
+		// catpty on | off: CI-V on the pty as well (default on; read at start only)
+		if (strcasecmp(t, "catpty") == 0) {
+			const char *v = strtok(NULL, " \t\r\n");
+
+			if (v != NULL && (strcasecmp(v, "on") == 0 || strcasecmp(v, "off") == 0))
+				g_cat_pty = strcasecmp(v, "on") == 0;
+			else
+				fprintf(stderr, "\ncatpty: on or off\n");
 
 			continue;
 		}
@@ -8087,8 +8112,6 @@ static void state_save(const rx_t *rx)
 	// GEN settings (a server from the conf is not repeated here: the conf sets it again)
 	if (g_cat_baud > 0)
 		fprintf(fp, "cat %d ", g_cat_baud);
-	else if (g_cat_baud == CAT_PTY)
-		fprintf(fp, "cat pty ");
 	else
 		fprintf(fp, "cat off ");
 
@@ -9471,18 +9494,18 @@ int main(int argc, char **argv)
 	x6100_flow_t flow;
 	x6100_flow_frame_t frame;
 	int fds[IN_COUNT];
-	struct pollfd pfd[IN_COUNT + 3];
+	struct pollfd pfd[IN_COUNT + 4];
 	int npfd = 0;
-	input_t pmap[IN_COUNT + 3];
+	input_t pmap[IN_COUNT + 4];
 	char cmd[128];
 	size_t cmd_len = 0;
 	int stdin_slot = -1;
-	int cat_slot = -1;
+	int cat_slot[CAT_N] = { -1, -1 };
 	int apcm_slot = -1;	/* audio scope capture, fd -1 while closed */
 	x6100_pcm_t apcm;
 	bool apcm_open = false;
 	bool codec_routed = false;	/* codec mixer set up for a mod input on USB */
-	static cat_t cat = { .fd = -1 };
+	static cat_t cats[CAT_N] = { { .fd = -1 }, { .fd = -1 } };	/* CAT_EP_DEV, CAT_EP_PTY */
 	rx_t rx = { .vol = 20, .rfg = 100, .step = 100, .agc = (x6100_agc_t) -1, .mode = X6100_MODE_USB,
 		.txpwr = TXPWR_DEF, .scope = SCOPE_CENTER, .span = SPAN_HZ,
 		.nr_lvl = 20, .nb_lvl = 10, .nb_w = 10, .dnf_f = 1000, .dnf_w = 50 };	/* defaults: g_dsp[] */
@@ -9529,9 +9552,10 @@ int main(int argc, char **argv)
 		}
 
 		if (strcmp(argv[i], "--cat") == 0 || strncmp(argv[i], "--cat=", 6) == 0) {
-			g_cat_baud = argv[i][5] != '=' ? CAT_BAUD_DEF : strcmp(argv[i] + 6, "pty") == 0 ? CAT_PTY : atoi(argv[i] + 6);
+			// --cat=pty: the pty only (it is always on), the DEV port off
+			g_cat_baud = argv[i][5] != '=' ? CAT_BAUD_DEF : strcmp(argv[i] + 6, "pty") == 0 ? 0 : atoi(argv[i] + 6);
 
-			if (g_cat_baud != CAT_PTY && g_cat_baud != 4800 && g_cat_baud != 9600 && g_cat_baud != 19200) {
+			if (g_cat_baud != 0 && g_cat_baud != 4800 && g_cat_baud != 9600 && g_cat_baud != 19200) {
 				fprintf(stderr, "%s: 4800, 9600, 19200 (the most the DEV port carries) or pty\n", argv[i]);
 				return 1;
 			}
@@ -9660,24 +9684,30 @@ int main(int argc, char **argv)
 		backlight_level(g_bright);
 
 	//
-	// CAT on the USB serial port (--cat)
+	// CAT: CI-V on the DEV port (cat, --cat) and on the pty (catpty), both at once
 	//
-	if (g_cat_baud != 0) {
-		if ((rc = cat_open(&cat, &rx, &scr, g_cat_baud)) < 0) {
-			fprintf(stderr, "warning: CAT %s: %s\n", g_cat_baud == CAT_PTY ? "pty" : CAT_DEV, strerror(-rc));
-		} else {
-			if (g_cat_baud == CAT_PTY)
-				printf("CAT: CI-V on %s -> %s (pseudo-terminal, any speed), address 0x%02X (%s)\n", CAT_PTY_LINK,
-					cat.pty_name, cat.civ.addr, civ_ident());
-			else
-				printf("CAT: CI-V on %s, %d baud, address 0x%02X (%s)\n", CAT_DEV, g_cat_baud, cat.civ.addr, civ_ident());
+	for (int e = 0; e < CAT_N; e++) {
+		int baud = e == CAT_EP_PTY ? (g_cat_pty ? CAT_PTY : 0) : g_cat_baud;
 
-			pfd[npfd].fd = cat.fd;
-			pfd[npfd].events = POLLIN;
-			pmap[npfd] = IN_COUNT;
-			cat_slot = npfd;
-			npfd++;
+		if (baud == 0)
+			continue;
+
+		if ((rc = cat_open(&cats[e], &rx, &scr, baud)) < 0) {
+			fprintf(stderr, "warning: CAT %s: %s\n", baud == CAT_PTY ? "pty" : CAT_DEV, strerror(-rc));
+			continue;
 		}
+
+		if (baud == CAT_PTY)
+			printf("CAT: CI-V on %s -> %s (pseudo-terminal, any speed), address 0x%02X (%s)\n", CAT_PTY_LINK,
+				cats[e].pty_name, cats[e].civ.addr, civ_ident());
+		else
+			printf("CAT: CI-V on %s, %d baud, address 0x%02X (%s)\n", CAT_DEV, baud, cats[e].civ.addr, civ_ident());
+
+		pfd[npfd].fd = cats[e].fd;
+		pfd[npfd].events = POLLIN;
+		pmap[npfd] = IN_COUNT;
+		cat_slot[e] = npfd;
+		npfd++;
 	}
 
 #ifdef X6100_RX_ONLY
@@ -9741,8 +9771,8 @@ int main(int argc, char **argv)
 				continue;
 			}
 
-			if (p == cat_slot) {
-				changed |= cat_poll(&cat);
+			if (p == cat_slot[CAT_EP_DEV] || p == cat_slot[CAT_EP_PTY]) {
+				changed |= cat_poll(&cats[p == cat_slot[CAT_EP_PTY]]);
 				continue;
 			}
 
@@ -9851,8 +9881,10 @@ int main(int argc, char **argv)
 			show(&rx);
 			dirty = true;
 
-			if (cat.fd >= 0)
-				cat_announce(&cat);
+			for (int e = 0; e < CAT_N; e++) {	/* both endpoints: one client's change reaches the other */
+				if (cats[e].fd >= 0)
+					cat_announce(&cats[e]);
+			}
 		}
 
 		uint64_t t = now_ms();
@@ -9911,9 +9943,11 @@ int main(int argc, char **argv)
 		}
 
 		// CI-V address changed on the GEN panel: the engine answers on it from now on
-		if (cat.fd >= 0 && cat.civ.addr != (uint8_t) g_civ_addr) {
-			cat.civ.addr = (uint8_t) g_civ_addr;
-			printf("\nCAT: address 0x%02X (%s)\n", cat.civ.addr, civ_ident());
+		for (int e = 0; e < CAT_N; e++) {
+			if (cats[e].fd >= 0 && cats[e].civ.addr != (uint8_t) g_civ_addr) {
+				cats[e].civ.addr = (uint8_t) g_civ_addr;
+				printf("\nCAT: %s address 0x%02X (%s)\n", e == CAT_EP_PTY ? "pty" : "DEV", cats[e].civ.addr, civ_ident());
+			}
 		}
 
 		// A mod input on USB: route the codec once for a Linux audio program (wfserver):
@@ -10068,8 +10102,10 @@ int main(int argc, char **argv)
 		apply(&ctl, &cal, &rx);
 		apply_flags(&ctl, &rx);
 
-		if (cat.fd >= 0)
-			cat_scope(&cat, t);
+		for (int e = 0; e < CAT_N; e++) {
+			if (cats[e].fd >= 0)
+				cat_scope(&cats[e], t);
+		}
 
 		//
 		// Full refresh resends register 17 too: not while the tuner is searching
@@ -10303,7 +10339,7 @@ int main(int argc, char **argv)
 	fil_save();
 	bscan_stop(&rx, false);	/* quit during a scan: the VFO comes back first */
 
-	if (cat.pty_name[0] != '\0')
+	if (cats[CAT_EP_PTY].pty_name[0] != '\0')
 		unlink(CAT_PTY_LINK);	/* the pty goes with us */
 
 	state_save(&rx);

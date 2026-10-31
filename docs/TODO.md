@@ -54,7 +54,8 @@ Status: 2026-10-30 (v0.15.0). Summary and next steps: `STATUS.md`.
   inside; the RF scope shows where it sits.
 - wfserver: CPU load and audio dropouts on the radio; why the combined scope mode
   fails (WaterfallFormat 0 works).
-  GEN row WFSERVER (on / off / start, 2026-10-31): to check on the radio.
+  GEN row WFSERVER (on / off / start, 2026-10-31) and CI-V on the DEV port and the pty
+  at once (wfserver no longer needs CAT on PTY): to check on the radio.
 - S-meter calibration (signal generator): SMETER_CAL_DB is provisional (-21: -15 from
   an IC-7851 comparison, then 6 dB lower); also the overload point with PRE / ATT.
 - Codec level vs ALC test (x6100_tx codec at -40 / -30 / -20 dBFS).
@@ -84,7 +85,8 @@ Status: 2026-10-30 (v0.15.0). Summary and next steps: `STATUS.md`.
 - GEN: more rows (see key plan: region, LAN server); KEY, MSG, APP are done.
 - CI-V rate: 19200 is the limit of the DEV port (9600 / 19200 work, 38400 and up do
   not, with the divisor written and the PC side checked); faster CAT goes over the
-  network: `cat pty` (CI-V on /tmp/x6100-civ, any speed) for wfserver on the radio, or
+  network: the CI-V pty (/tmp/x6100-civ, any speed; since 2026-10-31 served next to the
+  DEV port, so wfserver and a logger on the cable work at once: to check on the radio), or
   the own LAN server (`x6100_netaudio_design.md`, option A vs B reopened).
 - TX panel (F4 long): mic select and gains, compressor, VOX, monitor, squelch built;
   ranges and register 22 layout now from X6100Control v0.16.1 (VOX: [6:0] gain, [14:8]

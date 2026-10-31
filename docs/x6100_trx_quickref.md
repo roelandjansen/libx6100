@@ -6,7 +6,7 @@ panel. `x6100_rx` is the same program, receive only (PTT and tune refused).
 ## Start
 
 Stop the stock GUI first (`scripts/x6100_ui.sh stop`). That also starts wfserver when it is
-installed and set up (`contrib/wfserver`): it runs while x6100_trx serves `cat pty`;
+installed and set up (`contrib/wfserver`): it runs while x6100_trx serves the CI-V pty (always on, `catpty`);
 `x6100_ui.sh wfserver off` / `on` switches that off / on, `x6100_ui.sh start` stops it.
 
 ```
@@ -213,11 +213,11 @@ Values are kept in the last state (see Settings); defaults NR 20, NB 10 / 10, no
 | Row | Values | When |
 |---|---|---|
 | BRIGHTNESS | 5-100 % in steps of 5 (default 100) | at once |
-| CAT (CI-V) | OFF, 4800, 9600, 19200 (default 19200: the most the DEV port carries), PTY (/tmp/x6100-civ) | next start |
+| CAT (CI-V) | the DEV port: OFF, 4800, 9600, 19200 (default 19200: the most it carries). The pty /tmp/x6100-civ (wfserver, rigctld, socat) is served at the same time, at any speed (`catpty off` in the conf turns it off); each has its own scope and transceive settings | next start |
 | CI-V ADDRESS | IC-705 A4 (default) / X6100 61 (wfview with `contrib/wfview/X6100.rig`); `civaddr` in the conf fixes it | at once |
 | DATA OFF MOD | TX audio in SSB / AM / FM: MIC (default) / USB (the codec: audio from Linux, wfserver); PTT key and CAT PTT, the hand mic is always MIC; also CI-V 1A 05 0118; `modin` in the conf fixes both rows | at once |
 | DATA MOD | the same for USB-D / LSB-D: USB (default) / MIC; CI-V 1A 05 0119 | at once |
-| WFSERVER | ON / OFF (ON), N/A when not installed: runs `x6100_ui.sh wfserver on\|off` (autostart while CAT is on the pty); MFK hold starts it (also when x6100_trx was not started by `x6100_ui.sh stop`); the second column shows RUNNING, NOT RUNNING, STOPPING or NEEDS CAT CI-V PTY | at once (off: up to 10 s) |
+| WFSERVER | ON / OFF (ON), N/A when not installed: runs `x6100_ui.sh wfserver on\|off` (autostart while x6100_trx serves the CI-V pty, which is always on); MFK hold starts it (also when x6100_trx was not started by `x6100_ui.sh stop`); the second column shows RUNNING, NOT RUNNING, STOPPING or NEEDS THE CI-V PTY (catpty off) | at once (off: up to 10 s) |
 | NTP SYNC | AT START / OFF | next start |
 | WIFI | ON / OFF (NetworkManager); shows network, IP and signal | at once |
 | WIFI NETWORK | turn: choose a saved network, hold MFK: connect. New networks: `nmtui` over ssh | at once |
@@ -301,7 +301,8 @@ The status line starts with the VFO in use (A / B); with split, RIT or XIT it ad
 | `atumem 7120000 L C S` | a tuner memory (state file; `atunet 40m L C S` from older ones still loads) |
 | `mute nomute` | audio mute |
 | `meter po\|swr\|alc` | TX meter on the dial (F4; state) |
-| `cat 19200`, `cat pty`, `cat off` | CI-V at start (settings file; `--cat` overrides) |
+| `cat 19200`, `cat off` | CI-V on the DEV port at start (settings file; `--cat` overrides; `cat pty` from before reads as off) |
+| `catpty on`, `catpty off` | CI-V on the pty /tmp/x6100-civ as well (default on; settings file) |
 | `civaddr a4`, `civaddr 61` | CI-V address: a4 IC-705 (default), 61 X6100 with `contrib/wfview/X6100.rig`; also the GEN row CI-V ADDRESS (state); in the settings file it fixes that row |
 | `modin mic usb` | TX audio input DATA OFF MOD, DATA MOD: mic or usb (the codec, a Linux program such as wfserver); also the GEN rows (state); in the settings file it fixes them |
 | `ntp <server>`, `ntp on`, `ntp off` | NTP sync at start (settings file) |

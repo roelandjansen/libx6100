@@ -11,7 +11,7 @@
 # needs to be DRM master, else "display not available (Permission denied)".
 #
 # wfserver (contrib/wfserver, /opt/wfserver): stop also starts a detached watcher that
-# runs wfserver while x6100_trx serves CI-V on /tmp/x6100-civ (cat pty), and restarts it
+# runs wfserver while x6100_trx serves CI-V on /tmp/x6100-civ (always, unless catpty off), and restarts it
 # when x6100_trx restarts; start stops it. Only when installed, set up (a user in
 # /etc/x6100/wfserver.ini) and not switched off (/etc/x6100/wfserver.off).
 #
@@ -222,7 +222,7 @@ wfs_loop() {
 
 #
 # The CI-V pty and the x6100_trx serving it: changes when x6100_trx restarts, also onto
-# the same pts number; empty while x6100_trx is not on cat pty
+# the same pts number; empty while x6100_trx serves no pty (not running, catpty off)
 #
 
 pty_key() {
@@ -328,7 +328,7 @@ ui_status() {
 	L_PID="$(wfs_pid)"
 
 	if [ -n "${L_PID}" ]; then
-		printf '%-17s %s\n' 'wfserver:' "watcher ${L_PID}, pty ${C_CIV_LINK} $([ -L "${C_CIV_LINK}" ] && printf '%s' 'up' || printf '%s' 'not there (x6100_trx cat pty?)')"
+		printf '%-17s %s\n' 'wfserver:' "watcher ${L_PID}, pty ${C_CIV_LINK} $([ -L "${C_CIV_LINK}" ] && printf '%s' 'up' || printf '%s' 'not there (x6100_trx not running, or catpty off?)')"
 	else
 		printf '%-17s %s\n' 'wfserver:' "not running${L_WHY:+, ${L_WHY}}"
 	fi

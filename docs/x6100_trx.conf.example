@@ -28,8 +28,10 @@
 #   agc ssb|ssbd|cw|am|fm <agc>     AGC of a mode group
 #   atumem 7120000 L C S            a tuner memory (normally in the state file)
 #   mute nomute                     audio mute
-#   cat 19200 | cat pty | cat off   CI-V as an IC-705: on ttyS2 (DEV USB-C, 4800-19200)
-#                                   or on a pseudo-terminal /tmp/x6100-civ; start only
+#   cat 19200 | cat off            CI-V as an IC-705 on ttyS2 (DEV USB-C, 4800-19200);
+#                                   start only
+#   catpty on | off                 CI-V on the pseudo-terminal /tmp/x6100-civ as well,
+#                                   at any speed (default on: wfserver needs it)
 #   ntp pool.ntp.org | on | off     server for the one NTP sync at start
 #   bright 5-100                    display brightness, %
 #   region r1|r2|r3|nl              TX allocations for the band check and the OOB
@@ -46,9 +48,9 @@
 # ref -10
 # nrl 20 nbl 10 nbw 10
 
-# CI-V: 19200 is the most the DEV port carries (2026-10-25). For a client on the radio
-# (wfserver, rigctld, socat to TCP) use cat pty instead: no speed limit.
-# --cat=baud or --cat=pty overrides.
+# CI-V: 19200 is the most the DEV port carries (2026-10-25). A client on the radio
+# (wfserver, rigctld, socat to TCP) uses the pty, served at the same time: no speed limit.
+# --cat=baud overrides (--cat=pty: the DEV port off).
 cat 19200
 
 # CI-V address: a4 = IC-705 (out of the box; wfview IC-705 rig file), 61 = X6100 (needs

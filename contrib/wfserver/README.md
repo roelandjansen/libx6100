@@ -3,7 +3,7 @@
 wfview's `wfserver` runs on the radio and serves it over the network the Icom LAN way
 (UDP 50001-50003). wfview on a PC then connects to the X6100 as it would to a networked
 IC-705: CI-V control, scope, RX audio and TX audio. x6100_trx stays the only owner of the
-baseband; wfserver is a CI-V client of it over `cat pty` and moves the audio through the
+baseband; wfserver is a CI-V client of it over the CI-V pty (`/tmp/x6100-civ`, always served) and moves the audio through the
 R16 codec (ALSA card 0).
 
 ```
@@ -94,7 +94,7 @@ On the GEN panel:
 
 | Row | Value | Why |
 |---|---|---|
-| CAT CI-V | PTY | the CI-V engine on `/tmp/x6100-civ` (applies at the next start) |
+| CAT CI-V | any | the pty `/tmp/x6100-civ` is served next to the DEV port since 2026-10-31; the row only sets the DEV port |
 | CI-V ADDRESS | X6100 61 | matches `RigCIVuInt=97` in the ini; IC-705 A4 works too (then 164) |
 | DATA MOD | USB | TX audio in USB-D / LSB-D from the network (the default) |
 | DATA OFF MOD | USB for voice over the network, MIC for the radio's own microphone | |

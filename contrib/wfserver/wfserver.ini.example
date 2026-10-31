@@ -1,4 +1,4 @@
-; wfserver settings for the X6100 (x6100_trx with `cat pty`), as /etc/x6100/wfserver.ini
+; wfserver settings for the X6100 (x6100_trx serves the CI-V pty /tmp/x6100-civ), as /etc/x6100/wfserver.ini
 ;
 ; Users and passwords: run `/opt/wfserver/wfserver.sh --setup` (the launcher uses this file
 ; unless -s is given) once; the wizard stores them in its own encoding. Audio devices: the wizard
