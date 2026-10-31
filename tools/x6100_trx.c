@@ -4883,6 +4883,36 @@ typedef struct
 
 static sys_t g_sys;
 
+//
+// Bluetooth headset autoconnect: BlueZ does not connect a paired headset again by
+// itself (after Bluetooth off / on, the headset off / on, at start). The last one
+// connected from the GEN row (or seen connected) is remembered (state token btauto)
+// and, while not connected, tried every BT_AUTO_MS by a detached check-then-connect:
+// x6100_trx never waits on bluetoothctl. Disconnecting it on the GEN row forgets it.
+//
+
+#define BT_AUTO_MS	20000
+
+static char g_btauto[18];		/* MAC, empty = off */
+static uint64_t g_btauto_at;		/* last try, ms */
+
+static void sys_spawn(char *const argv[]);
+
+static void bt_autoconnect(uint64_t t)
+{
+	static const char script[] = "bluetoothctl show | grep -q 'Powered: yes' || exit 0;"
+		"bluetoothctl info \"$1\" | grep -q 'Connected: yes' || bluetoothctl connect \"$1\"";
+	char sh[] = "sh", c[] = "-c", arg0[] = "btauto", sc[sizeof(script)];
+	char *cmd[] = { sh, c, sc, arg0, g_btauto, NULL };
+
+	if (g_btauto[0] == '\0' || t - g_btauto_at < BT_AUTO_MS)
+		return;
+
+	g_btauto_at = t;
+	memcpy(sc, script, sizeof(script));
+	sys_spawn(cmd);	/* the MAC as $1, never in the script text */
+}
+
 // Run a command (argv, no shell) and read its output; false when it cannot run
 static bool sys_read(char *const argv[], char *buf, size_t size)
 {
@@ -5072,6 +5102,10 @@ static void sys_refresh(void)
 			char *info[] = { "bluetoothctl", "info", g_sys.dev_mac[i], NULL };
 
 			g_sys.dev_conn[i] = sys_read(info, buf, sizeof(buf)) && strstr(buf, "Connected: yes") != NULL;
+
+			// Connected some other way (bluetoothctl, the headset itself): remember it
+			if (g_sys.dev_conn[i] && g_btauto[0] == '\0' && strstr(buf, "Icon: audio-") != NULL)
+				snprintf(g_btauto, sizeof(g_btauto), "%s", g_sys.dev_mac[i]);
 		}
 	}
 
@@ -5323,6 +5357,9 @@ static void gen_adjust(int row, int dir, bool def)
 	case GEN_BT:
 		if (!def)
 			bt_cmd("power", dir > 0 ? "on" : "off");
+
+		if (!def && dir > 0)
+			g_btauto_at = now_ms() - BT_AUTO_MS + 2000;	/* the headset again in 2 s */
 		break;
 	case GEN_BTPAIR:
 		if (def)
@@ -5364,6 +5401,12 @@ static void gen_adjust(int row, int dir, bool def)
 
 			sys_spawn(cmd);	/* connecting takes seconds */
 			g_sys.at = now_ms() - SYS_POLL_MS + 1500;
+
+			// Autoconnect follows the choice: connect remembers it, disconnect forgets it
+			if (g_sys.dev_conn[g_sys.dev_sel])
+				g_btauto[0] = '\0';
+			else
+				snprintf(g_btauto, sizeof(g_btauto), "%s", g_sys.dev_mac[g_sys.dev_sel]);
 		} else {
 			g_sys.dev_sel = (g_sys.dev_sel + dir + g_sys.ndev) % g_sys.ndev;
 		}
@@ -7809,6 +7852,22 @@ static bool console_line(rx_t *rx, char *line)
 		}
 
 		// bright 5-100: display backlight in % (GEN)
+		// btauto <MAC> | off: the Bluetooth headset to connect again (state; GEN BT DEVICE)
+		if (strcasecmp(t, "btauto") == 0) {
+			const char *v = strtok(NULL, " \t\r\n");
+			unsigned b[6];
+			char x;
+
+			if (v != NULL && strcasecmp(v, "off") == 0)
+				g_btauto[0] = '\0';
+			else if (v != NULL && strlen(v) == 17 && sscanf(v, "%2x:%2x:%2x:%2x:%2x:%2x%c", &b[0], &b[1], &b[2], &b[3], &b[4], &b[5], &x) == 6)
+				snprintf(g_btauto, sizeof(g_btauto), "%s", v);
+			else
+				fprintf(stderr, "\nbtauto: a MAC (70:26:05:C0:19:7B) or off\n");
+
+			continue;
+		}
+
 		if (strcasecmp(t, "bright") == 0) {
 			const char *v = strtok(NULL, " \t\r\n");
 			int b = v == NULL ? 0 : atoi(v);
@@ -8122,7 +8181,7 @@ static void state_save(const rx_t *rx)
 	if (g_bright > 0)
 		fprintf(fp, " bright %d", g_bright);
 
-	fprintf(fp, "\n");
+	fprintf(fp, " btauto %s\n", g_btauto[0] != '\0' ? g_btauto : "off");
 	fprintf(fp, "%s span %d edge %d %s %s ref %d aref %d\n", scopes[rx->scope], rx->span, rx->edge,
 		rx->asplit ? "split" : rx->ascope ? "af" : "rf", rx->arange ? "af6" : "af3", rx->rref, rx->aref);
 	fprintf(fp, "meter %s\n", rx->meter == 1 ? "swr" : rx->meter == 2 ? "alc" : "po");	/* F4 */
@@ -9848,6 +9907,7 @@ int main(int argc, char **argv)
 		}
 
 		ntp_poll();
+		bt_autoconnect(now_ms());
 
 		if (hold.key >= 0 && !hold.fired && now_ms() - hold.since >= LONG_PRESS_MS) {
 			hold.fired = true;

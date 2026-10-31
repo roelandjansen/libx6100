@@ -192,6 +192,9 @@ under GEN until a better key turns up.
   ofono, ag=false): per IU1WXY, SCO gives no audio on this radio and drops the WiFi.
   So no headset mic: RADE TX on the radio over Bluetooth is out, RADE RX to the
   headset (A2DP) is in.
+  Autoconnect built 2026-10-31 (btauto: the headset connected again every 20 s while
+  not, detached check-then-connect): to check on the radio. HFP mic test: scripts/
+  x6100_bt_hfp_test.sh (we test ourselves what IU1WXY states).
 - Now: the IU1WXY image (OS, kernel 6.1.82, stock baseband BASE 1.1.9) is the base;
   x6100_trx and its tools run on it (`build.sh deploy`). wfserver for the R16 is built
   as a self-contained bundle (`contrib/wfserver`, Ubuntu 24.04 armhf Qt, own glibc

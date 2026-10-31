@@ -222,8 +222,8 @@ Values are kept in the last state (see Settings); defaults NR 20, NB 10 / 10, no
 | WIFI | ON / OFF (NetworkManager); shows network, IP and signal | at once |
 | WIFI NETWORK | turn: choose a saved network, hold MFK: connect. New networks: `nmtui` over ssh | at once |
 | BLUETOOTH | ON / OFF | at once |
-| BT PAIRING | turn right: visible as X6100 for 120 s to pair, left: hidden | at once |
-| BT DEVICE | turn: choose a paired device, hold MFK: connect / disconnect | at once |
+| BT PAIRING | turn right: visible as X6100 for 120 s, for a phone that pairs from its side; left: hidden. A headset never searches: pair it from the radio with `bluetoothctl` (scan on, scan off, pair, trust, connect in one session), WiFi briefly off for the scan: with WiFi on the scan finds nothing | at once |
+| BT DEVICE | turn: choose a paired device, hold MFK: connect / disconnect. A headset connected here (or seen connected) is connected again by itself every 20 s while it is not: after Bluetooth off / on, the headset off / on, at start (`btauto`, state); disconnecting it here stops that | at once |
 | BIRDIE SCAN | turn: THIS BAND / ALL BANDS, hold MFK: start (antenna off); any key stops | at once |
 | BIRDIE MARKS | ON / OFF (ON): yellow ticks on the scope | at once |
 | BIRDIE NOTCH | ON / OFF (OFF): automatic notch on a birdie in USB / LSB / AM | at once |
@@ -306,6 +306,7 @@ The status line starts with the VFO in use (A / B); with split, RIT or XIT it ad
 | `civaddr a4`, `civaddr 61` | CI-V address: a4 IC-705 (default), 61 X6100 with `contrib/wfview/X6100.rig`; also the GEN row CI-V ADDRESS (state); in the settings file it fixes that row |
 | `modin mic usb` | TX audio input DATA OFF MOD, DATA MOD: mic or usb (the codec, a Linux program such as wfserver); also the GEN rows (state); in the settings file it fixes them |
 | `ntp <server>`, `ntp on`, `ntp off` | NTP sync at start (settings file) |
+| `btauto 70:26:05:C0:19:7B`, `btauto off` | the Bluetooth headset connected again by itself (state; set by the GEN row BT DEVICE) |
 | `time 2026-10-31T10:15:00Z`, `time 10:15` | set the clock by hand, UTC (console only); the clock turns grey |
 | `bright 5-100` | display brightness in % |
 | `ab`, `a=b` | VFO A <-> B, A=B |
