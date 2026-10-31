@@ -9976,6 +9976,13 @@ int main(int argc, char **argv)
 	conf_load(&rx, STATE_PATH, false);
 	conf_load(&rx, CONF_PATH, false);
 
+	// The fixed window as the settings left it: the edge in use and, in SCROLL-F, the page
+	// with the VFO on it (else the scope stayed empty until the first change, 2026-10-31)
+	if (scope_fixed(&rx))
+		scope_fix_start(&rx);
+
+	scope_follow(&rx);
+
 	if (!g_af_seen)
 		spar_af_from_rf();	/* first start with the AF rows: as the RF scope looked */
 

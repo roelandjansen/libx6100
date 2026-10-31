@@ -91,7 +91,8 @@ Status: 2026-10-31 (v0.16.0). Summary and next steps: `STATUS.md`.
   1 kHz steps, as an Icom; verified 2026-10-31). Open: whether
   wfview sends 27 1E for a range we do not cover (above 60 MHz).
   SCROLL-F now pages by the window width on the edge grid, as an Icom (2026-10-31,
-  was a sliding window): to check on the radio.
+  was a sliding window): to check on the radio. At start SCROLL-F showed no scope
+  until the VFO moved (the window not yet on the VFO page): fixed, the page set at start.
 - Register 35 LO for FIX / SCROLL-F (built 2026-10-31; SCROLL-F showed a black right
   part on 6.920-6.976 with the VFO at 6.933): the LO goes as near the window centre as
   the shift allows (10-40 kHz either way), the IQ then covers the window: a 56 kHz
