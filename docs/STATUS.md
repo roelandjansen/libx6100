@@ -74,10 +74,10 @@ Verified on the radio:
     (IU1WXY's btaudio-ctl loopback) with WiFi on. No headset mic: HFP with the native
     pulseaudio backend sets up eSCO and a source, but no samples arrive, neither mSBC
     (16 kHz) nor CVSD (8 kHz) (scripts/x6100_bt_hfp_test.sh): RADE TX stays on the PC
+  - Bluetooth headset: connect / disconnect on the GEN row BT DEVICE and autoconnect
+    (`btauto`: after Bluetooth off / on, the headset off / on, a restart) work
 - built 2026-10-31, to check on the radio: CI-V on the DEV port next to the pty (a
   logger on the cable while wfview runs).
-  Bluetooth headset: connect / disconnect on the GEN row BT DEVICE and autoconnect
-  (`btauto`) work (2026-10-31)
 
 Built, not yet tried on the radio (2026-10-25 .. 28):
 
