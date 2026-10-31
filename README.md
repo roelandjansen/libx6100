@@ -94,7 +94,7 @@ curve over the RF scope with the lowest point marked (render with a dip at 7.110
 
 RF and audio scope (F3 long), the audio scope with colours of its own (AF rows).
 
-![wfview connected to the X6100 over the network](docs/images/x6100_wfview.webp)
+![wfview connected to the X6100 over the network](docs/images/x6100_wfview.png)
 
 wfview on a PC, connected over the LAN to wfserver on the radio (`contrib/wfserver`),
 which talks CI-V to x6100_trx on its pty: 20 m USB, scope and waterfall, meters, PBT
