@@ -1,11 +1,11 @@
 # libx6100 / x6100_trx — status
 
-Snapshot: 2026-10-31. Last tag: v0.15.0 (2026-10-30; baseband IF shift in all modes and
-TX, AM tone gone, AM snaps to the channel raster, scope bridges the DC spike, VOX N/A on
-BASE 1.1.9). Before: v0.14.0 (2026-10-29, on d8fc40c from before the history rewrite;
-wfserver for wfview, twin PBT incl. AM and the filter panel PBT box, scope panel,
-MSG / APP keys, TOT and stuck-TX safety, RADE studies), v0.13.0 (band edges, fixed
-edges, CI-V memories, wfview rig file on 61).
+Snapshot: 2026-10-31. Last tag: v0.16.0 (2026-10-31; CI-V on the DEV port and the pty at
+once, GEN row WFSERVER, clock sync indication and console time, Bluetooth headset
+autoconnect, HFP mic test: no headset mic on this radio). Before: v0.15.0 (2026-10-30;
+baseband IF shift in all modes and TX, AM tone gone, AM snaps to the channel raster,
+VOX N/A on BASE 1.1.9), v0.14.0 (2026-10-29, on 030ff5f; wfserver for wfview, twin PBT,
+scope panel, MSG / APP keys, TOT and stuck-TX safety, RADE studies).
 Tags are made by hand: they cannot be pushed from the cloud sessions.
 Open work in detail: `TODO.md`. Use: `x6100_trx_quickref.md`. CAT: `x6100_civ.md`.
 
