@@ -112,14 +112,14 @@ Status: 2026-10-30 (v0.15.0). Summary and next steps: `STATUS.md`.
   flag: traced 2026-10-27 (x6100_control_interface.md), the scan now uses it.
 - RX / TX equaliser (baseband or liquid-dsp; GEN TX panel).
 - Digital modes on the radio (FT8, CW / RTTY decoder) as APP entries; a recorder.
-- RADE on the radio, once Bluetooth audio works (headset; pulseaudio on the IU1WXY
-  image). Plan (2026-10-31): RX: the codec capture (0x8 off) -> RADE decoder -> the BT
-  headset (the speaker cannot play Linux audio while the capture carries RX); TX: the
-  BT headset mic -> RADE encoder -> codec playback keyed with the codec TX flag, only
-  when a BT headset is connected. A selection for it in x6100_trx (an APP entry or a
-  mode); the RADE code (contrib/rade, rade_rx_mt and the FFT pilot search patch) as a
-  helper process started by x6100_trx, not linked into it. RADE inside wfview is out
-  of scope (over the network RADE stays on the PC).
+- RADE RX on the radio to a Bluetooth headset (A2DP works, 2026-10-31). Plan: the codec
+  capture (0x8 off) -> RADE decoder -> the headset's pulseaudio sink, in place of
+  IU1WXY's RX loopback (btaudio-ctl rx off while RADE runs; latency about 400 ms as
+  theirs). A selection in x6100_trx (an APP entry); the RADE code (contrib/rade,
+  rade_rx_mt and the FFT pilot search patch) as a helper process started by x6100_trx,
+  not linked into it. RADE TX on the radio: no mic path (the built-in and hand mic go
+  to the baseband, HFP / SCO does not work on this radio), so TX stays on the PC over
+  the network (wfview). RADE inside wfview is out of scope.
 - x6100_tx micrec: the power / ALC telemetry reads 0.0 W / 100 while transmitting (seen
   2026-10-29, the IC-7851 heard the mic): read the flow in its own non-blocking step or
   thread instead of between blocking capture reads.
@@ -184,7 +184,14 @@ under GEN until a better key turns up.
   A2DP connects and plays, also with WiFi back on. The XM2 offers Handsfree / Headset
   (111E / 1108); the radio advertises A2DP / AVRCP only, no HFP / HSP gateway: the
   headset mic (RADE TX) needs HFP in pulseaudio first, then SCO over USB on the chip.
-  To find out: what btaudio-ctl / btcat route (the sound heard), the pulse config.
+  The sound heard is the RX audio: IU1WXY's btaudio-ctl (closed terms, read for its
+  behaviour only) keeps a pulseaudio loopback from the codec capture
+  (alsa_input.platform-sound.stereo-fallback) to each A2DP headphone sink, latency 400
+  ms (lower ran dry when WiFi held the shared chip), and forces every headset card to
+  a2dp_sink. HFP / HSP are switched off on purpose (btaudio.pa: headset=ofono without
+  ofono, ag=false): per IU1WXY, SCO gives no audio on this radio and drops the WiFi.
+  So no headset mic: RADE TX on the radio over Bluetooth is out, RADE RX to the
+  headset (A2DP) is in.
 - Now: the IU1WXY image (OS, kernel 6.1.82, stock baseband BASE 1.1.9) is the base;
   x6100_trx and its tools run on it (`build.sh deploy`). wfserver for the R16 is built
   as a self-contained bundle (`contrib/wfserver`, Ubuntu 24.04 armhf Qt, own glibc
