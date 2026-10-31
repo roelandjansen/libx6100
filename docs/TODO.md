@@ -57,8 +57,11 @@ Status: 2026-10-30 (v0.15.0). Summary and next steps: `STATUS.md`.
   1008 MHz; no dropouts that day. Watch for dropouts again; if they come: top -H per
   thread, wfview RX codec / rate / latency, scope Speed. Open: why the combined scope
   mode fails (WaterfallFormat 0 works).
-  GEN row WFSERVER (on / off / start, 2026-10-31) and CI-V on the DEV port and the pty
-  at once (wfserver no longer needs CAT on PTY): to check on the radio.
+  GEN row WFSERVER (2026-10-31): off works; on / start brings wfserver up, but wfview
+  sometimes needs up to three connects before it works, with nothing changed on the
+  X6100: a wfview reconnect / recovery matter, for the wfview project (Phil, Elliott,
+  Roeland). To test: CI-V on the DEV port next to the pty (a logger on the USB cable
+  while wfview is connected over the network).
 - S-meter calibration (signal generator): SMETER_CAL_DB is provisional (-21: -15 from
   an IC-7851 comparison, then 6 dB lower); also the overload point with PRE / ATT.
 - Codec level vs ALC test (x6100_tx codec at -40 / -30 / -20 dBFS).
