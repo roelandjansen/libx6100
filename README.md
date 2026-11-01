@@ -9,7 +9,8 @@ independent, documented library, as the base for a new front end.
 
 ![x6100_trx on the radio](docs/images/x6100_trx_photo.jpg)
 
-`x6100_trx` on the X6100 (stock BASE 1.1.9), 20 m SSB, 2026-10-24. Key reference
+`x6100_trx` on the X6100 (stock BASE 1.1.9), 20 m USB in SCROLL-F with a fixed edge,
+ATU and ATT on, 2026-11-01. Key reference
 in `docs/x6100_trx_quickref.md`.
 
 ![x6100_trx receive screen](docs/images/x6100_trx.png)

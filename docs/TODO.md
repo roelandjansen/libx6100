@@ -260,6 +260,12 @@ under GEN until a better key turns up.
 ## Parked
 
 - Baseband (STM32) clean-room firmware: `x6100_baseband_handover.md`.
+  Requirement from RADE (2026-11-01): the built-in and hand mic go to the baseband only,
+  no path to Linux (measured; the X6200 the same): RADE TX on the radio needs the
+  baseband to send the mic samples to Linux, e.g. over the flow UART (16 kHz x 16 bit,
+  about 256 kbit/s next to the IQ at 1.152 Mbaud). Linux encodes RADE (0.42-0.49 RTF on
+  the R16) and sends the TX audio back by codec playback with codec TX (works today).
+  The same for RX to the speaker: decoded audio from Linux played by the baseband.
 - RX IQ balance (registers 48 / 49): `tools/x6100_iqcal.c`.
 - Hand mic PTT is invisible to Linux (cannot abort a tune); evtest / GPIO not checked.
 - Band edge markers on the scope from the region table (`region`, done: r1 / r2 / r3 / nl;
