@@ -100,10 +100,17 @@ int x6100_pcm_open(x6100_pcm_t *pcm, int card, int device, bool capture, unsigne
 	pcm->capture = capture;
 
 	snprintf(path, sizeof(path), "/dev/snd/pcmC%dD%d%c", card, device, capture ? 'c' : 'p');
-	pcm->fd = open(path, O_RDWR | O_CLOEXEC);
+
+	// Opened non-blocking: a device another program holds (wfserver, pulseaudio) makes a
+	// blocking open wait until it is free, and the caller with it (x6100_trx froze on the
+	// audio scope, 2026-11-01); busy gives -EBUSY now. Reads and writes block as before.
+	pcm->fd = open(path, O_RDWR | O_CLOEXEC | O_NONBLOCK);
 
 	if (pcm->fd < 0)
 		return -errno;
+
+	if (fcntl(pcm->fd, F_SETFL, fcntl(pcm->fd, F_GETFL) & ~O_NONBLOCK) < 0)
+		goto fail;
 
 	param_init(&hw);
 	param_set_mask(&hw, SNDRV_PCM_HW_PARAM_ACCESS, SNDRV_PCM_ACCESS_RW_INTERLEAVED);

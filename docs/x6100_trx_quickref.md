@@ -44,7 +44,7 @@ Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
 | V/M | memory mode with the memory panel / back to the VFO (Icom style) | split on / off: RX on the VFO in use, TX on the other |
 | F1 | next scope mode: CENTER -> SCROLL-C -> FIX -> SCROLL-F -> CENTER | scope panel: mode, VBW, averaging, waveform, colours, waterfall (see Scope panel) |
 | F2 | span ±48 / 24 / 12 / 6 / 3 / 1.5 kHz; FIX / SCROLL-F: next fixed edge 1-4; audio scope: 0-3 / 0-6 kHz | FIX / SCROLL-F: edge panel, lower and upper of the edge in use (see Fixed edges); else reference level: MFK turn = ±1 dB (±30), MFK push = RF <-> AF scope; F2 long, other key or 10 s idle closes |
-| F3 | audio scope on / off (RF <-> AF) | RF scope left (5/8) + audio scope right (3/8), on / off |
+| F3 | audio scope on / off (RF <-> AF) | RF scope left (5/8) + audio scope right (3/8), on / off. While another program holds the codec capture (wfserver, the IU1WXY Bluetooth loopback) the audio scope does not open: AUDIO SCOPE: CODEC BUSY |
 | F4 | TX meter: PO / SWR / ALC | TX panel: mic, compressor, VOX, monitor, squelch, TX timeout |
 | F5 | filter FIL1 / FIL2 / FIL3 | filter panel |
 | PTT | hold = TX; tap (< 400 ms) = latch, next press drops | |
@@ -326,6 +326,7 @@ The status line starts with the VFO in use (A / B); with split, RIT or XIT it ad
 | `am_offset 100` | AM receive offset above the dial, 0-1000 Hz (0 = off), only with `ifshift 0`; also AGC long, row AM OFFSET |
 | `ifshift 10000` | IF shift, -40000 to 40000 Hz (0 = off): the LO that far below the receive frequency, the DC spike out of the passband |
 | `ifshift_tx 1` | keep the IF shift while transmitting (verified); 0: off in TX and in CW |
+| `hold on`, `hold off` | scope HOLD (as CI-V 27 17 from wfview): scope and waterfall frozen, the S-meter goes on; label HOLD; not kept |
 | `step ch` | 60 m channel steps |
 | `memr` | list the used memory channels |
 | `memr 5`, `memw 5`, `memc 5` | recall / write the VFO into / clear memory channel 5 |

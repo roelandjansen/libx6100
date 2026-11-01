@@ -69,6 +69,8 @@ Verified on the radio:
     1008 MHz; no dropouts, no errors in its log. GEN row WFSERVER: off works; wfview
     sometimes needs up to three connects (a wfview reconnect matter, for the wfview
     project). Screenshot in the README
+  - SCROLL-F: pages by the window width, the scope there at start; FIX: SCOPE OUT OF
+    RANGE; TX in FIX / SCROLL-F on the dial frequency; edge panel; negative IF shift
   - Bluetooth headset (Sony WH-1000XM2): with WiFi connected the scan finds nothing
     (rtl8723bu coexistence); paired with WiFi briefly off, then A2DP plays the RX audio
     (IU1WXY's btaudio-ctl loopback) with WiFi on. No headset mic: HFP with the native

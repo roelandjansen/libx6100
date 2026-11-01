@@ -2188,6 +2188,7 @@ static const kpar_t g_spar[SPARS] = {
 
 static int g_sp[SPARS];
 static uint32_t g_iq_hz;	/* IQ centre of the last spectrum (max hold starts again when it moves) */
+static bool g_scope_hold;	/* scope HOLD (CI-V 27 17, console hold): scope and waterfall frozen, the meter not */
 static bool g_dc_hide;		/* IF shift on: the DC / LO spike at the IQ centre is not drawn */
 
 #define DC_HIDE_BINS	2	/* IQ centre +- 2 bins (+- 375 Hz) interpolated over on the scope */
@@ -4056,6 +4057,9 @@ static void spectrum_update(screen_t *scr, const x6100_flow_frame_t *f)
 		dbs[i] = p > 1e-20f ? 10.0f * log10f(p / (float) n) : -200.0f;
 		scr->pow[i] = p / (float) n;
 	}
+
+	if (g_scope_hold)
+		return;	/* HOLD: the picture stays, the S-meter (pow) goes on */
 
 	// IF shift on: the receiver's own DC / LO spike sits at the IQ centre, away from the
 	// passband; drawn as the line between its neighbours (the scope only, not the meter)
@@ -7122,6 +7126,9 @@ overlays:
 		else
 			snprintf(m, sizeof(m), "%s +-%d.%dk", names[rx->scope], rx->span / 2000, rx->span / 200 % 10);
 
+		if (g_scope_hold && !rx->ascope)
+			snprintf(m + strlen(m), sizeof(m) - strlen(m), " HOLD");
+
 		tw = x6100_lcd_text_width(m, 2);
 
 		x6100_lcd_fill(lcd, W - tw - 10, SPEC_Y + 20, tw + 8, 18, 0x000000);
@@ -8322,6 +8329,20 @@ static bool console_line(rx_t *rx, char *line)
 			continue;
 		}
 
+		// hold on | off: scope HOLD, as CI-V 27 17 (console; not kept)
+		if (strcasecmp(t, "hold") == 0) {
+			const char *v = strtok(NULL, " \t\r\n");
+
+			if (v != NULL && (strcasecmp(v, "on") == 0 || strcasecmp(v, "off") == 0)) {
+				g_scope_hold = strcasecmp(v, "on") == 0;
+				changed = true;
+			} else {
+				fprintf(stderr, "\nhold: on or off\n");
+			}
+
+			continue;
+		}
+
 		if (strcasecmp(t, "ifshift_tx") == 0) {	/* 1: keep the IF shift while keyed (to test) */
 			want_lvl = &g_ifshift_tx;
 			lvl_min = 0;
@@ -8630,15 +8651,15 @@ static void console_raw(void)
 
 static const struct
 {
-	uint8_t cmd[2];
-	uint8_t n;		/* 1: no subcommand (11 ATT, 0F split) */
+	uint8_t cmd[3];
+	uint8_t n;		/* bytes of cmd: 1 no subcommand (11 ATT, 0F split), 3 scope (27 xx 00) */
 } g_cat_ann[] = {
 	{ { 0x14, 0x01 }, 2 }, { { 0x14, 0x02 }, 2 }, { { 0x14, 0x03 }, 2 }, { { 0x14, 0x06 }, 2 },
 	{ { 0x14, 0x07 }, 2 }, { { 0x14, 0x08 }, 2 }, { { 0x14, 0x09 }, 2 }, { { 0x14, 0x0A }, 2 },
 	{ { 0x14, 0x0B }, 2 }, { { 0x14, 0x0C }, 2 }, { { 0x14, 0x0E }, 2 }, { { 0x14, 0x12 }, 2 },
 	{ { 0x14, 0x15 }, 2 }, { { 0x16, 0x02 }, 2 }, { { 0x16, 0x12 }, 2 }, { { 0x16, 0x22 }, 2 },
 	{ { 0x16, 0x40 }, 2 }, { { 0x16, 0x41 }, 2 }, { { 0x16, 0x44 }, 2 }, { { 0x16, 0x45 }, 2 },
-	{ { 0x11 }, 1 }, { { 0x0F }, 1 },
+	{ { 0x11 }, 1 }, { { 0x0F }, 1 }, { { 0x27, 0x17, 0x00 }, 3 },
 };
 
 #define CAT_ANN_N	((int) (sizeof(g_cat_ann) / sizeof(g_cat_ann[0])))
@@ -8675,7 +8696,6 @@ typedef struct
 	//
 	bool scope_on;
 	bool scope_out;
-	bool scope_hold;
 	uint32_t fedge_lo;	/* 27 1E: LO arrives first, HI stores the pair */
 	int scope_ref;		/* 0.1 dB */
 	int scope_speed;	/* 0 fast, 1 mid, 2 slow */
@@ -8851,7 +8871,7 @@ static bool cat_get(void *ctx, x6100_civ_item_t item, int vfo, int32_t *v)
 			: g_edge[vfo / 4][vfo % 4].hi);
 		return true;
 	case X6100_CIV_SCOPE_HOLD:
-		*v = cat->scope_hold;
+		*v = g_scope_hold;
 		return true;
 	case X6100_CIV_SCOPE_REF:
 		*v = cat->scope_ref;
@@ -9212,7 +9232,7 @@ static bool cat_set(void *ctx, x6100_civ_item_t item, int vfo, int32_t v)
 		break;
 	}
 	case X6100_CIV_SCOPE_HOLD:
-		cat->scope_hold = v != 0;
+		g_scope_hold = v != 0;	/* the radio's scope, as an Icom's HOLD, not only the CAT data */
 		break;
 	case X6100_CIV_SCOPE_REF:
 		if (v < -200 || v > 200)
@@ -9704,7 +9724,7 @@ static void cat_scope(cat_t *cat, uint64_t t)
 	static uint8_t out[1024];
 	int queued = 0;
 
-	if (!cat->scope_on || !cat->scope_out || cat->scope_hold || !scr->spec_valid)
+	if (!cat->scope_on || !cat->scope_out || g_scope_hold || !scr->spec_valid)
 		return;
 
 	if (t - cat->scope_ms < (uint64_t) pace_ms[cat->scope_speed])
@@ -10270,10 +10290,16 @@ int main(int argc, char **argv)
 		if ((rx.ascope || rx.asplit) && !apcm_open) {
 			int boost = rx.mode == X6100_MODE_AM || rx.mode == X6100_MODE_NFM ? 0 : 1;	/* as x6100_audio */
 
-			if (x6100_mixer_rx_setup(X6100_PCM_CARD, boost) < 0
-				|| x6100_pcm_open(&apcm, X6100_PCM_CARD, X6100_PCM_DEVICE, true, AS_RATE, 2, 1024, 4) < 0) {
-				fprintf(stderr, "\naudio scope: codec capture not available\n");
+			int prc = x6100_mixer_rx_setup(X6100_PCM_CARD, boost) < 0 ? -EIO
+				: x6100_pcm_open(&apcm, X6100_PCM_CARD, X6100_PCM_DEVICE, true, AS_RATE, 2, 1024, 4);
+
+			if (prc < 0) {
+				// Busy: another program has the codec capture (wfserver, pulseaudio's
+				// Bluetooth loopback); the open no longer waits for it
+				fprintf(stderr, "\naudio scope: codec capture not available: %s\n", strerror(-prc));
+				toast(prc == -EBUSY ? "AUDIO SCOPE: CODEC BUSY" : "AUDIO SCOPE: NO CAPTURE");
 				rx.ascope = rx.asplit = false;
+				changed = true;
 			} else {
 				apcm_open = true;
 				pfd[apcm_slot].fd = apcm.fd;
@@ -10746,7 +10772,7 @@ int main(int argc, char **argv)
 				g_dc_hide = lo_shift(&rx) != 0 && g_keyed_hz == 0;	/* TX: the carrier is there */
 				spectrum_update(&scr, &frame);
 				scr.sig_dbm = passband_dbm(&scr, &rx);
-				new_frame = true;
+				new_frame = !g_scope_hold;	/* HOLD: the waterfall stands still too */
 			}
 		}
 
