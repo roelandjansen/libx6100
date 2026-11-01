@@ -89,15 +89,6 @@ Status: 2026-11-01 (v0.17.1). Summary and next steps: `STATUS.md`.
 - S-meter calibration (signal generator): SMETER_CAL_DB is provisional (-21: -15 from
   an IC-7851 comparison, then 6 dB lower); also the overload point with PRE / ATT.
 - Codec level vs ALC test (x6100_tx codec at -40 / -30 / -20 dBFS).
-- Lost I2C writes (built 2026-10-27, not tried on the radio; TOT is tested): a failed
-  write is resent at once (3 tries, the rest of the block still goes out), the whole
-  block after every un-key and write error, and every 250 ms while the baseband stays
-  in TX 0.3-2 s after an un-key; TOT off / 1 / 3 / 5 min (TX panel), hand mic / VOX TX
-  to 0.1 W at the timeout (TOT tested on the radio). To check: the console lines on a
-  band change NAK, normal un-keys without the stuck-TX line.
-  Since 2026-10-27 evening (not tried): power to the minimum when the baseband stays in
-  TX 2 s into a watch armed by a write error (OpenX6X00 tx_watch_power); after 2 s of
-  I2C failures TX drops and is refused, x6100_trx keeps trying instead of quitting.
 - Fixed scope edges (IC-705 style, built 2026-10-27; work well on the radio, 2026-10-31): F2 / F2
   long in FIX and SCROLL-F, the scope label, a band change moves the window, edges kept
   over a restart; wfview fixed edge window (27 16 / 27 1E set and read), a 200 kHz edge

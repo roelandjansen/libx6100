@@ -89,6 +89,8 @@ Verified on the radio:
   - HOLD from wfview freezes the radio's scope and waterfall, the meters run on
   - audio scope with wfview connected: AUDIO SCOPE: CODEC BUSY, no freeze
   - SWR scan: the frequency readout follows the scan step
+  - lost I2C writes: taken care of (no false stuck-TX lines since 2026-10-27; the power
+    cut on a TX stuck after a write error stays in the code, it cannot be provoked)
   - start: "calibration invalid" and no start until a reboot (seen once); now retried
     10 times over 5 s, and refused while another program drives the baseband (to see)
 
@@ -111,9 +113,6 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
 - fixed edges, IC-705 style: 4 per range on the 12 IC-705 ranges, at most 96 kHz; F2 in
   FIX / SCROLL-F picks one, F2 long stores the window round the VFO; state, console
   `edge` / `fixedge`, CI-V 27 16 / 27 1E (host tests pass)
-- lost I2C writes, the rest: power cut (TX enable off, minimum power) on a TX stuck after
-  a write error; after 2 s of I2C failures TX drops and is refused, x6100_trx keeps
-  trying instead of quitting
 - scope panel (F1 long), IC-7851 style: mode, center type, REF LEVEL, VBW, averaging,
   waveform type, max hold off / decay / 10 s / on, colours of fill / line / max hold
   (R, G, B), waterfall on / off, speed, size and peak level, scope during TX; the audio
