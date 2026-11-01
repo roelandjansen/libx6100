@@ -107,6 +107,8 @@ static const int g_tot_min[4] = { 0, 1, 3, 5 };	/* TX timeout (TX panel TOT): of
 #define TX_TAP_MS	400
 #define SWR_LIMIT	3.0
 #define SWR_TRIP_MS	300
+#define START_TRIES	10		/* baseband I2C at start: calibration read, first refresh */
+#define START_WAIT_US	500000		/* between the tries: 5 s in all */
 #define TUNE_TIMEOUT_MS	20000
 #define TUNE_SHOW_MS	4000	/* TUNED result stays on screen */
 #define TXPWR_DEF	50	/* 0.1 W units */
@@ -10121,13 +10123,37 @@ int main(int argc, char **argv)
 	apcm_slot = npfd;
 	npfd++;
 
+	// Another program on the baseband (a GUI not stopped yet, a second x6100_trx): two
+	// writers on the same registers garble each other, the calibration read too. The
+	// names as /proc comm has them (15 characters)
+	{
+		static const char *const others[] = { "x6100-iu1wxy-gu", "x6100_gui", "x6100_trx", "x6100_rx", NULL };
+
+		if (proc_running(others)) {
+			fprintf(stderr, "error: another program drives the baseband (IU1WXY / R1CBU GUI or x6100_trx):"
+				" x6100_ui.sh stop first\n");
+			return 1;
+		}
+	}
+
 	if ((rc = x6100_i2c_open(&i2c, NULL)) < 0 || (rc = x6100_flow_open(&flow, NULL)) < 0) {
 		fprintf(stderr, "open: %s\n", strerror(-rc));
 		return 1;
 	}
 
-	if (x6100_cal_read(&i2c, &cal) < 0) {
-		fprintf(stderr, "warning: calibration invalid, using defaults\n");
+	//
+	// The baseband right after another program let it go (the IU1WXY GUI, an x6100_trx
+	// that ended badly) may not answer on I2C for a while: the calibration read gave
+	// garbage and the first refresh failed, x6100_trx did not start until a reboot
+	// (2026-11-01). Both are tried again for a few seconds first.
+	//
+	for (int n = 1; (rc = x6100_cal_read(&i2c, &cal)) < 0 && n < START_TRIES; n++) {
+		fprintf(stderr, "calibration read: %s, again (%d/%d)\n", strerror(-rc), n, START_TRIES);
+		usleep(START_WAIT_US);
+	}
+
+	if (rc < 0) {
+		fprintf(stderr, "warning: calibration invalid (%s), using defaults\n", strerror(-rc));
 		memset(&cal, 0, sizeof(cal));
 		cal.bias_drive = X6100_CAL_BIAS_DRIVE_DEF;
 		cal.bias_final = X6100_CAL_BIAS_FINAL_DEF;
@@ -10137,8 +10163,13 @@ int main(int argc, char **argv)
 	apply(&ctl, &cal, &rx);
 	x6100_ctl_set(&ctl, X6100_REG_FLAGS, 0);
 
-	if ((rc = x6100_ctl_refresh(&ctl)) < 0) {
-		fprintf(stderr, "refresh: %s\n", strerror(-rc));
+	for (int n = 1; (rc = x6100_ctl_refresh(&ctl)) < 0 && n < START_TRIES; n++) {
+		fprintf(stderr, "refresh: %s, again (%d/%d)\n", strerror(-rc), n, START_TRIES);
+		usleep(START_WAIT_US);
+	}
+
+	if (rc < 0) {
+		fprintf(stderr, "refresh: %s: the baseband does not answer on I2C; a reboot resets it\n", strerror(-rc));
 		return 1;
 	}
 
