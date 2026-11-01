@@ -5139,6 +5139,7 @@ static sys_t g_sys;
 #define BT_AUTO_MS	20000
 
 static char g_btauto[18];		/* MAC, empty = off */
+static int g_bt_power = -1;		/* Bluetooth as last set on the GEN row: 1 on, 0 off, -1 as the image has it (state bt) */
 static uint64_t g_btauto_at;		/* last try, ms */
 
 static void sys_spawn(char *const argv[]);
@@ -5156,6 +5157,27 @@ static void bt_autoconnect(uint64_t t)
 	g_btauto_at = t;
 	memcpy(sc, script, sizeof(script));
 	sys_spawn(cmd);	/* the MAC as $1, never in the script text */
+}
+
+//
+// Bluetooth power as last set on the GEN row: the image switches it on at every boot,
+// and on the shared chip (rtl8723bu, one antenna) it costs WiFi airtime: wfview over
+// WiFi had audio dropouts with Bluetooth on (2026-11-02). Applied at start, detached:
+// bluetoothd may still be starting (up to 10 s waited for)
+//
+
+static void bt_power_apply(void)
+{
+	static const char script[] = "for i in 1 2 3 4 5 6 7 8 9 10; do bluetoothctl show >/dev/null 2>&1 && break;"
+		" sleep 1; done; bluetoothctl power \"$1\"";
+	char sh[] = "sh", c[] = "-c", arg0[] = "btpower", on[] = "on", off[] = "off", sc[sizeof(script)];
+	char *cmd[] = { sh, c, sc, arg0, g_bt_power ? on : off, NULL };
+
+	if (g_bt_power < 0)
+		return;
+
+	memcpy(sc, script, sizeof(script));
+	sys_spawn(cmd);
 }
 
 // Run a command (argv, no shell) and read its output; false when it cannot run
@@ -5602,6 +5624,9 @@ static void gen_adjust(int row, int dir, bool def)
 	case GEN_BT:
 		if (!def)
 			bt_cmd("power", dir > 0 ? "on" : "off");
+
+		if (!def)
+			g_bt_power = dir > 0;	/* kept: applied at the next start */
 
 		if (!def && dir > 0)
 			g_btauto_at = now_ms() - BT_AUTO_MS + 2000;	/* the headset again in 2 s */
@@ -8177,6 +8202,18 @@ static bool console_line(rx_t *rx, char *line)
 
 		// bright 5-100: display backlight in % (GEN)
 		// btauto <MAC> | off: the Bluetooth headset to connect again (state; GEN BT DEVICE)
+		// bt on | off: Bluetooth as last set on the GEN row, applied at start (state)
+		if (strcasecmp(t, "bt") == 0) {
+			const char *v = strtok(NULL, " \t\r\n");
+
+			if (v != NULL && (strcasecmp(v, "on") == 0 || strcasecmp(v, "off") == 0))
+				g_bt_power = strcasecmp(v, "on") == 0;
+			else
+				fprintf(stderr, "\nbt: on or off\n");
+
+			continue;
+		}
+
 		if (strcasecmp(t, "btauto") == 0) {
 			const char *v = strtok(NULL, " \t\r\n");
 			unsigned b[6];
@@ -8518,6 +8555,9 @@ static void state_write(const rx_t *rx)
 
 	if (g_bright > 0)
 		fprintf(fp, " bright %d", g_bright);
+
+	if (g_bt_power >= 0)
+		fprintf(fp, " bt %s", g_bt_power ? "on" : "off");
 
 	fprintf(fp, " btauto %s\n", g_btauto[0] != '\0' ? g_btauto : "off");
 	fprintf(fp, "%s span %d edge %d %s %s ref %d aref %d\n", scopes[rx->scope], rx->span, rx->edge,
@@ -10024,6 +10064,7 @@ int main(int argc, char **argv)
 		scope_fix_start(&rx);
 
 	scope_follow(&rx);
+	bt_power_apply();	/* Bluetooth as last set on the GEN row */
 
 	if (!g_af_seen)
 		spar_af_from_rf();	/* first start with the AF rows: as the RF scope looked */

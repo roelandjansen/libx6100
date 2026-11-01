@@ -71,7 +71,10 @@ Status: 2026-11-01 (v0.17.1). Summary and next steps: `STATUS.md`.
   HOLD verified (the meters slowed at first: fixed, the screen redraws every frame and
   only the waterfall line stops). Codec busy: no freeze, AUDIO SCOPE: CODEC BUSY (it was
   cut short by the labels on the right: the toast is drawn after them now), verified.
-- wfserver load measured 2026-10-31 (wfview connected, scope Fast, 20 m): wfserver 33 %
+- wfserver dropouts: Bluetooth on costs WiFi airtime on the shared rtl8723bu (one
+  antenna, the vendor driver's coexistence); with Bluetooth off the dropouts went
+  (2026-11-02). x6100_trx now keeps the BLUETOOTH row (state bt) and applies it at
+  start: to check after a reboot. wfserver load measured 2026-10-31
   of the CPU (about 1.3 of the 4 cores), x6100_trx 13 %, 52 % idle, load 1.6-1.8,
   1008 MHz; no dropouts that day. Watch for dropouts again; if they come: top -H per
   thread, wfview RX codec / rate / latency, scope Speed. Open: why the combined scope
