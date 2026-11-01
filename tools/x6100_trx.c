@@ -7082,19 +7082,6 @@ overlays:
 	}
 
 	//
-	// Toast: a short confirmation in the middle of the spectrum (VFO A / B, A=B)
-	//
-	if (g_toast[0] != '\0' && now_ms() < g_toast_until) {
-		int tw = x6100_lcd_text_width(g_toast, 3);
-		int tx = (W - tw) / 2, ty = SPEC_Y + SPEC_H / 2 - 16;
-
-		x6100_lcd_fill(lcd, tx - 14, ty - 8, tw + 28, 38, 0x000000);
-		x6100_lcd_hline(lcd, tx - 14, tx + tw + 13, ty - 8, SCR_ACCENT);
-		x6100_lcd_hline(lcd, tx - 14, tx + tw + 13, ty + 29, SCR_ACCENT);
-		x6100_lcd_text(lcd, tx, ty, 3, g_toast, SCR_ACCENT);
-	}
-
-	//
 	// Reference level edit (F2 long): which scope and its level, bottom left of
 	// that scope part; amber while editing
 	//
@@ -7185,6 +7172,20 @@ overlays:
 			x6100_lcd_fill(lcd, W - tw - 10, SPEC_Y + 60, tw + 8, 18, 0x000000);
 			x6100_lcd_text(lcd, W - tw - 6, SPEC_Y + 62, 2, m, time_ok() ? SCR_DIM : SCR_WARN);
 		}
+	}
+
+	//
+	// Toast: a short confirmation in the middle of the spectrum (VFO A / B, A=B), drawn
+	// after the labels on the right (they cut AUDIO SCOPE: CODEC BUSY short, 2026-11-01)
+	//
+	if (g_toast[0] != '\0' && now_ms() < g_toast_until) {
+		int tw = x6100_lcd_text_width(g_toast, 3);
+		int tx = (W - tw) / 2, ty = SPEC_Y + SPEC_H / 2 - 16;
+
+		x6100_lcd_fill(lcd, tx - 14, ty - 8, tw + 28, 38, 0x000000);
+		x6100_lcd_hline(lcd, tx - 14, tx + tw + 13, ty - 8, SCR_ACCENT);
+		x6100_lcd_hline(lcd, tx - 14, tx + tw + 13, ty + 29, SCR_ACCENT);
+		x6100_lcd_text(lcd, tx, ty, 3, g_toast, SCR_ACCENT);
 	}
 
 	if (rx->fedit)

@@ -64,7 +64,8 @@ Status: 2026-10-31 (v0.16.0). Summary and next steps: `STATUS.md`.
   audio scope (F3 / F3 long) froze the display when another program held the codec
   capture (a blocking open): x6100_pcm_open no longer waits, AUDIO SCOPE: CODEC BUSY.
   HOLD verified (the meters slowed at first: fixed, the screen redraws every frame and
-  only the waterfall line stops); the codec busy case to check.
+  only the waterfall line stops). Codec busy: no freeze, AUDIO SCOPE: CODEC BUSY (it was
+  cut short by the labels on the right: the toast is drawn after them now), verified.
 - wfserver load measured 2026-10-31 (wfview connected, scope Fast, 20 m): wfserver 33 %
   of the CPU (about 1.3 of the 4 cores), x6100_trx 13 %, 52 % idle, load 1.6-1.8,
   1008 MHz; no dropouts that day. Watch for dropouts again; if they come: top -H per
