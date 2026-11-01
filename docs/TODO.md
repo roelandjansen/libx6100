@@ -61,7 +61,8 @@ Status: 2026-10-31 (v0.16.0). Summary and next steps: `STATUS.md`.
   only the CAT stream to that client), console hold, reported by transceive; and the
   audio scope (F3 / F3 long) froze the display when another program held the codec
   capture (a blocking open): x6100_pcm_open no longer waits, AUDIO SCOPE: CODEC BUSY.
-  Both to check on the radio.
+  HOLD verified (the meters slowed at first: fixed, the screen redraws every frame and
+  only the waterfall line stops); the codec busy case to check.
 - wfserver load measured 2026-10-31 (wfview connected, scope Fast, 20 m): wfserver 33 %
   of the CPU (about 1.3 of the 4 cores), x6100_trx 13 %, 52 % idle, load 1.6-1.8,
   1008 MHz; no dropouts that day. Watch for dropouts again; if they come: top -H per

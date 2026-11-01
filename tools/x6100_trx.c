@@ -10772,7 +10772,7 @@ int main(int argc, char **argv)
 				g_dc_hide = lo_shift(&rx) != 0 && g_keyed_hz == 0;	/* TX: the carrier is there */
 				spectrum_update(&scr, &frame);
 				scr.sig_dbm = passband_dbm(&scr, &rx);
-				new_frame = !g_scope_hold;	/* HOLD: the waterfall stands still too */
+				new_frame = true;	/* meters redrawn every frame, also on HOLD */
 			}
 		}
 
@@ -10812,7 +10812,7 @@ int main(int argc, char **argv)
 		}
 
 		if (scr.on && (new_frame || dirty) && t - last_disp >= DISP_MS) {
-			draw_screen(&scr, &rx, new_frame);
+			draw_screen(&scr, &rx, new_frame && !g_scope_hold);	/* HOLD: no new waterfall line */
 			x6100_lcd_flush(&scr.lcd);
 			new_frame = false;
 			dirty = false;
