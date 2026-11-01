@@ -1,11 +1,13 @@
 # libx6100 / x6100_trx — status
 
-Snapshot: 2026-10-31. Last tag: v0.16.0 (2026-10-31; CI-V on the DEV port and the pty at
-once, GEN row WFSERVER, clock sync indication and console time, Bluetooth headset
-autoconnect, HFP mic test: no headset mic on this radio). Before: v0.15.0 (2026-10-30;
-baseband IF shift in all modes and TX, AM tone gone, AM snaps to the channel raster,
-VOX N/A on BASE 1.1.9), v0.14.0 (2026-10-29, on 030ff5f; wfserver for wfview, twin PBT,
-scope panel, MSG / APP keys, TOT and stuck-TX safety, RADE studies).
+Snapshot: 2026-11-01. Last tag: v0.17.0 (2026-11-01; memory mode Icom style, SCROLL-F
+pages, the fixed window painted with the LO near its centre, edges at most 75 kHz and an
+edge panel, SCOPE OUT OF RANGE, HOLD from CI-V, transceive of levels and switches, no
+freeze on a busy codec, the SWR scan readout, a more patient start). Before: v0.16.0
+(2026-10-31; CI-V on the DEV port and the pty at once, GEN row WFSERVER, clock, Bluetooth
+headset autoconnect, no headset mic), v0.15.0 (2026-10-30; baseband IF shift, AM tone
+gone, AM raster, VOX N/A), v0.14.0 (2026-10-29, on 030ff5f; wfserver, twin PBT, scope
+panel, MSG / APP keys, TOT, RADE studies).
 Tags are made by hand: they cannot be pushed from the cloud sessions.
 Open work in detail: `TODO.md`. Use: `x6100_trx_quickref.md`. CAT: `x6100_civ.md`.
 
@@ -80,6 +82,14 @@ Verified on the radio:
     (`btauto`: after Bluetooth off / on, the headset off / on, a restart) work
   - CI-V on the DEV port next to the pty: rigctl (IC-705 model 3085, 19200, civaddr 61)
     on the USB cable sets and reads the frequency while wfview runs over wfserver
+  - memory mode (V/M key and wfview's V/M): to M1 and back to the VFO as it was
+  - CI-V transceive of levels and switches: wfview follows NR / NB set on the radio
+- radio test of 2026-11-01:
+  - HOLD from wfview freezes the radio's scope and waterfall, the meters run on
+  - audio scope with wfview connected: AUDIO SCOPE: CODEC BUSY, no freeze
+  - SWR scan: the frequency readout follows the scan step
+  - start: "calibration invalid" and no start until a reboot (seen once); now retried
+    10 times over 5 s, and refused while another program drives the baseband (to see)
 
 Built, not yet tried on the radio (2026-10-25 .. 28):
 

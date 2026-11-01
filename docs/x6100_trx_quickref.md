@@ -8,6 +8,10 @@ panel. `x6100_rx` is the same program, receive only (PTT and tune refused).
 Stop the stock GUI first (`scripts/x6100_ui.sh stop`). That also starts wfserver when it is
 installed and set up (`contrib/wfserver`): it runs while x6100_trx serves the CI-V pty (always on, `catpty`);
 `x6100_ui.sh wfserver off` / `on` switches that off / on, `x6100_ui.sh start` stops it.
+x6100_trx refuses to start while the IU1WXY or R1CBU GUI or another x6100_trx still runs.
+Right after a GUI let the baseband go it may not answer on I2C for a moment: x6100_trx tries
+the calibration read and the first register write 10 times over 5 s (console: again n/10);
+if it still fails, a reboot resets the baseband.
 
 ```
 x6100_trx [--oob] [--no-limit] [--cat[=baud|pty]] [--cat-log] [--probe] [freq] [mode] [agc] [att|noatt] [pre|nopre] [vol 0-100]
