@@ -57,6 +57,8 @@ Status: 2026-10-31 (v0.16.0). Summary and next steps: `STATUS.md`.
 - AM PBT and the filter panel PBT box (2026-10-29): to check on the radio (PBT in USB
   from wfview verified). AM passband now: upper edge at Icom's H, lower 2 x offset
   inside; the RF scope shows where it sits.
+- SWR scan works on the radio (2026-11-01); the frequency readout now follows the scan
+  step (it showed the dial): to check.
 - 2026-11-01: HOLD from wfview (27 17) now freezes the radio's scope and waterfall (was:
   only the CAT stream to that client), console hold, reported by transceive; and the
   audio scope (F3 / F3 long) froze the display when another program held the codec

@@ -6655,11 +6655,13 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 
 	//
 	// Frequency, MHz.kHz.Hz; while transmitting with split or a duplex shift the TX
-	// frequency (without XIT, as on Icom radios), the scope stays on RX
+	// frequency (without XIT, as on Icom radios), the scope stays on RX; during the SWR
+	// scan the frequency it steps over (2026-11-01: the dial stood still)
 	//
 	{
 		bool on = scr->tx || rx->tuning;
-		uint32_t f = !on ? rx->freq : rx->split ? rx->b_freq : (uint32_t) ((int64_t) rx->freq + dup_shift(rx));
+		uint32_t f = rx->send == SEND_SCAN && rx->tx_hz_ovr != 0 ? rx->tx_hz_ovr
+			: !on ? rx->freq : rx->split ? rx->b_freq : (uint32_t) ((int64_t) rx->freq + dup_shift(rx));
 
 		snprintf(s, sizeof(s), "%u.%03u.%03u", f / 1000000, f / 1000 % 1000, f % 1000);
 	}
