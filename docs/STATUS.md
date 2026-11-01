@@ -1,6 +1,7 @@
 # libx6100 / x6100_trx — status
 
-Snapshot: 2026-11-01. Last tag: v0.17.0 (2026-11-01; memory mode Icom style, SCROLL-F
+Snapshot: 2026-11-01. Last tag: v0.17.1 (2026-11-01; a new README photo, the RADE mic
+requirement for a clean-room baseband in TODO), on v0.17.0 (memory mode Icom style, SCROLL-F
 pages, the fixed window painted with the LO near its centre, edges at most 75 kHz and an
 edge panel, SCOPE OUT OF RANGE, HOLD from CI-V, transceive of levels and switches, no
 freeze on a busy codec, the SWR scan readout, a more patient start). Before: v0.16.0
