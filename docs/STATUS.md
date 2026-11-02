@@ -91,6 +91,9 @@ Verified on the radio:
   - SWR scan: the frequency readout follows the scan step
   - lost I2C writes: taken care of (no false stuck-TX lines since 2026-10-27; the power
     cut on a TX stuck after a write error stays in the code, it cannot be provoked)
+  - long run (2026-11-02): about 24 h untouched with wfserver / wfview connected, no
+    crash or hang; five I2C NAKs in that day, each recovered by the resend (once after
+    a second round, 0.0 s), no dropped or stuck TX; a tune on 60 m in between
   - start: "calibration invalid" and no start until a reboot (seen once); now retried
     10 times over 5 s, and refused while another program drives the baseband (to see)
 
