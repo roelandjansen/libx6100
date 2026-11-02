@@ -68,6 +68,8 @@ BEGIN {
 	keyf["Spans"] = "-"		# replaced by ours
 	# Field changes: section SUBSEP name SUBSEP field
 	set["Commands", "CIV Transceive", "String"] = "\\\\x1a\\\\x05\\\\x01\\\\x31"
+	# The IC-705 file has \\x1a\\00 (the x missing): wfview sends 1A 5C 30 30, NG
+	set["Commands", "Memory Contents", "String"] = "\\\\x1a\\\\x00"
 	set["Commands", "Preamp Status", "Max"] = "1"
 	set["Commands", "Scope Span", "Max"] = "5"
 	set["Commands", "Tuning Step", "Max"] = "13"
