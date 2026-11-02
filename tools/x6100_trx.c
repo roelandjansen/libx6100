@@ -1935,38 +1935,41 @@ static void xpar_defaults(rx_t *rx)
 }
 
 //
-// Band keys: 160m .. 6m, then GEN (everything outside the ham bands, as Icom's GENE),
-// then 160m again. GEN keeps the last frequency used outside the bands and its mode.
-// From GEN the keys go to the nearest band in that direction (5450 kHz: up 40m, down
-// 60m); below 160m down and above 6m up wrap round as before (6m, 160m).
+// Band keys: 160m .. 6m with GEN (everything outside the ham bands, as Icom's GENE)
+// in between at its frequency, round and round. GEN keeps the last frequency used
+// outside the bands and its mode: at 5450 kHz the order is .. 60m, GEN, 40m ..; at
+// 500 kHz or 60 MHz GEN sits between 6m and 160m.
 //
 
 static void band_step(rx_t *rx, int dir)
 {
-	int band = rx->band < 0 ? BAND_COUNT : rx->band;	/* BAND_COUNT: GEN */
+	uint32_t gen = rx->band < 0 ? rx->freq : rx->gen_freq;
+	int gpos = 0;		/* GEN slot: after the bands below it */
+	int slot;
 
 	rx->mem_mode = false;	/* a band key leaves memory mode on that band, as an Icom */
 
-	if (rx->band < 0) {
-		rx->gen_mode = rx->mode;			/* leaving GEN: keep its mode */
-		band = dir > 0 ? 0 : BAND_COUNT - 1;		/* wrap: 160m up, 6m down */
-		for (int i = 0; i < BAND_COUNT; i++) {
-			if (dir > 0 && g_bands[i].low > rx->freq) {
-				band = i;
-				break;
-			}
-			if (dir < 0 && g_bands[i].high < rx->freq)
-				band = i;
-		}
-	} else {
-		band = (band + dir + BAND_COUNT + 1) % (BAND_COUNT + 1);
+	for (int i = 0; i < BAND_COUNT; i++) {
+		if (g_bands[i].high < gen)
+			gpos = i + 1;
 	}
 
-	if (band == BAND_COUNT) {
+	if (rx->band < 0) {
+		rx->gen_mode = rx->mode;			/* leaving GEN: keep its mode */
+		slot = gpos;
+	} else {
+		slot = rx->band < gpos ? rx->band : rx->band + 1;
+	}
+
+	slot = (slot + dir + BAND_COUNT + 1) % (BAND_COUNT + 1);
+
+	if (slot == gpos) {
 		set_freq(rx, rx->gen_freq);
 		rx->mode = rx->gen_mode;
 		return;
 	}
+
+	int band = slot < gpos ? slot : slot - 1;
 
 	set_freq(rx, rx->band_freq[band]);
 	rx->mode = rx->freq < 10000000 ? X6100_MODE_LSB : X6100_MODE_USB;
