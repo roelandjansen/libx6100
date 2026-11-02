@@ -461,6 +461,7 @@ enum { CAT_EP_DEV, CAT_EP_PTY, CAT_N };
 
 static bool g_i2c_down;		/* 2 s of failed I2C writes: TX dropped and refused, still trying */
 static int g_civ_addr = X6100_CIV_ADDR_IC705;	/* conf token civaddr: a4 (IC-705) or 61 (X6100 rig file) */
+static bool g_cat_mem_rw;	/* CAT may write / clear memories (09, 0B, 1A 00): conf token catmem rw; default ro */
 static int g_modin[2] = { 0, 1 };	/* TX audio input, DATA OFF MOD / DATA MOD (1A 05 0118 / 0119): 0 MIC, 1 USB (codec) */
 static char g_ntp_server[64];	/* conf token ntp <server> | off; empty = ntp.conf or pool.ntp.org */
 static int g_bright;		/* backlight level, % (10-100); 0 = leave as the OS set it */
@@ -526,7 +527,7 @@ static bool time_set(const char *v)
 	return true;
 }
 
-enum { GEN_BRIGHT, GEN_CAT, GEN_CIVADDR, GEN_MODOFF, GEN_MODDATA, GEN_WFS, GEN_NTP, GEN_WIFI, GEN_WNET, GEN_BT, GEN_BTPAIR,
+enum { GEN_BRIGHT, GEN_CAT, GEN_CIVADDR, GEN_CATMEM, GEN_MODOFF, GEN_MODDATA, GEN_WFS, GEN_NTP, GEN_WIFI, GEN_WNET, GEN_BT, GEN_BTPAIR,
 	GEN_BTDEV, GEN_BSCAN, GEN_BMARK, GEN_BNOTCH, GEN_ROWS };	/* GEN rows */
 
 static void gen_adjust(int row, int dir, bool def);
@@ -5114,8 +5115,8 @@ static void draw_filter_panel(x6100_lcd_t *lcd, const rx_t *rx)
 //
 
 static const char *g_gen_name[GEN_ROWS] = {
-	"BRIGHTNESS", "CAT CI-V", "CI-V ADDRESS", "DATA OFF MOD", "DATA MOD", "WFSERVER", "NTP SYNC", "WIFI", "WIFI NETWORK",
-	"BLUETOOTH", "BT PAIRING", "BT DEVICE", "BIRDIE SCAN", "BIRDIE MARKS", "BIRDIE NOTCH",
+	"BRIGHTNESS", "CAT CI-V", "CI-V ADDRESS", "CAT MEMORIES", "DATA OFF MOD", "DATA MOD", "WFSERVER", "NTP SYNC", "WIFI",
+	"WIFI NETWORK", "BLUETOOTH", "BT PAIRING", "BT DEVICE", "BIRDIE SCAN", "BIRDIE MARKS", "BIRDIE NOTCH",
 };
 static const int g_cat_rates[] = { 0, 4800, 9600, 19200 };	/* the DEV port carries no more than 19200 */
 
@@ -5496,6 +5497,9 @@ static void gen_value(int row, char *s, size_t n)
 	case GEN_CIVADDR:
 		snprintf(s, n, "%s %02XH", civ_ident(), g_civ_addr);
 		break;
+	case GEN_CATMEM:
+		snprintf(s, n, "%s", g_cat_mem_rw ? "READ / WRITE" : "READ ONLY");
+		break;
 	case GEN_MODOFF:
 	case GEN_MODDATA:
 		snprintf(s, n, "%s", g_modin[row == GEN_MODDATA] ? "USB" : "MIC");
@@ -5553,6 +5557,9 @@ static void gen_hint(int row, char *s, size_t n)
 		break;
 	case GEN_CIVADDR:
 		snprintf(s, n, "WFVIEW: %s RIG FILE", g_civ_addr == X6100_CIV_ADDR_X6100 ? "X6100" : "IC-705");
+		break;
+	case GEN_CATMEM:
+		snprintf(s, n, "%s", g_cat_mem_rw ? "CAT MAY WRITE AND CLEAR CHANNELS" : "CAT WRITE / CLEAR: NG");
 		break;
 	case GEN_MODOFF:	/* the TX audio a PTT key or CAT PTT uses; the hand mic PTT is always MIC */
 	case GEN_MODDATA:
@@ -5624,6 +5631,9 @@ static void gen_adjust(int row, int dir, bool def)
 	}
 	case GEN_CIVADDR:	/* IC-705 (A4) <-> X6100 (61); the main loop gives it to the engine at once */
 		g_civ_addr = def || g_civ_addr != X6100_CIV_ADDR_IC705 ? X6100_CIV_ADDR_IC705 : X6100_CIV_ADDR_X6100;
+		break;
+	case GEN_CATMEM:	/* read only <-> read / write; default read only */
+		g_cat_mem_rw = def ? false : !g_cat_mem_rw;
 		break;
 	case GEN_MODOFF:	/* MIC <-> USB; default as an Icom: MIC, data USB */
 	case GEN_MODDATA:
@@ -7772,6 +7782,22 @@ static bool console_line(rx_t *rx, char *line)
 			continue;
 		}
 
+		// catmem ro | rw: may CAT (wfview, rigctl, any client on the DEV port or the pty)
+		// write and clear memory channels (09, 0B, 1A 00 with content)? Default ro: reading
+		// and using them (08, 0A, 1A 00) only. GEN row CAT MEMORIES too; the conf fixes it.
+		if (strcasecmp(t, "catmem") == 0) {
+			const char *v = strtok(NULL, " \t\r\n");
+
+			if (v != NULL && (strcasecmp(v, "ro") == 0 || strcasecmp(v, "rw") == 0)) {
+				g_cat_mem_rw = strcasecmp(v, "rw") == 0;
+				g_conf_set |= g_conf_reading ? 1u << GEN_CATMEM : 0;	/* the conf fixes the GEN row */
+			} else {
+				fprintf(stderr, "\ncatmem: ro or rw\n");
+			}
+
+			continue;
+		}
+
 		// modin <mic|usb> <mic|usb>: TX audio input for DATA OFF MOD and DATA MOD (GEN rows
 		// too; in the conf it fixes them). usb: the codec, played by a Linux program (wfserver)
 		if (strcasecmp(t, "modin") == 0) {
@@ -8579,6 +8605,7 @@ static void state_write(const rx_t *rx)
 		fprintf(fp, "cat off ");
 
 	fprintf(fp, "civaddr %02x ", g_civ_addr);
+	fprintf(fp, "catmem %s ", g_cat_mem_rw ? "rw" : "ro");
 	fprintf(fp, "modin %s %s ", g_modin[0] ? "usb" : "mic", g_modin[1] ? "usb" : "mic");
 	fprintf(fp, "ntp %s", strcmp(g_ntp_server, "off") == 0 ? "off" : "on");
 
@@ -9089,6 +9116,9 @@ static bool cat_set(void *ctx, x6100_civ_item_t item, int vfo, int32_t v)
 		rx->medit_ch = v;
 		break;
 	case X6100_CIV_MEM_WRITE:	/* 09: the VFO (in memory mode the one kept), as the panel */
+		if (!g_cat_mem_rw)
+			return false;	/* catmem ro: NG */
+
 		mem_write_vfo(rx, v);
 		break;
 	case X6100_CIV_MEM_MODE:	/* 08: memory mode on channel v (empty: the next stored) */
@@ -9112,6 +9142,9 @@ static bool cat_set(void *ctx, x6100_civ_item_t item, int vfo, int32_t v)
 		rx->mem_mode = false;
 		break;
 	case X6100_CIV_MEM_CLEAR:	/* 0B */
+		if (!g_cat_mem_rw)
+			return false;	/* catmem ro: NG */
+
 		mem_clear(v);
 		break;
 	case X6100_CIV_TRANSCEIVE:	/* 1A 05 0131 */
@@ -9477,6 +9510,9 @@ static bool cat_mem_set(void *ctx, int ch, const x6100_civ_mem_t *m)
 	mem_t n = g_mem[ch];
 
 	(void) ctx;
+
+	if (!g_cat_mem_rw)
+		return false;	/* catmem ro: NG */
 
 	if (!m->used) {
 		mem_clear(ch);

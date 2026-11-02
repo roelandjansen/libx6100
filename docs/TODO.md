@@ -15,7 +15,9 @@ Status: 2026-11-01 (v0.17.1). Summary and next steps: `STATUS.md`.
   GEN, 40m; was after 6m); verified on the radio 2026-11-02.
 - wfview memory window (2026-11-02): 1A 00 now takes the group as two bytes (gg gg cc
   cc), as wfview sends it; with one byte every read answered NG, so the window stayed
-  empty and writes failed. To check on the radio: read all, write one, clear one.
+  empty and writes failed. Writes and clears from CAT only with catmem rw (GEN row CAT
+  MEMORIES; default read only: NG). To check on the radio: read all; with rw write one,
+  clear one; with ro both NG.
 - ATU key on (2026-11-02): a toast with the tuner memory in use (kHz, L, C, S) or
   ATU ON: NO MEMORY; to check on the radio.
 - TX ranges config file and transverter profile (frequency offset, TX enable).
