@@ -1,6 +1,6 @@
 # libx6100 / x6100_trx — to do
 
-Status: 2026-11-01 (v0.17.1). Summary and next steps: `STATUS.md`.
+Status: 2026-11-02 (v0.17.2). Summary and next steps: `STATUS.md`.
 
 ## Display
 
@@ -13,13 +13,13 @@ Status: 2026-11-01 (v0.17.1). Summary and next steps: `STATUS.md`.
 
 - Band keys (2026-11-02): GEN sits in the band order at its frequency (5450 kHz: 60m,
   GEN, 40m; was after 6m); verified on the radio 2026-11-02.
-- wfview memory window (2026-11-02): as IC-705 (A4) 1A 00 takes the group as two bytes (gg gg cc
-  cc), as wfview sends it; as X6100 (61) no group (X6100.rig MemFormat without it: wfview
-  sent no group and timed out; and the IC-705 file has Memory Contents as \\x1a\\00, so
-  wfview sent 1A 5C 30 30: fixed in X6100.rig, to report to wfview). Before, every read
-  answered NG, so the window stayed empty and writes failed. Writes and clears from CAT only with catmem rw (GEN row CAT
-  MEMORIES; default read only: NG). To check on the radio: read all; with rw write one,
-  clear one; with ro both NG.
+- wfview memory window (2026-11-02): as IC-705 (A4) 1A 00 takes the group as two bytes
+  (gg gg cc cc), as wfview sends it; as X6100 (61) no group (X6100.rig MemFormat without
+  it: wfview sent no group and timed out). The IC-705 file has Memory Contents as
+  \\x1a\\00, so wfview sent 1A 5C 30 30: fixed in X6100.rig; patch for wfview made (to
+  send upstream). Writes and clears from CAT only with catmem rw (GEN row CAT MEMORIES;
+  default read only: NG). Read all verified 2026-11-02 (X6100.rig). To check on the
+  radio: with rw write one, clear one; with ro both NG.
 - ATU key on (2026-11-02): a toast with the tuner memory in use (kHz, L, C, S) or
   ATU ON: NO MEMORY; to check on the radio.
 - TX ranges config file and transverter profile (frequency offset, TX enable).

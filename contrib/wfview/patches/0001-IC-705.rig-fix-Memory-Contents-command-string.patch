@@ -1,0 +1,29 @@
+From d7cafccd75123c89f5cb198207fbda0e5f422158 Mon Sep 17 00:00:00 2001
+From: Roeland Jansen <roeland.jansen69@gmail.com>
+Date: Mon, 2 Nov 2026 21:53:11 +0000
+Subject: [PATCH] IC-705.rig: fix Memory Contents command string
+
+The Memory Contents command was \\x1a\\00 (the x missing), so wfview sent
+1A 5C 30 30 (the text "\00") instead of 1A 00 and the radio answered FA:
+the memory window timed out ("Timeout receiving memory") and could not
+read or write memories. Now \\x1a\\x00, as the other command strings.
+---
+ rigs/IC-705.rig | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/rigs/IC-705.rig b/rigs/IC-705.rig
+index 378d330..e3eb804 100644
+--- a/rigs/IC-705.rig
++++ b/rigs/IC-705.rig
+@@ -691,7 +691,7 @@ Commands\74\GetCommand=true
+ Commands\74\SetCommand=true
+ Commands\74\Admin=false
+ Commands\75\Type=Memory Contents
+-Commands\75\String=\\x1a\\00
++Commands\75\String=\\x1a\\x00
+ Commands\75\Min=0
+ Commands\75\Max=101
+ Commands\75\Bytes=0
+-- 
+2.43.0
+

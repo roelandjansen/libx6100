@@ -46,7 +46,7 @@ data are the IC-705's. Only the identity and what the radio can do differ:
 | Preamp | off, 1, 2 | off, on (Preamp Status max 1) |
 | Inputs | MIC, USB, M/U, WLAN | MIC, USB |
 | Memories | 100 groups, 1A 00 gg gg cc cc | one bank, channels 1-99, 1A 00 cc cc (MemGroups=0, MemFormat without the group: wfview then sends no group, as for an IC-7300; with the group field it timed out, 2026-11-02) |
-| Memory Contents string | `\\x1a\\00` (the x missing: wfview sends 1A 5C 30 30, answered FA; an upstream bug, 2026-11-02) | `\\x1a\\x00` |
+| Memory Contents string | `\\x1a\\00` (the x missing: wfview sends 1A 5C 30 30, answered FA; an upstream bug, 2026-11-02; fix for wfview: `patches/0001-IC-705.rig-fix-Memory-Contents-command-string.patch`, `git am` in a wfview checkout) | `\\x1a\\x00` |
 
 Fixed edges (27 16 / 27 1E) are kept: wfview counts the band `Range` thresholds to get
 the IC-705 range code, which gives the same 12 HF ranges as x6100_trx.

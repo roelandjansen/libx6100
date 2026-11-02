@@ -1,10 +1,15 @@
 # libx6100 / x6100_trx — status
 
-Snapshot: 2026-11-01. Last tag: v0.17.1 (2026-11-01; a new README photo, the RADE mic
-requirement for a clean-room baseband in TODO), on v0.17.0 (memory mode Icom style, SCROLL-F
-pages, the fixed window painted with the LO near its centre, edges at most 75 kHz and an
-edge panel, SCOPE OUT OF RANGE, HOLD from CI-V, transceive of levels and switches, no
-freeze on a busy codec, the SWR scan readout, a more patient start). Before: v0.16.0
+Snapshot: 2026-11-02. Last tag: v0.17.2 (2026-11-02; band keys with GEN in the band order
+at its frequency, ATU on shows the tuner memory in use, the wfview memory window works:
+1A 00 group as wfview sends it, X6100.rig without the group and with the Memory Contents
+string fixed (the IC-705 file has it wrong: patch for wfview made), CAT memories read only
+by default (`catmem`), 60 m channels in the memories example), on v0.17.1 (2026-11-01; a
+new README photo, the RADE mic requirement for a clean-room baseband in TODO), on v0.17.0
+(memory mode Icom style, SCROLL-F pages, the fixed window painted with the LO near its
+centre, edges at most 75 kHz and an edge panel, SCOPE OUT OF RANGE, HOLD from CI-V,
+transceive of levels and switches, no freeze on a busy codec, the SWR scan readout, a
+more patient start). Before: v0.16.0
 (2026-10-31; CI-V on the DEV port and the pty at once, GEN row WFSERVER, clock, Bluetooth
 headset autoconnect, no headset mic), v0.15.0 (2026-10-30; baseband IF shift, AM tone
 gone, AM raster, VOX N/A), v0.14.0 (2026-10-29, on 030ff5f; wfserver, twin PBT, scope
@@ -46,6 +51,10 @@ Verified on the radio:
 - TX readings folded into the console status line
 - WiFi: connecting to a saved network from the GEN panel
 - 60 m channel mode on the MFK (FST: CH)
+- band keys with GEN in the band order at its frequency (GEN 5450 kHz: 60m, GEN, 40m;
+  2026-11-02)
+- wfview memory window with X6100.rig: all channels read, with names and the split TX
+  side (2026-11-02, after the 1A 00 group and Memory Contents string fixes)
 - TX frequency on the display while keyed with a duplex shift (AUTO, DUP- / DUP+; PTT
   key, mic PTT, tune), with split (TX VFO), without XIT (as Icom; console shows the
   real TX frequency), DUPLEX OFF stays on RX; the scope stays on RX
@@ -166,7 +175,9 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
 8. AM offset: MW station tuned exactly, sound as with RIT +500; AGC long row AM OFFSET
    (20 / 200 / 500 Hz, hold = 500, panel scrolls to row 6); signals on the RF scope
    at the right place in AM and with RIT on; wfview SCROLL-C waterfall runs.
-9. wfview with CI-V memories (its memory window: read, write, recall, clear) and with
+9. wfview with CI-V memories: read works (X6100.rig, 2026-11-02); still write, recall,
+   clear with `catmem rw`, NG for both with `catmem ro` (the default), and the IC-705
+   file on A4 once the Memory Contents string is fixed there (patch made); and with
    transceive off (mouse-wheel tuning without jumps?).
 10. Fixed edges: F2 / F2 long in FIX and SCROLL-F, the label, a new band moves the window,
     the band edge markers on 40 / 20 m, edges after a restart; wfview fixed edge window
@@ -253,6 +264,9 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     runs on the PC (wfview / wfserver + FreeDV, TX audio via DATA MOD USB, item 17).
     x6100_tx micrec: its power / ALC columns read 0.0 W / 100 while transmitting (wrong:
     the flow telemetry is not read in time while the loop waits for audio); see TODO.
+
+19. ATU key on: the toast with the tuner memory in use (kHz, L, C, S), or ATU ON: NO
+    MEMORY away from any memory (2026-11-02).
 
 ## Next steps (suggested order)
 
