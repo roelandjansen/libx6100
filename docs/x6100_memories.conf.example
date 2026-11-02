@@ -9,7 +9,8 @@
 # x6100_trx rewrites this file on every write / clear from the memory panel
 # (V/M) or the console (memw, memc), without these comments. memr lists the channels.
 #
-# Example set: FT8 dial frequencies (USB), a 60 m spot, 10 m FM repeaters (one as a
+# Example set: FT8 dial frequencies (USB), 60 m channels (WRC-15 band 5351.5-5366.5
+# kHz: check your national rules and licence class), 10 m FM repeaters (one as a
 # split channel, one on AUTO duplex) and FM simplex. Check repeater frequencies
 # against your national list; repeaters that need CTCSS cannot be opened yet.
 
@@ -24,6 +25,11 @@ mem 8 21074000 usb fil1 name FT8 15m
 mem 9 24915000 usb fil1 name FT8 12m
 mem 10 28074000 usb fil1 name FT8 10m
 mem 11 50313000 usb fil1 name FT8 6m
+
+mem 12 5352000 cw fil1 name 60m CW 5352
+mem 13 5354000 usb fil1 name 60m SSB 5354
+mem 14 5360000 usb fil1 name 60m SSB 5360
+mem 15 5363000 usb fil1 name 60m SSB 5363
 
 mem 20 29620000 nfm fil1 tx 29520000 nfm name 10m RPT 29.62
 mem 21 29500000 nfm fil1 name 10m FM simplex
