@@ -55,6 +55,7 @@ Verified on the radio:
   2026-11-02)
 - wfview memory window with X6100.rig: all channels read, with names and the split TX
   side (2026-11-02, after the 1A 00 group and Memory Contents string fixes)
+- ATU key on: the toast with the tuner memory in use (2026-11-02)
 - TX frequency on the display while keyed with a duplex shift (AUTO, DUP- / DUP+; PTT
   key, mic PTT, tune), with split (TX VFO), without XIT (as Icom; console shows the
   real TX frequency), DUPLEX OFF stays on RX; the scope stays on RX
@@ -265,8 +266,8 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     x6100_tx micrec: its power / ALC columns read 0.0 W / 100 while transmitting (wrong:
     the flow telemetry is not read in time while the loop waits for audio); see TODO.
 
-19. ATU key on: the toast with the tuner memory in use (kHz, L, C, S), or ATU ON: NO
-    MEMORY away from any memory (2026-11-02).
+19. (done) ATU key on: the toast with the tuner memory in use (kHz, L, C, S), or ATU ON: NO
+    MEMORY away from any memory: verified 2026-11-02.
 
 ## Next steps (suggested order)
 

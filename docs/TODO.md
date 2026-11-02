@@ -21,7 +21,7 @@ Status: 2026-11-02 (v0.17.2). Summary and next steps: `STATUS.md`.
   default read only: NG). Read all verified 2026-11-02 (X6100.rig). To check on the
   radio: with rw write one, clear one; with ro both NG.
 - ATU key on (2026-11-02): a toast with the tuner memory in use (kHz, L, C, S) or
-  ATU ON: NO MEMORY; to check on the radio.
+  ATU ON: NO MEMORY; verified on the radio 2026-11-02.
 - TX ranges config file and transverter profile (frequency offset, TX enable).
 - Repeater duplex (AUTO / OFF / DUP- / DUP+, AGC long): test on the radio (TX on
   29.520 from 29.620 verified with the PTT key and the hand mic; still: CAT, memories,
