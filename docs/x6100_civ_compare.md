@@ -16,6 +16,18 @@ Columns:
 - **x6100_trx**: **y** implemented, **v** implemented and verified with wfview / rigctl
   on the radio, **NG** answered NG (no such function on the X6100).
 
+## Known gaps in the Xiegu reference
+
+Checked so far (section 1): these IC-705 commands are not in the Xiegu reference, while
+x6100_trx has them and wfview uses them:
+
+- `07 A0`: VFO A = VFO B (wfview A=B button)
+- `0F 10 / 11 / 12`: simplex / DUP- / DUP+ (repeater duplex)
+- `1C 03`: read TX frequency (split and duplex)
+
+Sections 2-8 are not yet checked against the Xiegu reference (Xiegu column **?**):
+every row there with **?** may be another gap.
+
 ## 1. Frequency, mode, VFO, split
 
 | Cmd | Function | IC-705 | Xiegu | x6100_trx | Notes |
