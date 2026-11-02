@@ -436,6 +436,16 @@ int main(void)
 		check(&civ, "1A 00 00 00 00 08", req);
 		check(&civ, "1A 00 00 00 00 08 FF", "FB");
 
+		// As the X6100 (61, X6100.rig): no group bytes, as wfview sends them then
+		civ.addr = X6100_CIV_ADDR_X6100;
+		snprintf(req, sizeof(req), "1A 00 00 09 00%s%s%s%s%s", ch5, calls, ch5, calls, name_blank);
+		check(&civ, req, "FB");
+		check(&civ, "1A 00 00 09", req);
+		check(&civ, "1A 00 00 00", "1A 00 00 00 FF");	/* channel 00: empty */
+		check(&civ, "1A 00 00 09 FF", "FB");
+		check(&civ, "1A 00 00 09", "1A 00 00 09 FF");
+		civ.addr = X6100_CIV_ADDR_IC705;
+
 		m.v[X6100_CIV_TRANSCEIVE][0] = 1;
 		check(&civ, "1A 05 01 31", "1A 05 01 31 01");
 		check(&civ, "1A 05 01 31 00", "FB");

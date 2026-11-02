@@ -786,11 +786,12 @@ static size_t cmd_mem_action(req_t *r, x6100_civ_item_t item)
 }
 
 // 1A 00: memory contents, IC-705 layout. After 1A 00 gg gg cc cc (group 0000, channel
-// 0001-0099): split / select, then the A side: frequency (5), mode, filter, data, duplex /
-// tone, digital squelch, repeater tone (3), TSQL tone (3), DTCS (3), DV CSQL, duplex offset
-// (3, 100 Hz units), UR / R1 / R2 (24); the B side in the same 47 bytes (the TX side of a
-// split channel, else as A); name (16). 111 bytes. An empty channel reads FF (so do other
-// groups and channel 00, which the IC-705 rig asks for); writing FF clears it.
+// 0001-0099; as the X6100, 61: cc cc, no group): split / select, then the A side:
+// frequency (5), mode, filter, data, duplex / tone, digital squelch, repeater tone (3),
+// TSQL tone (3), DTCS (3), DV CSQL, duplex offset (3, 100 Hz units), UR / R1 / R2 (24);
+// the B side in the same 47 bytes (the TX side of a split channel, else as A); name (16).
+// 111 bytes. An empty channel reads FF (so do other groups and channel 00, which the
+// IC-705 rig asks for); writing FF clears it.
 #define MEM_SIDE	47
 #define MEM_B		(1 + MEM_SIDE)
 #define MEM_NAME	(1 + 2 * MEM_SIDE)
@@ -827,20 +828,25 @@ static size_t cmd_mem_content(req_t *r)
 	uint8_t civ_mode, tx_civ;
 	bool data, tx_data;
 
-	if (r->n < 5 || r->d[0] != 0x00 || !ops->mem_get || !ops->mem_set)
+	// As the IC-705 (A4): 00 gg gg cc cc, group 0000 only (the X6100 has one bank); the
+	// IC-705 rig asks groups 00-99 and channel 00 too: those read as empty, so a scan goes
+	// on. As the X6100 (61, X6100.rig, no groups): 00 cc cc, as wfview sends it for a
+	// radio without groups (IC-7300 style)
+	size_t g = r->civ->addr == X6100_CIV_ADDR_X6100 ? 0 : 2;
+	size_t hd = 3 + g;	/* 00, group, channel */
+
+	if (r->n < hd || r->d[0] != 0x00 || !ops->mem_get || !ops->mem_set)
 		return reply_ng(r);
 
-	// Group 0000 only (the X6100 has one bank, MemGroups=0 in X6100.rig); the IC-705 rig
-	// asks groups 00-99 and channel 00 too: those read as empty, so a scan goes on
-	int ch = r->d[1] == 0x00 && r->d[2] == 0x00 ? mem_ch_bcd(r->d + 3) : -1;
+	int ch = g == 0 || (r->d[1] == 0x00 && r->d[2] == 0x00) ? mem_ch_bcd(r->d + 1 + g) : -1;
 
-	if (ch < 0 && r->n > 5)
+	if (ch < 0 && r->n > hd)
 		return reply_ng(r);
 
 	// Write: clear, or the content as far as it goes (offset, B side and name optional)
-	if (r->n > 5) {
-		const uint8_t *c = r->d + 5;
-		size_t cn = r->n - 5;
+	if (r->n > hd) {
+		const uint8_t *c = r->d + hd;
+		size_t cn = r->n - hd;
 
 		memset(&m, 0, sizeof(m));
 
@@ -894,7 +900,7 @@ static size_t cmd_mem_content(req_t *r)
 	reply_head(r);
 	out_byte(r->o, 0x1A);
 
-	for (size_t i = 0; i < 5; i++)
+	for (size_t i = 0; i < hd; i++)
 		out_byte(r->o, r->d[i]);
 
 	if (!m.used || !mode_to_civ(m.mode, &civ_mode, &data)) {

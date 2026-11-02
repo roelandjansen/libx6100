@@ -29,7 +29,7 @@ CI-V Output, scope RBW, voice TX (28), scan (0E), date / time / UTC offset. wfvi
 polled some of them every few seconds for an FA (16 5D, the FM tones) and showed the
 others as controls that did nothing. Every command left is answered by x6100_trx (a
 read without its parameter, as 1A 00, answers NG).
-The commands, the 1A 00 memory layout (A and B side, name at byte 100) and the scope
+The commands, the 1A 00 memory layout (A and B side and name, but no group bytes) and the scope
 data are the IC-705's. Only the identity and what the radio can do differ:
 
 | Item | IC-705 file | X6100.rig |
@@ -45,7 +45,7 @@ data are the IC-705's. Only the identity and what the radio can do differ:
 | Modes | 10 | LSB, USB, AM, CW, FM, CW-R; AM filter up to 6 kHz |
 | Preamp | off, 1, 2 | off, on (Preamp Status max 1) |
 | Inputs | MIC, USB, M/U, WLAN | MIC, USB |
-| Memories | 100 groups | group 00 only, channels 1-99 |
+| Memories | 100 groups, 1A 00 gg gg cc cc | one bank, channels 1-99, 1A 00 cc cc (MemGroups=0, MemFormat without the group: wfview then sends no group, as for an IC-7300; with the group field it timed out, 2026-11-02) |
 
 Fixed edges (27 16 / 27 1E) are kept: wfview counts the band `Range` thresholds to get
 the IC-705 range code, which gives the same 12 HF ranges as x6100_trx.

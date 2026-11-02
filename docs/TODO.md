@@ -13,8 +13,9 @@ Status: 2026-11-01 (v0.17.1). Summary and next steps: `STATUS.md`.
 
 - Band keys (2026-11-02): GEN sits in the band order at its frequency (5450 kHz: 60m,
   GEN, 40m; was after 6m); verified on the radio 2026-11-02.
-- wfview memory window (2026-11-02): 1A 00 now takes the group as two bytes (gg gg cc
-  cc), as wfview sends it; with one byte every read answered NG, so the window stayed
+- wfview memory window (2026-11-02): as IC-705 (A4) 1A 00 takes the group as two bytes (gg gg cc
+  cc), as wfview sends it; as X6100 (61) no group (X6100.rig MemFormat without it: wfview
+  sent no group and timed out). Before, every read answered NG, so the window stayed
   empty and writes failed. Writes and clears from CAT only with catmem rw (GEN row CAT
   MEMORIES; default read only: NG). To check on the radio: read all; with rw write one,
   clear one; with ro both NG.

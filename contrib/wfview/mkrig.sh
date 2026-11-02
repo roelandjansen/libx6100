@@ -86,6 +86,22 @@ BEGIN {
 	hdr["MemStart"] = "1"
 }
 
+# MemFormat without the group (%1.2a): one bank, so wfview sends 1A 00 cc cc (IC-7300
+# style; with MemGroups=0 and the group field it sent no group and timed out). The other
+# fields move up two bytes.
+function memfmt(v,   n, f, i, out, pos, rest) {
+	n = split(v, f, " ")
+	out = ""
+	for (i = 1; i <= n; i++) {
+		if (f[i] ~ /a$/)
+			continue
+		pos = substr(f[i], 2, index(f[i], ".") - 2) - 2
+		rest = substr(f[i], index(f[i], "."))
+		out = out (out == "" ? "" : " ") "%" pos rest
+	}
+	return out
+}
+
 # Record line: Section\N\Field=value
 function rec(line, r,   p, q) {
 	if (!match(line, /^[A-Za-z%0-9]+\\[0-9]+\\[A-Za-z0-9]+=/))
@@ -164,6 +180,10 @@ FNR == 1 {
 		next
 	}
 	p = index($0, "=")
+	if (p > 1 && substr($0, 1, p - 1) == "MemFormat") {
+		printf "MemFormat=%s\n", memfmt(substr($0, p + 1))
+		next
+	}
 	if (p > 1 && substr($0, 1, p - 1) in hdr) {
 		printf "%s=%s\n", substr($0, 1, p - 1), hdr[substr($0, 1, p - 1)]
 		next
