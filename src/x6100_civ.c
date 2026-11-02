@@ -254,6 +254,7 @@ static const sub_map_t g_switches[] = {
 	{ 0x44, X6100_CIV_COMP },
 	{ 0x45, X6100_CIV_MONI },
 	{ 0x46, X6100_CIV_VOX },
+	{ 0x47, X6100_CIV_BKIN },	/* break-in: 00 off, 01 semi, 02 full */
 	{ 0x50, X6100_CIV_LOCK },
 };
 
@@ -595,7 +596,7 @@ static size_t cmd_switch(req_t *r)
 
 		if (item == X6100_CIV_PRE)
 			val = val != 0;		/* 01 or 02 = on */
-		else if (item == X6100_CIV_AGC ? val < 1 || val > 3 : val > 1)	/* AGC 01-03 */
+		else if (item == X6100_CIV_AGC ? val < 1 || val > 3 : val > (item == X6100_CIV_BKIN ? 2 : 1))	/* AGC 01-03, break-in 00-02 */
 			return reply_ng(r);
 
 		return reply_ok(r, set(r, item, 0, val));
@@ -684,6 +685,27 @@ static size_t cmd_menu(req_t *r)
 		out_byte(r->o, 0x01);
 		out_byte(r->o, 0x31);
 		out_byte(r->o, v ? 0x01 : 0x00);
+
+		return out_end(r->o);
+	}
+
+	// 0252 dash ratio: one BCD byte, 28-45 = 1:1:2.8-4.5 (wfview polls it in CW)
+	if (item == 0x0252) {
+		if (r->n >= 4) {
+			int x = bcd_val(r->d[3]);
+
+			return reply_ok(r, x >= 28 && x <= 45 && set(r, X6100_CIV_DASH_RATIO, 0, x));
+		}
+
+		if (!get(r, X6100_CIV_DASH_RATIO, 0, &v))
+			return reply_ng(r);
+
+		reply_head(r);
+		out_byte(r->o, 0x1A);
+		out_byte(r->o, 0x05);
+		out_byte(r->o, 0x02);
+		out_byte(r->o, 0x52);
+		out_byte(r->o, bcd_byte((unsigned) v));
 
 		return out_end(r->o);
 	}

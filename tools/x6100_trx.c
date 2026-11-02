@@ -9033,6 +9033,12 @@ static bool cat_get(void *ctx, x6100_civ_item_t item, int vfo, int32_t *v)
 		*v = lv < 0 ? 0 : lv > 255 ? 255 : lv;
 		return true;
 	}
+	case X6100_CIV_BKIN:		/* 16 47: the X6100 keys CW with semi break-in (QSK delay in the keyer) */
+		*v = 1;
+		return true;
+	case X6100_CIV_DASH_RATIO:	/* 1A 05 0252: the keyer RATIO, x10 */
+		*v = rx->ratio;
+		return true;
 	case X6100_CIV_MOD_IN:		/* vfo 0 DATA OFF MOD, 1 DATA MOD */
 		*v = g_modin[vfo != 0];
 		return true;
@@ -9059,6 +9065,13 @@ static bool cat_set(void *ctx, x6100_civ_item_t item, int vfo, int32_t v)
 	case X6100_CIV_MEM_MODE:	/* 08: memory mode on channel v (empty: the next stored) */
 		if (!mem_mode_on(rx, v))
 			return false;
+		break;
+	case X6100_CIV_BKIN:		/* semi only: off and full break-in are not on the X6100 */
+		if (v != 1)
+			return false;
+		break;
+	case X6100_CIV_DASH_RATIO:	/* 28-45, the keyer panel takes 25-45 */
+		rx->ratio = clampi(v, 25, 45);
 		break;
 	case X6100_CIV_VFO_MODE:	/* 07: back to the VFO as it was */
 		mem_mode_off(rx);

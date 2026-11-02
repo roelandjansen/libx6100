@@ -192,8 +192,9 @@ under GEN until a better key turns up.
 - wfview rig file for the X6100: built 2026-10-27, `contrib/wfview/X6100.rig` (made by
   `mkrig.sh` from the IC-705 file; README there). Address 61 (odd: never a real Icom;
   Icom addresses are all even), `civaddr 61` in x6100_trx.conf, 19 00 also answered to
-  a broadcast (wfview auto detect). The Icom way (wfview is Icom centred): all IC-705
-  commands and polls kept, NG where we have no function; transceive 0131; our spans,
+  a broadcast (wfview auto detect). The Icom way (wfview is Icom centred): the IC-705
+  commands and polls kept but the 29 functions the X6100 lacks (2026-11-02, no FA polls
+  any more); transceive 0131; our spans,
   bands, modes. 1A 00 now the full IC-705 layout (A + B side, name at 100; B = split
   TX side), so the IC-705 file reads names too. Tested in wfview (2026-10-29). To do:
   - the same memory window with the IC-705 file (A4)

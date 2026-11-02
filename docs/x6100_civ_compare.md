@@ -104,6 +104,7 @@ every row there with **?** may be another gap.
 | 16 40 | NR on / off | y | ? | v | |
 | 16 41 | notch (Xiegu: DNF) | y | y | y | |
 | 16 44 / 45 / 46 | compressor / monitor / VOX | y | ? | y | |
+| 16 47 | break-in (00 off, 01 semi, 02 full) | y | ? | y | semi only on the X6100; wfview polls it in CW |
 | 16 50 | dial lock | y | ? | y | |
 
 ## 6. Attenuator, ID, CW, misc (11, 17, 19, 1A, 1D)
@@ -117,6 +118,7 @@ every row there with **?** may be another gap.
 | 1A 03 | IF filter width | y | ? | y | |
 | 1A 05 0131 | CI-V transceive on / off | y | ? | y | |
 | 1A 05 0118 / 0119 | DATA OFF MOD / DATA MOD (MIC / USB) | y | ? | v | TX audio from the network for wfview |
+| 1A 05 0252 | dash ratio | y | ? | y | wfview polls it in CW |
 | 1A 06 | data mode and filter | y | ? | y | |
 | 1D 19 | Xiegu radio ID | n | y | y | |
 
@@ -166,4 +168,6 @@ These are not single commands but matter as much:
 ## 10. Not on the X6100 (answered NG)
 
 0E scan; 0C / 0D, 1B, 1F-24, 28 (duplex offset, tones, D-STAR, GPS, voice); 13 speech;
+(these are also left out of the wfview rig file X6100.rig, with the other IC-705
+functions the X6100 lacks, so wfview neither polls them nor shows their controls);
 18 power on / off; 04 RTTY, 06 WFM, 08 RTTY-R, 17 DV modes; 15 14 / 16 meters.

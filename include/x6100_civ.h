@@ -145,6 +145,8 @@ typedef enum
 	X6100_CIV_MOD_IN,
 	X6100_CIV_MEM_MODE,		/* 08: memory mode on the channel given */
 	X6100_CIV_VFO_MODE,		/* 07: back to VFO mode */
+	X6100_CIV_BKIN,			/* 16 47: break-in 00 off, 01 semi, 02 full */
+	X6100_CIV_DASH_RATIO,		/* 1A 05 0252: dash ratio x10, 28-45 */
 	X6100_CIV_ITEM_COUNT
 } x6100_civ_item_t;
 

@@ -4,9 +4,10 @@
 #
 # Usage: mkrig.sh <wfview>/rigs/IC-705.rig > X6100.rig
 #
-# Keeps every IC-705 command and poll (x6100_trx answers NG where it has no function,
-# as an Icom does), sets the X6100 identity (CI-V address 0x61, hamlib model 3087) and
-# its capabilities: spans, bands, modes, memories. See README.md next to this script.
+# Keeps the IC-705 commands and polls but those for functions the X6100 does not have
+# (they gave FA polls and dead controls), sets the X6100 identity (CI-V address 0x61,
+# hamlib model 3087) and its capabilities: spans, bands, modes, memories. See README.md
+# next to this script.
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
@@ -33,11 +34,20 @@ G_SRC="${1}"
 
 awk -v CIV="${C_CIV_ADDR}" -v HAMLIB="${C_HAMLIB}" -f <(cat <<'EOF'
 BEGIN {
-	# All IC-705 commands and polls are kept: x6100_trx answers NG where it has no
-	# function, as an Icom does (wfview is Icom centred). Bands, modes and the other
-	# capabilities are the X6100's.
+	# The IC-705 commands and polls are kept, except for functions the X6100 does not
+	# have: those wfview would poll for an FA (16 5D, 1B 00 .. every few seconds) or show
+	# as a control that does nothing (2026-11-02). Their polls go with them. Bands, modes
+	# and the other capabilities are the X6100's.
 	all["Commands"] = 1
 	all["Periodic"] = 1
+	n = split("Scanning|APF Type Level|DIGI-SEL Shift|Drive Gain|Comp Meter|Id Meter|" \
+		"Audio Peak Filter|Repeater Tone|Repeater TSQL|Twin Peak Filter|RX Antenna|" \
+		"Filter Shape|SSB TX Bandwidth|Tone Squelch Type|Power Control|REF Adjust|" \
+		"USB Mod Level|LAN Mod Level|Tone Frequency|TSQL Frequency|DTCS Code/Polarity|" \
+		"CSQL Code|XFC Status|CI-V Output|Scope RBW|Voice TX|System Date|System Time|" \
+		"UTC Offset", a, "|")
+	for (i = 1; i <= n; i++)
+		drop[a[i]] = 1
 	n = split("6m|10m|12m|15m|17m|20m|30m|40m|60m|80m|160m|Gen", a, "|")
 	for (i = 1; i <= n; i++)
 		want["Bands", a[i]] = 1
@@ -108,7 +118,7 @@ FNR == 1 {
 		for (i = 1; i <= last[s]; i++) {
 			k = (s, i) in name ? name[s, i] : ""
 			if (!(s in keyf) || (s in all))
-				ok = 1
+				ok = !((s == "Commands" || s == "Periodic") && (k in drop))
 			else
 				ok = (s, k) in want
 			if (ok)
