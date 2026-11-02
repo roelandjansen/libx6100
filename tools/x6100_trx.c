@@ -3369,6 +3369,20 @@ static bool on_key(rx_t *rx, int key)
 		break;
 	case X6100_KEY_ATU:
 		rx->atu_on = !rx->atu_on;
+
+		// Which tuner memory goes in (apply: the one nearest the TX frequency)
+		if (rx->atu_on) {
+			const atum_t *am = atu_find(tx_hz(rx));
+			char s[40];
+
+			if (am != NULL) {
+				snprintf(s, sizeof(s), "ATU %u L %u C %u S %u", (unsigned) (am->hz / 1000),
+					am->net.l, am->net.c, am->net.s);
+				toast(s);
+			} else {
+				toast("ATU ON: NO MEMORY");
+			}
+		}
 		break;
 	case X6100_KEY_F1:
 		// Short: the next scope mode, CENTER -> SCROLL-C -> FIX -> SCROLL-F -> CENTER (long:

@@ -52,7 +52,7 @@ Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
 | F4 | TX meter: PO / SWR / ALC | TX panel: mic, compressor, VOX, monitor, squelch, TX timeout |
 | F5 | filter FIL1 / FIL2 / FIL3 | filter panel |
 | PTT | hold = TX; tap (< 400 ms) = latch, next press drops | |
-| ATU | tuner in / out | tune (keys TX at tune power); the result becomes a tuner memory |
+| ATU | tuner in / out; on shows the tuner memory it uses, nearest the TX frequency within 0.5 % (`ATU 14074 L 23 C 112 S 1`), or `ATU ON: NO MEMORY` (straight through until a tune) | tune (keys TX at tune power); the result becomes a tuner memory |
 | LOCK | lock knobs and keys (PTT still works) | |
 | PWR | display on / off | release after 1.5-4 s: quit; hold 4 s: power off (as the stock UI). TX is dropped and filters saved first |
 | GEN | settings panel: brightness, CAT, wfserver, NTP (MFK turn = change, push = next row, long = default; GEN, other key or 10 s idle closes) | status page: IP, uptime, battery, CAT, NTP result, build (any key or 30 s closes) |

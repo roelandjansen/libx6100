@@ -13,6 +13,8 @@ Status: 2026-11-01 (v0.17.1). Summary and next steps: `STATUS.md`.
 
 - Band keys (2026-11-02): GEN sits in the band order at its frequency (5450 kHz: 60m,
   GEN, 40m; was after 6m); verified on the radio 2026-11-02.
+- ATU key on (2026-11-02): a toast with the tuner memory in use (kHz, L, C, S) or
+  ATU ON: NO MEMORY; to check on the radio.
 - TX ranges config file and transverter profile (frequency offset, TX enable).
 - Repeater duplex (AUTO / OFF / DUP- / DUP+, AGC long): test on the radio (TX on
   29.520 from 29.620 verified with the PTT key and the hand mic; still: CAT, memories,
