@@ -1937,6 +1937,8 @@ static void xpar_defaults(rx_t *rx)
 //
 // Band keys: 160m .. 6m, then GEN (everything outside the ham bands, as Icom's GENE),
 // then 160m again. GEN keeps the last frequency used outside the bands and its mode.
+// From GEN the keys go to the nearest band in that direction (5450 kHz: up 40m, down
+// 60m); below 160m down and above 6m up wrap round as before (6m, 160m).
 //
 
 static void band_step(rx_t *rx, int dir)
@@ -1945,10 +1947,20 @@ static void band_step(rx_t *rx, int dir)
 
 	rx->mem_mode = false;	/* a band key leaves memory mode on that band, as an Icom */
 
-	if (rx->band < 0)
+	if (rx->band < 0) {
 		rx->gen_mode = rx->mode;			/* leaving GEN: keep its mode */
-
-	band = (band + dir + BAND_COUNT + 1) % (BAND_COUNT + 1);
+		band = dir > 0 ? 0 : BAND_COUNT - 1;		/* wrap: 160m up, 6m down */
+		for (int i = 0; i < BAND_COUNT; i++) {
+			if (dir > 0 && g_bands[i].low > rx->freq) {
+				band = i;
+				break;
+			}
+			if (dir < 0 && g_bands[i].high < rx->freq)
+				band = i;
+		}
+	} else {
+		band = (band + dir + BAND_COUNT + 1) % (BAND_COUNT + 1);
+	}
 
 	if (band == BAND_COUNT) {
 		set_freq(rx, rx->gen_freq);

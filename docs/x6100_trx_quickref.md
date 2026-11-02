@@ -38,7 +38,7 @@ Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
 | VOL knob | volume; push = mute | |
 | MFK knob | RF gain or TX power | |
 | MFK push | RF gain 100 / TX power 5.0 W | switch RF gain <-> TX power |
-| BAND- / BAND+ | previous / next band (last frequency per band kept): 160m .. 6m, GEN, 160m; GEN is everything outside the ham bands (last frequency and mode there; 10.000 MHz AM out of the box; state `gen <Hz> <mode>`) | |
+| BAND- / BAND+ | previous / next band (last frequency per band kept): 160m .. 6m, GEN, 160m; GEN is everything outside the ham bands (last frequency and mode there; 10.000 MHz AM out of the box; state `gen <Hz> <mode>`); from GEN the keys go to the nearest band in that direction (5450 kHz: BAND- 60m, BAND+ 40m) | |
 | SSB / CW / AM-FM | USB <-> LSB / CW <-> CWR / AM <-> NFM | |
 | A/B | VFO A <-> B (frequency, mode, filter) | A=B: the other VFO takes the one in use |
 | PRE | preamp on / off | attenuator on / off (~12 dB) |
