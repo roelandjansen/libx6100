@@ -49,11 +49,12 @@ static bool mock_set(void *ctx, x6100_civ_item_t item, int vfo, int32_t value)
 	if (!m->supported[item])
 		return false;
 
-	// Memories: write the VFO, recall into it, clear
-	if (item == X6100_CIV_MEM_WRITE || item == X6100_CIV_MEM_TO_VFO || item == X6100_CIV_MEM_CLEAR) {
+	// Memories: write the VFO, recall into it (0A, or memory mode on it, 08), clear
+	if (item == X6100_CIV_MEM_WRITE || item == X6100_CIV_MEM_TO_VFO || item == X6100_CIV_MEM_MODE ||
+	    item == X6100_CIV_MEM_CLEAR) {
 		x6100_civ_mem_t *c = &m->mem[value];
 
-		if (item == X6100_CIV_MEM_TO_VFO) {
+		if (item == X6100_CIV_MEM_TO_VFO || item == X6100_CIV_MEM_MODE) {
 			if (!c->used)
 				return false;
 
@@ -391,21 +392,24 @@ int main(void)
 
 		check(&civ, "08 00 05", "FA");			/* empty: selected, not tuned */
 		check(&civ, "09", "FB");			/* VFO into channel 5 */
-		snprintf(want, sizeof(want), "1A 00 00 00 05 00%s%s%s%s%s", ch5, calls, ch5, calls, name_blank);
-		check(&civ, "1A 00 00 00 05", want);		/* B side as A */
+		snprintf(want, sizeof(want), "1A 00 00 00 00 05 00%s%s%s%s%s", ch5, calls, ch5, calls, name_blank);
+		check(&civ, "1A 00 00 00 00 05", want);		/* B side as A */
 		check(&civ, "0A", "FB");
 		check(&civ, "0B", "FB");
-		check(&civ, "1A 00 00 00 05", "1A 00 00 00 05 FF");
+		check(&civ, "1A 00 00 00 00 05", "1A 00 00 00 00 05 FF");
 		check(&civ, "08 01 00", "FA");			/* channel 100 */
-		check(&civ, "1A 00 01 00 05", "FA");		/* group 01 */
+		check(&civ, "1A 00 00 01 00 05", "1A 00 00 01 00 05 FF");	/* group 01: empty */
+		check(&civ, "1A 00 00 00 00 00", "1A 00 00 00 00 00 FF");	/* channel 00: empty */
+		check(&civ, "1A 00 00 01 00 05 FF", "FA");	/* no write there */
+		check(&civ, "1A 00 00 00 05", "FA");		/* one-byte group: short */
 		check(&civ, "09 01", "FA");
 
 		// 10 m repeater, NFM, DUP- 100 kHz, named: written, read back the same, tuned
-		snprintf(req, sizeof(req), "1A 00 00 00 07 00%s%s%s%s 31 30 4D 20 52 50 54 20 20 20 20 20 20 20 20 20",
+		snprintf(req, sizeof(req), "1A 00 00 00 00 07 00%s%s%s%s 31 30 4D 20 52 50 54 20 20 20 20 20 20 20 20 20",
 			rpt, calls, rpt, calls);
 		check(&civ, req, "FB");
 		snprintf(want, sizeof(want), "%s", req);
-		check(&civ, "1A 00 00 00 07", want);
+		check(&civ, "1A 00 00 00 00 07", want);
 		g_run++;
 
 		if (m.mem[7].dup != 1 || m.mem[7].dup_hz != 100000 || strcmp(m.mem[7].name, "10M RPT") != 0) {
@@ -415,11 +419,11 @@ int main(void)
 
 		check(&civ, "08 00 07", "FB");
 		check(&civ, "03", "03 00 00 66 29 00");
-		check(&civ, "1A 00 00 00 07 FF", "FB");		/* clear */
-		check(&civ, "1A 00 00 00 07", "1A 00 00 00 07 FF");
+		check(&civ, "1A 00 00 00 00 07 FF", "FB");		/* clear */
+		check(&civ, "1A 00 00 00 00 07", "1A 00 00 00 00 07 FF");
 
 		// Split channel: RX 14.074 USB FIL1 (A), TX 14.174 USB FIL2 (B)
-		snprintf(req, sizeof(req), "1A 00 00 00 08 10%s%s%s%s%s", spl_a, calls, spl_b, calls, name_blank);
+		snprintf(req, sizeof(req), "1A 00 00 00 00 08 10%s%s%s%s%s", spl_a, calls, spl_b, calls, name_blank);
 		check(&civ, req, "FB");
 		g_run++;
 
@@ -429,8 +433,8 @@ int main(void)
 				m.mem[8].tx_mode, m.mem[8].tx_fil);
 		}
 
-		check(&civ, "1A 00 00 00 08", req);
-		check(&civ, "1A 00 00 00 08 FF", "FB");
+		check(&civ, "1A 00 00 00 00 08", req);
+		check(&civ, "1A 00 00 00 00 08 FF", "FB");
 
 		m.v[X6100_CIV_TRANSCEIVE][0] = 1;
 		check(&civ, "1A 05 01 31", "1A 05 01 31 01");

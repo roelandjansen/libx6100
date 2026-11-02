@@ -13,6 +13,9 @@ Status: 2026-11-01 (v0.17.1). Summary and next steps: `STATUS.md`.
 
 - Band keys (2026-11-02): GEN sits in the band order at its frequency (5450 kHz: 60m,
   GEN, 40m; was after 6m); verified on the radio 2026-11-02.
+- wfview memory window (2026-11-02): 1A 00 now takes the group as two bytes (gg gg cc
+  cc), as wfview sends it; with one byte every read answered NG, so the window stayed
+  empty and writes failed. To check on the radio: read all, write one, clear one.
 - ATU key on (2026-11-02): a toast with the tuner memory in use (kHz, L, C, S) or
   ATU ON: NO MEMORY; to check on the radio.
 - TX ranges config file and transverter profile (frequency offset, TX enable).

@@ -785,11 +785,12 @@ static size_t cmd_mem_action(req_t *r, x6100_civ_item_t item)
 	return reply_ok(r, r->n == 0 && get(r, X6100_CIV_MEM_CH, 0, &ch) && set(r, item, 0, ch));
 }
 
-// 1A 00: memory contents, IC-705 layout. After 1A 00 gg cc cc: split / select, then the
-// A side: frequency (5), mode, filter, data, duplex / tone, digital squelch, repeater
-// tone (3), TSQL tone (3), DTCS (3), DV CSQL, duplex offset (3, 100 Hz units), UR / R1 /
-// R2 (24); the B side in the same 47 bytes (the TX side of a split channel, else as A);
-// name (16). 111 bytes. An empty channel reads FF; writing FF clears it.
+// 1A 00: memory contents, IC-705 layout. After 1A 00 gg gg cc cc (group 0000, channel
+// 0001-0099): split / select, then the A side: frequency (5), mode, filter, data, duplex /
+// tone, digital squelch, repeater tone (3), TSQL tone (3), DTCS (3), DV CSQL, duplex offset
+// (3, 100 Hz units), UR / R1 / R2 (24); the B side in the same 47 bytes (the TX side of a
+// split channel, else as A); name (16). 111 bytes. An empty channel reads FF (so do other
+// groups and channel 00, which the IC-705 rig asks for); writing FF clears it.
 #define MEM_SIDE	47
 #define MEM_B		(1 + MEM_SIDE)
 #define MEM_NAME	(1 + 2 * MEM_SIDE)
@@ -826,18 +827,20 @@ static size_t cmd_mem_content(req_t *r)
 	uint8_t civ_mode, tx_civ;
 	bool data, tx_data;
 
-	if (r->n < 4 || r->d[1] != 0x00 || !ops->mem_get || !ops->mem_set)
+	if (r->n < 5 || r->d[0] != 0x00 || !ops->mem_get || !ops->mem_set)
 		return reply_ng(r);
 
-	int ch = mem_ch_bcd(r->d + 2);
+	// Group 0000 only (the X6100 has one bank, MemGroups=0 in X6100.rig); the IC-705 rig
+	// asks groups 00-99 and channel 00 too: those read as empty, so a scan goes on
+	int ch = r->d[1] == 0x00 && r->d[2] == 0x00 ? mem_ch_bcd(r->d + 3) : -1;
 
-	if (ch < 0)
+	if (ch < 0 && r->n > 5)
 		return reply_ng(r);
 
 	// Write: clear, or the content as far as it goes (offset, B side and name optional)
-	if (r->n > 4) {
-		const uint8_t *c = r->d + 4;
-		size_t cn = r->n - 4;
+	if (r->n > 5) {
+		const uint8_t *c = r->d + 5;
+		size_t cn = r->n - 5;
 
 		memset(&m, 0, sizeof(m));
 
@@ -883,15 +886,16 @@ static size_t cmd_mem_content(req_t *r)
 		return reply_ok(r, ops->mem_set(ops->ctx, ch, &m));
 	}
 
-	if (!ops->mem_get(ops->ctx, ch, &m))
+	memset(&m, 0, sizeof(m));
+
+	if (ch > 0 && !ops->mem_get(ops->ctx, ch, &m))
 		return reply_ng(r);
 
 	reply_head(r);
 	out_byte(r->o, 0x1A);
-	out_byte(r->o, 0x00);
-	out_byte(r->o, r->d[1]);
-	out_byte(r->o, r->d[2]);
-	out_byte(r->o, r->d[3]);
+
+	for (size_t i = 0; i < 5; i++)
+		out_byte(r->o, r->d[i]);
 
 	if (!m.used || !mode_to_civ(m.mode, &civ_mode, &data)) {
 		out_byte(r->o, 0xFF);
