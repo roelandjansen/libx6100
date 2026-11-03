@@ -99,7 +99,7 @@ every row there with **?** may be another gap.
 | Cmd | Function | IC-705 | Xiegu | x6100_trx | Notes |
 |---|---|---|---|---|---|
 | 16 02 | preamp | y | ? | v | |
-| 16 12 | AGC | y | ? | y | |
+| 16 12 | AGC | y | ? | y | 01 fast, 02 mid, 03 slow; in wfview rig files AGC Status (the IC-705 file has it as AGC Time Constant, which is 1A 04) |
 | 16 22 | NB on / off | y | ? | v | |
 | 16 40 | NR on / off | y | ? | v | |
 | 16 41 | notch (Xiegu: DNF) | y | y | y | |
@@ -177,6 +177,10 @@ These are not single commands but matter as much:
   channels. x6100_trx answers writes and clears (09, 0B, 1A 00 with content) NG unless
   the user allows it (`catmem rw`, GEN row CAT MEMORIES); reading and using channels
   always works. A suggestion for the Xiegu firmware too: a menu switch for it.
+- **Clock from CAT.** wfview can set the radio clock (1A 05 0170 offset, 0166 time at
+  second 00, 0165 date). On the X6100 that is the Linux clock: x6100_trx takes it only
+  while NTP does not keep the clock (no WiFi in the field), so a PC with a wrong clock
+  cannot overwrite a synced one; otherwise NG.
 
 ## 10. Not on the X6100 (answered NG)
 
