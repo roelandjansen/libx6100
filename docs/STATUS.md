@@ -59,6 +59,7 @@ Verified on the radio:
 - wfview memory window with X6100.rig: all channels read, with names and the split TX
   side (2026-11-02, after the 1A 00 group and Memory Contents string fixes)
 - ATU key on: the toast with the tuner memory in use (2026-11-02)
+- Bluetooth state (GEN row, state `bt`) applied at start: off after a reboot (2026-11-03)
 - TX frequency on the display while keyed with a duplex shift (AUTO, DUP- / DUP+; PTT
   key, mic PTT, tune), with split (TX VFO), without XIT (as Icom; console shows the
   real TX frequency), DUPLEX OFF stays on RX; the scope stays on RX

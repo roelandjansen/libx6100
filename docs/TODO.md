@@ -24,8 +24,8 @@ Status: 2026-11-03 (v0.17.3). Summary and next steps: `STATUS.md`.
   `send_voice_mem` (wfview has no control for it). To check on the radio: `rigctl -m 3085
   -r /tmp/x6100-civ` then `\send_voice_mem 1` (a voice message in USB) and `\stop_voice_mem`.
 - GEN rows saved 2 s after a change (2026-11-03; before only at exit: a GEN BLUETOOTH
-  OFF was lost once). `bt off` in the state verified after a quit. To check: switch a
-  row, wait 2 s, kill x6100_trx: the state has it; Bluetooth comes up off after a reboot.
+  OFF was lost once). `bt off` in the state after a quit and Bluetooth off after a reboot: verified
+  2026-11-03. Still to check: switch a row, wait 2 s, kill x6100_trx: the state has it.
 - Clock from CAT (2026-11-03): 1A 05 0165 / 0166 / 0170 (wfview Set Clock, set radio time
   on connect) set the Linux clock while NTP does not keep it (cattime unsynced, the
   default; GEN row CAT CLOCK). To check on the radio: no WiFi after a cold start (clock
@@ -98,7 +98,7 @@ Status: 2026-11-03 (v0.17.3). Summary and next steps: `STATUS.md`.
 - wfserver dropouts: Bluetooth on costs WiFi airtime on the shared rtl8723bu (one
   antenna, the vendor driver's coexistence); with Bluetooth off the dropouts went
   (2026-11-02). x6100_trx now keeps the BLUETOOTH row (state bt) and applies it at
-  start: to check after a reboot.
+  start: verified 2026-11-03 (bt off in the state, Bluetooth off after a reboot).
 - wfserver load measured 2026-10-31 (wfview connected, scope Fast, 20 m): wfserver 33 %
   of the CPU (about 1.3 of the 4 cores), x6100_trx 13 %, 52 % idle, load 1.6-1.8,
   1008 MHz; no dropouts that day. Watch for dropouts again; if they come: top -H per
