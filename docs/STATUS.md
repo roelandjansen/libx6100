@@ -1,6 +1,9 @@
 # libx6100 / x6100_trx — status
 
-Snapshot: 2026-11-02. Last tag: v0.17.2 (2026-11-02; band keys with GEN in the band order
+Snapshot: 2026-11-03. Last tag: v0.17.3 (2026-11-03; X6100.rig: 16 12 as AGC Status, not
+AGC Time Constant; the ATU toast verified; x6100_civ_compare.md updated for memories;
+Xiegu APP refactor and baseband protocol expected end of December, in TODO), on v0.17.2
+(2026-11-02; band keys with GEN in the band order
 at its frequency, ATU on shows the tuner memory in use, the wfview memory window works:
 1A 00 group as wfview sends it, X6100.rig without the group and with the Memory Contents
 string fixed (the IC-705 file has it wrong: patch for wfview made), CAT memories read only
