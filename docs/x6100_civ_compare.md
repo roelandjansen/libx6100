@@ -1,6 +1,6 @@
 # X6100 CI-V: Xiegu firmware and x6100_trx compared
 
-Status: 2026-11-02. For Xiegu, to bring the X6100 firmware's CI-V up to what clients
+Status: 2026-11-03. For Xiegu, to bring the X6100 firmware's CI-V up to what clients
 such as wfview, hamlib and loggers expect from an IC-705.
 
 x6100_trx (an open front end for the X6100, `tools/x6100_trx.c`, engine
@@ -56,10 +56,10 @@ every row there with **?** may be another gap.
 |---|---|---|---|---|---|
 | 08 | memory mode | y | ? | v | wfview V/M button: keeps the VFO, tunes the channel |
 | 08 0001-0099 | select channel | y | ? | v | |
-| 09 | memory write | y | ? | y | |
+| 09 | memory write | y | ? | y | NG unless `catmem rw` (default read only, see section 9) |
 | 0A | memory to VFO | y | ? | y | |
-| 0B | memory clear | y | ? | y | |
-| 1A 00 | memory contents (IC-705 layout, 111 bytes: A side, B side, name) | y | ? | y | for a memory editor: read, write, name |
+| 0B | memory clear | y | ? | y | NG unless `catmem rw` |
+| 1A 00 | memory contents (IC-705 layout, 111 bytes: A side, B side, name) | y | ? | v | wfview memory window reads all channels (2026-11-02). As IC-705: 1A 00 gg gg cc cc (group two bytes); as X6100 (X6100.rig, no groups): 1A 00 cc cc, IC-7300 style. Empty channel: FF. Write NG unless `catmem rw` |
 
 ## 3. Levels (14, 0000-0255)
 
@@ -164,6 +164,17 @@ These are not single commands but matter as much:
   waits for silence until its timeout; NG lets it move on.
 - **Scope over serial.** 27 00 is paced by the port: a new sweep only when the previous
   one has left (about 3 sweeps / s at 19200 baud on the DEV port).
+- **Memory group bytes.** wfview sends 1A 00 with a two-byte group for the IC-705 (gg gg
+  cc cc) and none for a radio without groups (cc cc, as the IC-7300). Answering the wrong
+  form with NG made the wfview memory window time out (found 2026-11-02).
+- **wfview IC-705 rig file.** Its Memory Contents string is `\\x1a\\00` (the x missing),
+  so wfview sends 1A 5C 30 30 and gets NG: with that file the memory window cannot work
+  on any radio, a real IC-705 included. X6100.rig has it right; a one-line fix for wfview
+  is in `contrib/wfview/patches`. Worth knowing when testing memory commands with wfview.
+- **Memories read only from CAT.** Any client on the CI-V port can overwrite or clear all
+  channels. x6100_trx answers writes and clears (09, 0B, 1A 00 with content) NG unless
+  the user allows it (`catmem rw`, GEN row CAT MEMORIES); reading and using channels
+  always works. A suggestion for the Xiegu firmware too: a menu switch for it.
 
 ## 10. Not on the X6100 (answered NG)
 
