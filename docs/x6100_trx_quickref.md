@@ -253,8 +253,8 @@ brightness, CAT, NTP and the birdie switches go to `x6100_trx.state` at exit. A 
 cannot be changed here: the conf wins at start, so change it there.
 
 GEN long: status page (IP address, battery with charge (the gauge tops out at 99: shown as
-100 %, as the stock UI does) and external supply, CHARGING / FULL / NOT CHARGING from the
-flow charging flag, CAT, last
+100 %, as the stock UI does) and external supply, CHARGING below 100 % / FULL (the flow
+flag bit 4, "charging" in X6100Control, stays 0 while charging on BASE 1.1.9), CAT, last
 NTP result, region, uptime, build).
 
 ![GEN status](images/x6100_trx_status.png)

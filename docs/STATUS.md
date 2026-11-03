@@ -285,7 +285,7 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     Use UTC on and off; with NTP synced NG. Does the IU1WXY image mark the clock synced
     without network (then `cattime on`)?
 22. AGC SLOW / FAST / HANG audible; LINE IN with wfserver TX audio (DATA MOD USB).
-23. Battery: CHARGING / FULL / NOT CHARGING from the flow charging flag on external power.
+23. (done) Battery: flow bit 4 is not a charging flag on BASE 1.1.9; CHARGING below 100 %.
 24. Birdie scan again (the old list was found with the 96 kHz scale).
 25. Hand mic keys: log the flow `hkey` while pressing F1 / F2 (stock HANDLE F1 / F2).
 26. LAN / CAT indicators: LAN with wfview over the network (and off after it leaves), CAT

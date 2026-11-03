@@ -44,8 +44,9 @@ Status: 2026-11-03 (v0.17.4). Summary and next steps: `STATUS.md`.
   To check on the radio: SLOW 250 vs 50 audible on a fading signal, HANG, LINE IN with
   wfserver TX audio (DATA MOD USB: ALC / power follow it).
 - Battery (2026-11-03): the gauge reads 99 when full (stock UI and IU1WXY show 100):
-  shown as 100 now; CHARGING / FULL / NOT CHARGING from flow flag bit 4 (X6100Control
-  calls it charging): to check on the radio, on external power, full and charging.
+  shown as 100 now. Flow flag bit 4 ("charging" in X6100Control) tested on the radio: it
+  stayed 0 while charging from 98 to 100 % on external power, so not used; CHARGING below
+  100 % on external power, else FULL, as before. Verified: 98 % CHARGING, then FULL 100 %.
 - Hand mic keys (to do): the flow frame carries them in `hkey` (X6100Control: F1 0x48,
   F2 0x44, UP 0x84, DOWN 0x04, V/M 0x81, 0-9, MODE, FIL, ...); the stock UI 1.2.0 lets
   HANDLE F1 / F2 do PRE, NR etc. First: log hkey on the radio while pressing them.

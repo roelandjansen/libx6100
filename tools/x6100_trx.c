@@ -4109,7 +4109,6 @@ typedef struct
 	double vbat;
 	double vext;		/* external supply, V */
 	int batcap;		/* battery charge, % */
-	bool charging;		/* flow flag bit 4: the battery is being charged */
 	bool ext;		/* external supply present (flow flag b3): charging when below 100 % */
 
 	//
@@ -6035,7 +6034,7 @@ static void draw_gen_info(x6100_lcd_t *lcd, const screen_t *scr)
 
 	if (scr->ext)
 		snprintf(lines[n++], sizeof(lines[0]), "BATTERY %.1f V %d %%  %s, EXT %.1f V", scr->vbat, scr->batcap,
-			scr->charging ? "CHARGING" : scr->batcap >= 100 ? "FULL" : "NOT CHARGING", scr->vext);
+			scr->batcap < 100 ? "CHARGING" : "FULL", scr->vext);	/* bit 4 stays 0 while charging (2026-11-03) */
 	else
 		snprintf(lines[n++], sizeof(lines[0]), "BATTERY %.1f V %d %%", scr->vbat, scr->batcap);
 
@@ -11148,7 +11147,6 @@ int main(int argc, char **argv)
 			scr.vext = frame.vext * 0.1;
 			// The gauge tops out at 99: the stock UI and IU1WXY show that as 100 %
 			scr.batcap = frame.batcap >= 99 ? 100 : frame.batcap;
-			scr.charging = (frame.flags & X6100_FLOW_CHARGING) != 0;
 			scr.ext = (frame.flags & X6100_FLOW_VEXT) != 0;
 
 			//
