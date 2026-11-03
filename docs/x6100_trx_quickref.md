@@ -83,7 +83,7 @@ Four edges per range, the IC-705 ranges (MHz): 01 below 1.6, 02 1.6-2, 03 2-6, 0
   set it); MFK push: lower <-> upper; MFK long: this edge back to its default; F2: the
   next edge, the panel stays; F2 long, another key or 10 s idle closes. The other end
   follows when the width would pass the maximum; the edge stays inside its range.
-- An edge is at most 75 kHz wide with the IF shift (96 kHz, the IQ width, with `ifshift 0`):
+- An edge is at most 75 kHz wide with the IF shift (96 kHz with `ifshift 0`; the IQ is 100 kHz wide):
   then the IQ covers it whole with the DC spike out of the passband (2026-10-31). A wider
   one (CI-V, or stored before) is cut from its lower end.
 - Defaults: 75 kHz windows from the bottom of the ham band in the range, the fourth at

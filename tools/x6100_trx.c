@@ -1118,7 +1118,7 @@ static uint32_t g_keyed_hz;
 // 2026-10-31: SCROLL-F on 6.920-6.976 with the VFO at 6.933 left the right part black.
 //
 
-#define IQ_HALF_HZ	48000	/* half the IQ span (SPAN_HZ) */
+#define IQ_HALF_HZ	50000	/* half the IQ span (SPAN_HZ) */
 #define IFSHIFT_DYN_MAX	40000	/* largest shift used (OpenX6X00's range) */
 
 static bool scope_fixed(const rx_t *rx);
@@ -4062,7 +4062,8 @@ static const int g_tag_x[5] = { 52, 224, 393, 567, 742 };	/* fitted to photos of
 #define DISP_MS		70
 #define SPEC_DB_MIN	-130.0f
 #define SPEC_DB_MAX	-30.0f
-#define SPAN_HZ		96000
+#define SPAN_HZ		100000	/* the IQ width: 512 bins of 195.3 Hz (2026-11-03; was 96000, 4 % off: with the
+				   IF shift a carrier was drawn shift x 4 % short of the dial; stock: FFT SPAN 100k) */
 #define GRID_HZ		10000
 #define GRID_DB		10
 
@@ -4595,7 +4596,7 @@ static float bin_at(const float *arr, const view_t *v, int x)
 		return i0 >= 0 && i0 < n ? arr[X6100_FLOW_IQ_MIRRORED ? (n - i0) % n : i0] : SPEC_DB_MIN - 20.0f;
 
 	if (X6100_FLOW_IQ_MIRRORED) {
-		i0 = (n - i0) % n;	/* as spec_index: bin n - i, not n - 1 - i (one bin, 187.5 Hz) */
+		i0 = (n - i0) % n;	/* as spec_index: bin n - i, not n - 1 - i (one bin, 195.3 Hz) */
 		i1 = (n - i1) % n;
 	}
 
@@ -10328,7 +10329,7 @@ int main(int argc, char **argv)
 	bool codec_routed = false;	/* codec mixer set up for a mod input on USB */
 	static cat_t cats[CAT_N] = { { .fd = -1 }, { .fd = -1 } };	/* CAT_EP_DEV, CAT_EP_PTY */
 	rx_t rx = { .vol = 20, .rfg = 100, .step = 100, .agc = (x6100_agc_t) -1, .mode = X6100_MODE_USB,
-		.txpwr = TXPWR_DEF, .scope = SCOPE_CENTER, .span = SPAN_HZ,
+		.txpwr = TXPWR_DEF, .scope = SCOPE_CENTER, .span = 96000,	/* the widest span (g_spans) */
 		.nr_lvl = 20, .nb_lvl = 10, .nb_w = 10, .dnf_f = 1000, .dnf_w = 50 };	/* defaults: g_dsp[] */
 	int rc;
 

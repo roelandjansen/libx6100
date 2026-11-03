@@ -37,7 +37,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#define SPAN_HZ		96000
+#define SPAN_HZ		100000	/* the IQ width (2026-11-03; was 96000) */
 #define FRAMES		24	/* frames averaged per measurement, ~0.9 s */
 #define SETTLE_FRAMES	6	/* frames dropped after a register change */
 #define BIN_SPREAD	2	/* bins either side summed (Hann main lobe) */

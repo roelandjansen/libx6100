@@ -40,7 +40,7 @@ because it happens inside the STM32:
 Allwinner R16 (Linux)                      STM32F427 baseband (closed, encrypted .xgf)
   libx6100  -- I2C /dev/i2c-0, 0x72 ---->  register file 56 x u32, BE16 address = reg x 4
             <-- UART /dev/ttyS1 1152000 --  flow frames 4136 B, magic 0xAA5555AA:
-                                            512 complex-float IQ (96 kHz span), flags,
+                                            512 complex-float IQ (100 kHz span; 96 here until 2026-11-03), flags,
                                             telemetry (pwr, swr, alc, vext, vbat), atu_params
   ALSA card 0 (sun8i-a33 codec)
     capture  <-- RX audio from the baseband (Mic1 input, mono, 48 kHz)
