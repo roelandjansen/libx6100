@@ -33,6 +33,11 @@ Status: 2026-11-03 (v0.17.4). Summary and next steps: `STATUS.md`.
   100000 now (also x6100_iqcal). Verified 2026-11-03: the carrier on the dial line at 10 / 20 / 40
   kHz shift (a few Hz at most). Birdies found before this have their frequency off by up to 4 % of their
   distance from the scan centre (up to about 2 kHz): scan again (GEN BIRDIE SCAN).
+- LAN and CAT indicators under the scope clock (2026-11-03): LAN while a wfview client is
+  connected through wfserver (UDP rate from /proc/net/snmp, wfserver running), CAT while
+  CI-V frames arrive (3 s). To check: LAN comes when wfview connects over the network and
+  goes about 3 s after it disconnects; CAT with rigctl on the DEV port; no LAN with only
+  NTP / DNS traffic.
 - AGC SLOW / FAST times and HANG (AGC long panel, rows 7-9) and LINE IN / LINE OUT
   (TX panel), as the stock UI 1.2.0 (2026-11-03): registers 28, 27 bit 12, 20 [15:0].
   To check on the radio: SLOW 250 vs 50 audible on a fading signal, HANG, LINE IN with

@@ -5606,6 +5606,76 @@ static bool wfs_watching(void)
 	return pid > 0 && kill(pid, 0) == 0;
 }
 
+//
+// LAN and CAT indicators (under the clock on the scope). LAN: a wfview client is connected
+// through wfserver. wfserver pings each client on its three UDP ports every 100 ms and the
+// client answers, so while one is connected the system takes in some 30 UDP datagrams a
+// second (/proc/net/udp counts no traffic per socket; /proc/net/snmp Udp InDatagrams
+// counts all of it: NTP, DNS and the like stay far below the threshold). CAT: a CI-V
+// frame came in on the DEV port or the pty in the last CAT_SEEN_MS.
+//
+
+#define LAN_DGRAMS_S	10	/* UDP datagrams in a second that mean a client */
+#define LAN_HOLD_S	3	/* seconds below that before LAN goes off */
+#define CAT_SEEN_MS	3000
+
+static bool g_lan;
+static uint64_t g_cat_rx_ms;
+
+static long long udp_in_dgrams(void)
+{
+	FILE *fp = fopen("/proc/net/snmp", "r");
+	char line[512];
+	long long v = -1;
+	bool head = false;
+
+	if (fp == NULL)
+		return -1;
+
+	while (fgets(line, sizeof(line), fp) != NULL) {
+		if (strncmp(line, "Udp: ", 5) != 0)
+			continue;
+
+		if (!head) {		/* the first Udp: line names the fields, InDatagrams first */
+			head = true;
+			continue;
+		}
+
+		v = strtoll(line + 5, NULL, 10);
+		break;
+	}
+
+	fclose(fp);
+	return v;
+}
+
+// Once a second: LAN on while wfserver runs and the UDP rate says a client is there
+static void lan_poll(uint64_t t)
+{
+	static uint64_t last;
+	static long long prev = -1;
+	static int low;
+	long long now_in;
+
+	if (t - last < 1000)
+		return;
+
+	last = t;
+	now_in = udp_in_dgrams();
+
+	if (now_in < 0 || prev < 0 || !wfs_watching()) {
+		g_lan = false;
+		low = LAN_HOLD_S;
+	} else if (now_in - prev >= LAN_DGRAMS_S) {
+		g_lan = true;
+		low = 0;
+	} else if (++low >= LAN_HOLD_S) {
+		g_lan = false;
+	}
+
+	prev = now_in;
+}
+
 static void gen_value(int row, char *s, size_t n)
 {
 	switch (row) {
@@ -7384,6 +7454,22 @@ overlays:
 			tw = x6100_lcd_text_width(m, 2);
 			x6100_lcd_fill(lcd, W - tw - 10, SPEC_Y + 60, tw + 8, 18, 0x000000);
 			x6100_lcd_text(lcd, W - tw - 6, SPEC_Y + 62, 2, m, time_ok() ? SCR_DIM : SCR_WARN);
+		}
+	}
+
+	//
+	// LAN (a wfview client through wfserver) and CAT (CI-V traffic in the last 3 s), right
+	// aligned under the clock, as the LAN icon on an Icom
+	//
+	{
+		bool cat = g_cat_rx_ms != 0 && now_ms() - g_cat_rx_ms < CAT_SEEN_MS;
+		const char *m = g_lan && cat ? "LAN  CAT" : g_lan ? "LAN" : cat ? "CAT" : NULL;
+
+		if (m != NULL) {
+			int tw = x6100_lcd_text_width(m, 2);
+
+			x6100_lcd_fill(lcd, W - tw - 10, SPEC_Y + 80, tw + 8, 18, 0x000000);
+			x6100_lcd_text(lcd, W - tw - 6, SPEC_Y + 82, 2, m, g_lan ? 0x3CC83C : SCR_ACCENT);
 		}
 	}
 
@@ -9994,6 +10080,8 @@ static bool cat_poll(cat_t *cat)
 			if (len == 0)
 				continue;
 
+			g_cat_rx_ms = now_ms();	/* the CAT indicator */
+
 			size_t rn = x6100_civ_process(&cat->civ, frame, len, reply, sizeof(reply));
 
 			// Log commands and refusals only (reply OK / NG); the steady stream of
@@ -10776,6 +10864,8 @@ int main(int argc, char **argv)
 			rx.gedit = rx.ginfo = false;
 			dirty = true;
 		}
+
+		lan_poll(t);	/* the LAN indicator */
 
 		// A GEN setting changed: the state on disk (a kill or power loss keeps it)
 		if (g_gen_save_at != 0 && t >= g_gen_save_at) {
