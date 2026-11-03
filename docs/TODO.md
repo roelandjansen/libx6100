@@ -35,7 +35,8 @@ Status: 2026-11-03 (v0.17.4). Summary and next steps: `STATUS.md`.
   distance from the scan centre (up to about 2 kHz): scan again (GEN BIRDIE SCAN).
 - LAN and CAT indicators under the scope clock (2026-11-03): LAN while a wfview client is
   connected through wfserver (UDP rate from /proc/net/snmp, wfserver running), CAT while
-  CI-V frames arrive (3 s). To check: LAN comes when wfview connects over the network and
+  CI-V frames arrive (3 s; the pty only without wfserver, which polls it with no client
+  too: CAT was on with no client, 2026-11-03). To check: LAN comes when wfview connects over the network and
   goes about 3 s after it disconnects; CAT with rigctl on the DEV port; no LAN with only
   NTP / DNS traffic.
 - AGC SLOW / FAST times and HANG (AGC long panel, rows 7-9) and LINE IN / LINE OUT

@@ -5620,7 +5620,8 @@ static bool wfs_watching(void)
 #define CAT_SEEN_MS	3000
 
 static bool g_lan;
-static uint64_t g_cat_rx_ms;
+static bool g_wfs_run;	/* wfserver running, as lan_poll last saw it */
+static uint64_t g_cat_rx_ms[CAT_N];	/* last CI-V frame in, per endpoint (CAT_EP_DEV, CAT_EP_PTY) */
 
 static long long udp_in_dgrams(void)
 {
@@ -5662,8 +5663,9 @@ static void lan_poll(uint64_t t)
 
 	last = t;
 	now_in = udp_in_dgrams();
+	g_wfs_run = wfs_watching();
 
-	if (now_in < 0 || prev < 0 || !wfs_watching()) {
+	if (now_in < 0 || prev < 0 || !g_wfs_run) {
 		g_lan = false;
 		low = LAN_HOLD_S;
 	} else if (now_in - prev >= LAN_DGRAMS_S) {
@@ -7462,7 +7464,12 @@ overlays:
 	// aligned under the clock, as the LAN icon on an Icom
 	//
 	{
-		bool cat = g_cat_rx_ms != 0 && now_ms() - g_cat_rx_ms < CAT_SEEN_MS;
+		// wfserver polls the radio over the pty with no client too (2026-11-03): pty
+		// traffic counts only without it; a client through wfserver shows as LAN
+		uint64_t ms = now_ms();
+		bool dev = g_cat_rx_ms[CAT_EP_DEV] != 0 && ms - g_cat_rx_ms[CAT_EP_DEV] < CAT_SEEN_MS;
+		bool pty = g_cat_rx_ms[CAT_EP_PTY] != 0 && ms - g_cat_rx_ms[CAT_EP_PTY] < CAT_SEEN_MS && !g_wfs_run;
+		bool cat = dev || pty;
 		const char *m = g_lan && cat ? "LAN  CAT" : g_lan ? "LAN" : cat ? "CAT" : NULL;
 
 		if (m != NULL) {
@@ -10080,7 +10087,7 @@ static bool cat_poll(cat_t *cat)
 			if (len == 0)
 				continue;
 
-			g_cat_rx_ms = now_ms();	/* the CAT indicator */
+			g_cat_rx_ms[cat->pty_name[0] != '\0' ? CAT_EP_PTY : CAT_EP_DEV] = now_ms();	/* the CAT indicator */
 
 			size_t rn = x6100_civ_process(&cat->civ, frame, len, reply, sizeof(reply));
 
