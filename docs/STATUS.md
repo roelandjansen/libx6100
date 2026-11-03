@@ -1,6 +1,11 @@
 # libx6100 / x6100_trx — status
 
-Snapshot: 2026-11-03. Last tag: v0.17.3 (2026-11-03; X6100.rig: 16 12 as AGC Status, not
+Snapshot: 2026-11-03. Last tag: v0.17.4 (2026-11-03; the scope frequency scale fixed: the
+IQ is 100 kHz wide, not 96 (verified); AGC SLOW / FAST times and HANG, LINE IN / OUT as the
+stock UI 1.2.0; CI-V 28 00 voice TX (messages M1-M8) and the clock from CAT (1A 05 0165 /
+0166 / 0170, `cattime`); GEN rows saved 2 s after a change; battery 99 shown as 100 %, the
+charging flag; Bluetooth state after a reboot verified), on v0.17.3 (2026-11-03; X6100.rig:
+16 12 as AGC Status, not
 AGC Time Constant; the ATU toast verified; x6100_civ_compare.md updated for memories;
 Xiegu APP refactor and baseband protocol expected end of December, in TODO), on v0.17.2
 (2026-11-02; band keys with GEN in the band order
@@ -274,6 +279,15 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
 
 19. (done) ATU key on: the toast with the tuner memory in use (kHz, L, C, S), or ATU ON: NO
     MEMORY away from any memory: verified 2026-11-02.
+
+20. CI-V 28 00 (voice TX) from hamlib: `\send_voice_mem 1` in USB, `\stop_voice_mem`.
+21. Clock from CAT: wfview Set Clock with the clock amber (no WiFi after a cold start),
+    Use UTC on and off; with NTP synced NG. Does the IU1WXY image mark the clock synced
+    without network (then `cattime on`)?
+22. AGC SLOW / FAST / HANG audible; LINE IN with wfserver TX audio (DATA MOD USB).
+23. Battery: CHARGING / FULL / NOT CHARGING from the flow charging flag on external power.
+24. Birdie scan again (the old list was found with the 96 kHz scale).
+25. Hand mic keys: log the flow `hkey` while pressing F1 / F2 (stock HANDLE F1 / F2).
 
 ## Next steps (suggested order)
 
