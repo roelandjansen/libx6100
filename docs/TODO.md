@@ -264,6 +264,16 @@ under GEN until a better key turns up.
   update path, settings partition kept across updates (as `/etc/x6100` with backup /
   restore now).
 
+## From Xiegu
+
+- 2026-11-03: Xiegu (Jin) is refactoring the X6100 APP code, done by the end of December,
+  with the CI-V part rewritten; a beta for us, and a copy of the baseband communication
+  protocol and register list. To do when it comes: check the flow format, register 35
+  (IF shift), zoom / calibration and the mic path to Linux (RADE TX) against what we
+  measured; ask under which terms the protocol may be used / published in libx6100
+  (GPL); test the beta CI-V against `x6100_civ_compare.md` (send him that list first,
+  so the rewrite can cover the known gaps: 07 A0, 0F 10-12, 1C 03).
+
 ## Parked
 
 - Baseband (STM32) clean-room firmware: `x6100_baseband_handover.md`.
