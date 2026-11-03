@@ -78,6 +78,7 @@
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <sys/timex.h>
 #include <sys/wait.h>
 #include <termios.h>
 #include <time.h>
@@ -479,7 +480,7 @@ static uint64_t g_toast_until;	/* ms; shown while now_ms() is before this */
 // clock never set: no network in the field). FT8 and logging need it right.
 //
 
-enum { TS_UNKNOWN, TS_NTP, TS_OS, TS_HAND };
+enum { TS_UNKNOWN, TS_NTP, TS_OS, TS_HAND, TS_CAT };
 
 #define TIME_MIN	1767225600	/* 2026-01-01T00:00:00Z */
 
@@ -527,7 +528,89 @@ static bool time_set(const char *v)
 	return true;
 }
 
-enum { GEN_BRIGHT, GEN_CAT, GEN_CIVADDR, GEN_CATMEM, GEN_MODOFF, GEN_MODDATA, GEN_WFS, GEN_NTP, GEN_WIFI, GEN_WNET, GEN_BT, GEN_BTPAIR,
+//
+// The clock from CAT (1A 05 0165 date, 0166 time, 0170 UTC offset: wfview Set Clock or
+// set radio time on connect). The client sends local time with its UTC offset; the
+// system clock stays UTC. cattime off: refused; unsynced (default): only while no NTP
+// keeps the clock (unknown, set by hand or by CAT, the OS without a kernel sync);
+// on: always. A refused set answers NG.
+//
+
+enum { CT_OFF, CT_UNSYNCED, CT_ON };
+
+static int g_cat_time = CT_UNSYNCED;	/* conf token cattime off | unsynced | on */
+static int g_cat_utc_ofs;		/* minutes, local = UTC + offset; the last one a client sent */
+
+// The clock kept by NTP: our own sync, or the OS's with the kernel flag synced
+static bool clock_synced(void)
+{
+	struct timex tx = { 0 };
+	int st;
+
+	if (time(NULL) < TIME_MIN)
+		return false;
+
+	if (g_time_src == TS_NTP)
+		return true;
+
+	if (g_time_src != TS_OS)
+		return false;
+
+	st = adjtimex(&tx);
+	return st >= 0 && st != TIME_ERROR && !(tx.status & STA_UNSYNC);
+}
+
+static bool cat_time_allowed(void)
+{
+	return g_cat_time == CT_ON || (g_cat_time == CT_UNSYNCED && !clock_synced());
+}
+
+// Local time now as broken-down fields (UTC + the client's offset)
+static void cat_time_local(struct tm *tm)
+{
+	time_t t = time(NULL) + (time_t) g_cat_utc_ofs * 60;
+
+	gmtime_r(&t, tm);
+}
+
+// Set the local date (YYYYMMDD, time of day kept) or time (HHMM, second 00, date kept)
+static bool cat_time_set(bool date, int32_t v)
+{
+	struct timespec now, ts = { 0 };
+	struct tm tm;
+
+	if (!cat_time_allowed() || clock_gettime(CLOCK_REALTIME, &now) != 0)
+		return false;
+
+	cat_time_local(&tm);
+
+	if (date) {
+		tm.tm_year = (int) (v / 10000) - 1900;
+		tm.tm_mon = (int) (v / 100 % 100) - 1;
+		tm.tm_mday = (int) (v % 100);
+		ts.tv_nsec = now.tv_nsec;
+	} else {
+		tm.tm_hour = (int) (v / 100);
+		tm.tm_min = (int) (v % 100);
+		tm.tm_sec = 0;
+	}
+
+	ts.tv_sec = timegm(&tm) - (time_t) g_cat_utc_ofs * 60;
+
+	// A time before TIME_MIN is set too: wfview sends the time before the date, so on a
+	// clock never set the time of day lands first and the date then puts it right
+	if ((date && ts.tv_sec < TIME_MIN) || clock_settime(CLOCK_REALTIME, &ts) != 0)
+		return false;
+
+	if (ts.tv_sec >= TIME_MIN) {
+		g_time_src = TS_CAT;
+		snprintf(g_ntp_msg, sizeof(g_ntp_msg), "set by CAT");
+	}
+
+	return true;
+}
+
+enum { GEN_BRIGHT, GEN_CAT, GEN_CIVADDR, GEN_CATMEM, GEN_CATTIME, GEN_MODOFF, GEN_MODDATA, GEN_WFS, GEN_NTP, GEN_WIFI, GEN_WNET, GEN_BT, GEN_BTPAIR,
 	GEN_BTDEV, GEN_BSCAN, GEN_BMARK, GEN_BNOTCH, GEN_ROWS };	/* GEN rows */
 
 static void gen_adjust(int row, int dir, bool def);
@@ -5115,8 +5198,8 @@ static void draw_filter_panel(x6100_lcd_t *lcd, const rx_t *rx)
 //
 
 static const char *g_gen_name[GEN_ROWS] = {
-	"BRIGHTNESS", "CAT CI-V", "CI-V ADDRESS", "CAT MEMORIES", "DATA OFF MOD", "DATA MOD", "WFSERVER", "NTP SYNC", "WIFI",
-	"WIFI NETWORK", "BLUETOOTH", "BT PAIRING", "BT DEVICE", "BIRDIE SCAN", "BIRDIE MARKS", "BIRDIE NOTCH",
+	"BRIGHTNESS", "CAT CI-V", "CI-V ADDRESS", "CAT MEMORIES", "CAT CLOCK", "DATA OFF MOD", "DATA MOD", "WFSERVER",
+	"NTP SYNC", "WIFI", "WIFI NETWORK", "BLUETOOTH", "BT PAIRING", "BT DEVICE", "BIRDIE SCAN", "BIRDIE MARKS", "BIRDIE NOTCH",
 };
 static const int g_cat_rates[] = { 0, 4800, 9600, 19200 };	/* the DEV port carries no more than 19200 */
 
@@ -5500,6 +5583,9 @@ static void gen_value(int row, char *s, size_t n)
 	case GEN_CATMEM:
 		snprintf(s, n, "%s", g_cat_mem_rw ? "READ / WRITE" : "READ ONLY");
 		break;
+	case GEN_CATTIME:
+		snprintf(s, n, "%s", g_cat_time == CT_OFF ? "OFF" : g_cat_time == CT_ON ? "ON" : "IF NOT SYNCED");
+		break;
 	case GEN_MODOFF:
 	case GEN_MODDATA:
 		snprintf(s, n, "%s", g_modin[row == GEN_MODDATA] ? "USB" : "MIC");
@@ -5560,6 +5646,10 @@ static void gen_hint(int row, char *s, size_t n)
 		break;
 	case GEN_CATMEM:
 		snprintf(s, n, "%s", g_cat_mem_rw ? "CAT MAY WRITE AND CLEAR CHANNELS" : "CAT WRITE / CLEAR: NG");
+		break;
+	case GEN_CATTIME:
+		snprintf(s, n, "%s", g_cat_time == CT_OFF ? "CAT CLOCK SET: NG" : g_cat_time == CT_ON
+			? "CAT MAY SET THE CLOCK" : clock_synced() ? "NTP KEEPS IT: CAT SET NG" : "CAT MAY SET IT NOW");
 		break;
 	case GEN_MODOFF:	/* the TX audio a PTT key or CAT PTT uses; the hand mic PTT is always MIC */
 	case GEN_MODDATA:
@@ -5634,6 +5724,9 @@ static void gen_adjust(int row, int dir, bool def)
 		break;
 	case GEN_CATMEM:	/* read only <-> read / write; default read only */
 		g_cat_mem_rw = def ? false : !g_cat_mem_rw;
+		break;
+	case GEN_CATTIME:	/* off / if not synced / on; default if not synced */
+		g_cat_time = def ? CT_UNSYNCED : clampi(g_cat_time + dir, CT_OFF, CT_ON);
 		break;
 	case GEN_MODOFF:	/* MIC <-> USB; default as an Icom: MIC, data USB */
 	case GEN_MODDATA:
@@ -7798,6 +7891,24 @@ static bool console_line(rx_t *rx, char *line)
 			continue;
 		}
 
+		// cattime off | unsynced | on: may CAT set the clock (1A 05 0165 / 0166 / 0170,
+		// wfview Set Clock)? Default unsynced: only while NTP does not keep it. GEN row CAT
+		// CLOCK too; the conf fixes it.
+		if (strcasecmp(t, "cattime") == 0) {
+			const char *v = strtok(NULL, " \t\r\n");
+			int c = v == NULL ? -1 : strcasecmp(v, "off") == 0 ? CT_OFF : strcasecmp(v, "unsynced") == 0
+				? CT_UNSYNCED : strcasecmp(v, "on") == 0 ? CT_ON : -1;
+
+			if (c >= 0) {
+				g_cat_time = c;
+				g_conf_set |= g_conf_reading ? 1u << GEN_CATTIME : 0;	/* the conf fixes the GEN row */
+			} else {
+				fprintf(stderr, "\ncattime: off, unsynced or on\n");
+			}
+
+			continue;
+		}
+
 		// modin <mic|usb> <mic|usb>: TX audio input for DATA OFF MOD and DATA MOD (GEN rows
 		// too; in the conf it fixes them). usb: the codec, played by a Linux program (wfserver)
 		if (strcasecmp(t, "modin") == 0) {
@@ -8606,6 +8717,7 @@ static void state_write(const rx_t *rx)
 
 	fprintf(fp, "civaddr %02x ", g_civ_addr);
 	fprintf(fp, "catmem %s ", g_cat_mem_rw ? "rw" : "ro");
+	fprintf(fp, "cattime %s ", g_cat_time == CT_OFF ? "off" : g_cat_time == CT_ON ? "on" : "unsynced");
 	fprintf(fp, "modin %s %s ", g_modin[0] ? "usb" : "mic", g_modin[1] ? "usb" : "mic");
 	fprintf(fp, "ntp %s", strcmp(g_ntp_server, "off") == 0 ? "off" : "on");
 
@@ -9098,6 +9210,18 @@ static bool cat_get(void *ctx, x6100_civ_item_t item, int vfo, int32_t *v)
 	case X6100_CIV_VOICE_TX:	/* 28 00: the message going out (CI-V 17 text is 0: none) */
 		*v = rx->send == SEND_MSG ? g_send.msg : 0;
 		return true;
+	case X6100_CIV_DATE:		/* 1A 05 0165 / 0166: local time, UTC + the client's offset */
+	case X6100_CIV_TIME: {
+		struct tm tm;
+
+		cat_time_local(&tm);
+		*v = item == X6100_CIV_DATE ? (tm.tm_year + 1900) * 10000 + (tm.tm_mon + 1) * 100 + tm.tm_mday
+			: tm.tm_hour * 100 + tm.tm_min;
+		return true;
+	}
+	case X6100_CIV_UTC_OFS:
+		*v = g_cat_utc_ofs;
+		return true;
 	case X6100_CIV_MOD_IN:		/* vfo 0 DATA OFF MOD, 1 DATA MOD */
 		*v = g_modin[vfo != 0];
 		return true;
@@ -9134,6 +9258,17 @@ static bool cat_set(void *ctx, x6100_civ_item_t item, int vfo, int32_t v)
 		break;
 	case X6100_CIV_DASH_RATIO:	/* 28-45, the keyer panel takes 25-45 */
 		rx->ratio = clampi(v, 25, 45);
+		break;
+	case X6100_CIV_UTC_OFS:		/* 1A 05 0170: wfview sends it first, then time and date */
+		if (!cat_time_allowed())
+			return false;
+
+		g_cat_utc_ofs = v;
+		break;
+	case X6100_CIV_DATE:		/* 1A 05 0165 / 0166: NG unless cattime allows it now */
+	case X6100_CIV_TIME:
+		if (!cat_time_set(item == X6100_CIV_DATE, v))
+			return false;
 		break;
 	case X6100_CIV_VOICE_TX:	/* 28 00 01-08: message M1-M8 as the MSG key (voice: not in CW;
 				   CW: CW mode only); 00 stops a message going out */

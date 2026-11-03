@@ -66,6 +66,9 @@
 //                      (0119): 0 MIC, 1 USB (the codec: a Linux program such as wfserver)
 //   VOICE_TX           28 00: 1-8 start message M1-M8 (voice TX memory T1-T8 on an Icom),
 //                      0 stop; get: the message going out, 0 none
+//   DATE, TIME         the clock in local time (UTC + UTC_OFS): DATE YYYYMMDD (1A 05 0165),
+//                      TIME HHMM (0166; a set means second 00); UTC_OFS signed minutes,
+//                      -840 .. +840 (0170: hh mm, 00 + / 01 -)
 //
 // The vfo argument: 0 = foreground (selected), 1 = background (unselected).
 //
@@ -150,6 +153,9 @@ typedef enum
 	X6100_CIV_BKIN,			/* 16 47: break-in 00 off, 01 semi, 02 full */
 	X6100_CIV_DASH_RATIO,		/* 1A 05 0252: dash ratio x10, 28-45 */
 	X6100_CIV_VOICE_TX,		/* 28 00: message 1-8 playing / start, 0 none / stop */
+	X6100_CIV_DATE,		/* 1A 05 0165: local date YYYYMMDD */
+	X6100_CIV_TIME,		/* 1A 05 0166: local time HHMM */
+	X6100_CIV_UTC_OFS,		/* 1A 05 0170: UTC offset in minutes, local = UTC + offset */
 	X6100_CIV_ITEM_COUNT
 } x6100_civ_item_t;
 

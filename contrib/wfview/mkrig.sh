@@ -44,8 +44,7 @@ BEGIN {
 		"Audio Peak Filter|Repeater Tone|Repeater TSQL|Twin Peak Filter|RX Antenna|" \
 		"Filter Shape|SSB TX Bandwidth|Tone Squelch Type|Power Control|REF Adjust|" \
 		"USB Mod Level|LAN Mod Level|Tone Frequency|TSQL Frequency|DTCS Code/Polarity|" \
-		"CSQL Code|XFC Status|CI-V Output|Scope RBW|System Date|System Time|" \
-		"UTC Offset", a, "|")
+		"CSQL Code|XFC Status|CI-V Output|Scope RBW", a, "|")
 	for (i = 1; i <= n; i++)
 		drop[a[i]] = 1
 	n = split("6m|10m|12m|15m|17m|20m|30m|40m|60m|80m|160m|Gen", a, "|")

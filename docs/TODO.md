@@ -23,6 +23,13 @@ Status: 2026-11-03 (v0.17.3). Summary and next steps: `STATUS.md`.
 - CI-V 28 00 (voice TX, 2026-11-03): 01-08 sends message M1-M8, 00 stops; for hamlib
   `send_voice_mem` (wfview has no control for it). To check on the radio: `rigctl -m 3085
   -r /tmp/x6100-civ` then `\send_voice_mem 1` (a voice message in USB) and `\stop_voice_mem`.
+- Clock from CAT (2026-11-03): 1A 05 0165 / 0166 / 0170 (wfview Set Clock, set radio time
+  on connect) set the Linux clock while NTP does not keep it (cattime unsynced, the
+  default; GEN row CAT CLOCK). To check on the radio: no WiFi after a cold start (clock
+  amber), wfview Set Clock: the clock right and grey, status page "set by CAT"; with NTP
+  synced: NG in the wfview log, the clock unchanged; Use UTC off (local time) and on.
+  Open: does the IU1WXY image (S48sntp / S49ntp) leave the kernel flag unsynced without
+  network? If it marks the clock synced anyway, CAT is refused there (cattime on then).
 - ATU key on (2026-11-02): a toast with the tuner memory in use (kHz, L, C, S) or
   ATU ON: NO MEMORY; verified on the radio 2026-11-02.
 - TX ranges config file and transverter profile (frequency offset, TX enable).

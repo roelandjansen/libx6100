@@ -710,6 +710,61 @@ static size_t cmd_menu(req_t *r)
 		return out_end(r->o);
 	}
 
+	// 0165 date (yyyy mm dd), 0166 time (hh mm), 0170 UTC offset (hh mm, 00 + / 01 -), as
+	// the IC-705; wfview sets them in the order offset, time, date (at second 00)
+	if (item == 0x0165 || item == 0x0166 || item == 0x0170) {
+		x6100_civ_item_t it = item == 0x0165 ? X6100_CIV_DATE : item == 0x0166 ? X6100_CIV_TIME : X6100_CIV_UTC_OFS;
+		size_t len = item == 0x0165 ? 4 : item == 0x0166 ? 2 : 3;
+
+		if (r->n > 3) {
+			const uint8_t *d = r->d + 3;
+			int b0 = bcd_val(d[0]), b1 = r->n == 3 + len ? bcd_val(d[1]) : -1;
+			bool ok = b0 >= 0 && b1 >= 0;
+
+			if (ok && item == 0x0165) {		/* yyyy mm dd */
+				int mo = bcd_val(d[2]), dd = bcd_val(d[3]);
+
+				ok = mo >= 1 && mo <= 12 && dd >= 1 && dd <= 31;
+				v = (b0 * 100 + b1) * 10000 + mo * 100 + dd;
+			} else if (ok && item == 0x0166) {	/* hh mm */
+				ok = b0 < 24 && b1 < 60;
+				v = b0 * 100 + b1;
+			} else if (ok) {			/* hh mm sign */
+				ok = b1 < 60 && b0 * 60 + b1 <= 840 && d[2] <= 0x01;
+				v = (d[2] ? -1 : 1) * (b0 * 60 + b1);
+			}
+
+			return reply_ok(r, ok && set(r, it, 0, v));
+		}
+
+		if (!get(r, it, 0, &v))
+			return reply_ng(r);
+
+		reply_head(r);
+		out_byte(r->o, 0x1A);
+		out_byte(r->o, 0x05);
+		out_byte(r->o, 0x01);
+		out_byte(r->o, r->d[2]);
+
+		if (item == 0x0165) {
+			out_byte(r->o, bcd_byte((unsigned) (v / 1000000)));
+			out_byte(r->o, bcd_byte((unsigned) (v / 10000 % 100)));
+			out_byte(r->o, bcd_byte((unsigned) (v / 100 % 100)));
+			out_byte(r->o, bcd_byte((unsigned) (v % 100)));
+		} else if (item == 0x0166) {
+			out_byte(r->o, bcd_byte((unsigned) (v / 100)));
+			out_byte(r->o, bcd_byte((unsigned) (v % 100)));
+		} else {
+			unsigned a = (unsigned) (v < 0 ? -v : v);
+
+			out_byte(r->o, bcd_byte(a / 60));
+			out_byte(r->o, bcd_byte(a % 60));
+			out_byte(r->o, v < 0 ? 0x01 : 0x00);
+		}
+
+		return out_end(r->o);
+	}
+
 	// 0118 DATA OFF MOD, 0119 DATA MOD: 00 MIC, 01 USB (MIC,USB and LAN: NG)
 	if (item == 0x0118 || item == 0x0119) {
 		int vfo = item == 0x0119;

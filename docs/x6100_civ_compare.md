@@ -120,6 +120,7 @@ every row there with **?** may be another gap.
 | 1A 05 0131 | CI-V transceive on / off | y | ? | y | |
 | 1A 05 0118 / 0119 | DATA OFF MOD / DATA MOD (MIC / USB) | y | ? | v | TX audio from the network for wfview |
 | 1A 05 0252 | dash ratio | y | ? | y | wfview polls it in CW |
+| 1A 05 0165 / 0166 / 0170 | date, time, UTC offset | y | ? | y | wfview Set Clock / set radio time on connect; x6100_trx sets the Linux clock only while NTP does not keep it (`cattime`) |
 | 1A 06 | data mode and filter | y | ? | y | |
 | 1D 19 | Xiegu radio ID | n | y | y | |
 

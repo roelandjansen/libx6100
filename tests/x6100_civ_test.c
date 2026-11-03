@@ -461,6 +461,28 @@ int main(void)
 		check(&civ, "28 01 01", "FA");
 		check(&civ, "28", "FA");
 
+		// 1A 05 0165 / 0166 / 0170: date, time, UTC offset (wfview set clock)
+		check(&civ, "1A 05 01 70 01 00 00", "FB");		/* +01:00 */
+		check(&civ, "1A 05 01 70", "1A 05 01 70 01 00 00");
+		check(&civ, "1A 05 01 70 05 30 01", "FB");		/* -05:30 */
+		check(&civ, "1A 05 01 70", "1A 05 01 70 05 30 01");
+		g_run++;
+
+		if (m.v[X6100_CIV_UTC_OFS][0] != -330) {
+			g_fail++;
+			printf("FAIL utc offset: %d\n", (int) m.v[X6100_CIV_UTC_OFS][0]);
+		}
+
+		check(&civ, "1A 05 01 70 15 00 00", "FA");		/* beyond 14:00 */
+		check(&civ, "1A 05 01 70 01 00 02", "FA");		/* bad sign */
+		check(&civ, "1A 05 01 66 21 07", "FB");
+		check(&civ, "1A 05 01 66", "1A 05 01 66 21 07");
+		check(&civ, "1A 05 01 66 24 00", "FA");
+		check(&civ, "1A 05 01 66 21", "FA");			/* short */
+		check(&civ, "1A 05 01 65 20 26 11 03", "FB");
+		check(&civ, "1A 05 01 65", "1A 05 01 65 20 26 11 03");
+		check(&civ, "1A 05 01 65 20 26 13 03", "FA");		/* month 13 */
+
 		check(&civ, "1A 05 01 18", "1A 05 01 18 00");
 		check(&civ, "1A 05 01 19", "1A 05 01 19 01");
 		check(&civ, "1A 05 01 18 01", "FB");
