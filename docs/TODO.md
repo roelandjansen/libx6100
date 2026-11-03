@@ -30,8 +30,8 @@ Status: 2026-11-03 (v0.17.3). Summary and next steps: `STATUS.md`.
   stock UI: FFT SPAN 100k). With 96 a carrier was drawn 4 % of its distance from the LO
   short: with the IF shift the station sat left of the dial line (1053 kHz AM: -500 Hz
   at ifshift 10000, -614 at 20000, -1561 at 40000; on the line with ifshift 0). SPAN_HZ
-  100000 now (also x6100_iqcal). To check: the carrier on the dial line at 10 / 20 / 40
-  kHz shift. Birdies found before this have their frequency off by up to 4 % of their
+  100000 now (also x6100_iqcal). Verified 2026-11-03: the carrier on the dial line at 10 / 20 / 40
+  kHz shift (a few Hz at most). Birdies found before this have their frequency off by up to 4 % of their
   distance from the scan centre (up to about 2 kHz): scan again (GEN BIRDIE SCAN).
 - AGC SLOW / FAST times and HANG (AGC long panel, rows 7-9) and LINE IN / LINE OUT
   (TX panel), as the stock UI 1.2.0 (2026-11-03): registers 28, 27 bit 12, 20 [15:0].

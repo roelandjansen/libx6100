@@ -60,6 +60,8 @@ Verified on the radio:
   side (2026-11-02, after the 1A 00 group and Memory Contents string fixes)
 - ATU key on: the toast with the tuner memory in use (2026-11-02)
 - Bluetooth state (GEN row, state `bt`) applied at start: off after a reboot (2026-11-03)
+- scope frequency scale with the IQ 100 kHz wide: the carrier on the dial line with the IF
+  shift at 10, 20 and 40 kHz (2026-11-03)
 - TX frequency on the display while keyed with a duplex shift (AUTO, DUP- / DUP+; PTT
   key, mic PTT, tune), with split (TX VFO), without XIT (as Icom; console shows the
   real TX frequency), DUPLEX OFF stays on RX; the scope stays on RX
