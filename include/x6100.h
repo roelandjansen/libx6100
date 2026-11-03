@@ -105,6 +105,7 @@ typedef struct
 #define X6100_FLOW_TX		0x2u
 #define X6100_FLOW_ATU		0x4u	/* stock UI: xradio_get_atu_status(), ATU tune done */
 #define X6100_FLOW_VEXT		0x8u
+#define X6100_FLOW_CHARGING	0x10u	/* charging (X6100Control x6100_flow_flags_t.charging) */
 
 //
 // CRC

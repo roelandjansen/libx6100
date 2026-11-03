@@ -262,6 +262,8 @@ typedef struct
 	int micsel;		/* 0 internal, 1 hand mic, 2 auto */
 	int imicg;		/* internal mic gain */
 	int hmicg;		/* hand mic gain */
+	int line_in;		/* LINE IN level (register 20 [7:0]: codec audio into the baseband TX) */
+	int line_out;		/* LINE OUT level (register 20 [15:8]) */
 	int cmp;		/* compressor on / off */
 	int cmp_lvl;		/* 1 = 1:2, 2 = 1:4, 3 = 1:8 */
 	int vox;		/* VOX on / off */
@@ -989,9 +991,28 @@ static int dup_shift(const rx_t *rx)
 
 #define AM_OFS_DEF	100
 #define AM_OFS_MAX	1000
-#define TPARS		6	/* rows of the RIT / XIT / duplex panel (AGC long), AM OFFSET last */
+#define TPARS		9	/* rows of the RIT / XIT / duplex panel (AGC long): ..., AM OFFSET, AGC SLOW / FAST / HANG */
 
 static int g_am_ofs = AM_OFS_DEF;	/* conf / console token am_offset, 0 = off; AGC long panel */
+
+//
+// AGC time constants (register 28, units of 10 ms) and hang (register 27 bit 12), as the
+// stock UI 1.2.0 has them (RADIO SETTING1: AGC SLOW 250, AGC FAST 5, AGC HANG OFF, the
+// values x6100_ctl_init writes). The middle one (AUTO, as we read it) stays at 50.
+// AGC long panel rows; state / conf tokens agcslow, agcfast, agchang.
+//
+
+#define AGC_SLOW_DEF	250
+#define AGC_SLOW_MIN	20
+#define AGC_SLOW_MAX	1000
+#define AGC_FAST_DEF	5
+#define AGC_FAST_MIN	1
+#define AGC_FAST_MAX	100
+#define AGC_MID		50
+
+static int g_agc_slow = AGC_SLOW_DEF;
+static int g_agc_fast = AGC_FAST_DEF;
+static int g_agc_hang;
 
 //
 // IF shift (register 35, BASE 1.1.9; as OpenX6X00 and X6100Control use it): [23:0]
@@ -1407,13 +1428,17 @@ static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 	x6100_ctl_set(ctl, X6100_REG_KEYER, X6100_R33(rx->wpm, rx->keymode ? 3 - rx->keymode : 0, rx->iambic, rx->cwtone, (rx->cwvol * 63 + 50) / 100, 0));
 	x6100_ctl_set(ctl, X6100_REG_QSK_KR, X6100_R34(rx->qsk, rx->ratio));
 
-	// TX audio: mic gains (line in / out levels kept), mic select and squelch (charger,
+	// TX audio: line in / out levels and mic gains, mic select and squelch (charger,
 	// speaker and aux IQ bits of register 21 kept), VOX, compressor, monitor
-	x6100_ctl_update(ctl, X6100_REG_AUDIO_GAIN, 0xFFFF0000u, X6100_R20(0, 0, rx->imicg, rx->hmicg));
+	x6100_ctl_set(ctl, X6100_REG_AUDIO_GAIN, X6100_R20(rx->line_in, rx->line_out, rx->imicg, rx->hmicg));
 	x6100_ctl_update(ctl, X6100_REG_MIC_PTT_SQL, 0x0000FF03u, X6100_R21(rx->micsel, 0, 0, 0, 0, rx->sql));
 	x6100_ctl_set(ctl, X6100_REG_VOX, X6100_R22(rx->voxg, rx->voxag, rx->voxdly, rx->vox));
 	x6100_ctl_set(ctl, X6100_REG_CMP, X6100_R25(rx->cmp_lvl, rx->cmp));
 	x6100_ctl_set(ctl, X6100_REG_MONILEVEL, rx->moni ? (uint32_t) rx->moni_lvl : 0);
+
+	// AGC: hang (knee -60, slope 6 as x6100_ctl_init) and the time constants
+	x6100_ctl_set(ctl, X6100_REG_AGC, X6100_R27(-60, 6, g_agc_hang));
+	x6100_ctl_set(ctl, X6100_REG_AGC_TC, X6100_R28(g_agc_slow, AGC_MID, g_agc_fast));
 
 	x6100_set_filter(ctl, mode, low, high);
 	x6100_ctl_set(ctl, X6100_REG_RXVOL, rx->mute ? 0 : (uint32_t) rx->vol);
@@ -1918,7 +1943,7 @@ static void kpar_defaults(rx_t *rx)
 //
 
 enum { XP_MIC, XP_IMICG, XP_HMICG, XP_CMP, XP_CMPLVL, XP_VOX, XP_VOXG, XP_ANTIVOX, XP_VOXDLY,
-	XP_MONI, XP_MONILVL, XP_SQL, XP_TOT, XPARS };
+	XP_MONI, XP_MONILVL, XP_LINEIN, XP_LINEOUT, XP_SQL, XP_TOT, XPARS };
 
 static const kpar_t g_xpar[XPARS] = {
 	[XP_MIC] = { "MIC", "mic", 0, 2, 1, 2 },
@@ -1932,6 +1957,8 @@ static const kpar_t g_xpar[XPARS] = {
 	[XP_VOXDLY] = { "VOX DELAY", "voxdly", 100, 2000, 50, 500 },
 	[XP_MONI] = { "MONITOR", "moni", 0, 1, 1, 1 },
 	[XP_MONILVL] = { "MONI LEVEL", "monilvl", 0, 100, 1, 30 },
+	[XP_LINEIN] = { "LINE IN", "linein", 0, 36, 1, 10 },	/* 0-36 as OpenX6X00; 10 as stock */
+	[XP_LINEOUT] = { "LINE OUT", "lineout", 0, 36, 1, 10 },
 	[XP_SQL] = { "SQUELCH", "sql", 0, 100, 1, 0 },
 	[XP_TOT] = { "TX TIMEOUT", "tot", 0, 3, 1, 2 },
 };
@@ -1942,7 +1969,7 @@ static const char *g_cmp_tok[4] = { "", "1:2", "1:4", "1:8" };
 static int *xpar_value(rx_t *rx, int i)
 {
 	int *v[XPARS] = { &rx->micsel, &rx->imicg, &rx->hmicg, &rx->cmp, &rx->cmp_lvl, &rx->vox, &rx->voxg,
-		&rx->voxag, &rx->voxdly, &rx->moni, &rx->moni_lvl, &rx->sql, &rx->tot };
+		&rx->voxag, &rx->voxdly, &rx->moni, &rx->moni_lvl, &rx->line_in, &rx->line_out, &rx->sql, &rx->tot };
 
 	return v[i];
 }
@@ -3616,6 +3643,12 @@ static bool on_long_key(rx_t *rx, int key)
 				rx->dup = DUP_AUTO;
 			else if (rx->tedit_par == 4)
 				rx->dup_khz = DUP_KHZ_DEF;
+			else if (rx->tedit_par == 6)
+				g_agc_slow = AGC_SLOW_DEF;
+			else if (rx->tedit_par == 7)
+				g_agc_fast = AGC_FAST_DEF;
+			else if (rx->tedit_par == 8)
+				g_agc_hang = 0;
 			else if (rx->tedit_par == 5)
 				g_am_ofs = AM_OFS_DEF;
 			else
@@ -3888,8 +3921,15 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 				rx->dup = (rx->dup + dir + DUP_COUNT) % DUP_COUNT;
 			else if (rx->tedit_par == 4)
 				rx->dup_khz = clampi(rx->dup_khz + value * X6100_DIR_MFK * 10, 10, DUP_KHZ_MAX);
-			else
+			else if (rx->tedit_par == 5)
 				g_am_ofs = clampi(g_am_ofs + value * X6100_DIR_MFK * 10, 0, AM_OFS_MAX);
+			else if (rx->tedit_par == 6)		/* 10 ms steps, 50 ms from 1 s */
+				g_agc_slow = clampi(g_agc_slow + value * X6100_DIR_MFK * (g_agc_slow >= 100 ? 5 : 1), AGC_SLOW_MIN,
+					AGC_SLOW_MAX);
+			else if (rx->tedit_par == 7)
+				g_agc_fast = clampi(g_agc_fast + value * X6100_DIR_MFK, AGC_FAST_MIN, AGC_FAST_MAX);
+			else
+				g_agc_hang = dir > 0;
 
 			rx->tedit_since = now_ms();
 			return true;
@@ -4068,6 +4108,7 @@ typedef struct
 	double vbat;
 	double vext;		/* external supply, V */
 	int batcap;		/* battery charge, % */
+	bool charging;		/* flow flag bit 4: the battery is being charged */
 	bool ext;		/* external supply present (flow flag b3): charging when below 100 % */
 
 	//
@@ -5921,7 +5962,7 @@ static void draw_gen_info(x6100_lcd_t *lcd, const screen_t *scr)
 
 	if (scr->ext)
 		snprintf(lines[n++], sizeof(lines[0]), "BATTERY %.1f V %d %%  %s, EXT %.1f V", scr->vbat, scr->batcap,
-			scr->batcap < 100 ? "CHARGING" : "FULL", scr->vext);
+			scr->charging ? "CHARGING" : scr->batcap >= 100 ? "FULL" : "NOT CHARGING", scr->vext);
 	else
 		snprintf(lines[n++], sizeof(lines[0]), "BATTERY %.1f V %d %%", scr->vbat, scr->batcap);
 
@@ -6190,18 +6231,21 @@ static void draw_mem_panel(x6100_lcd_t *lcd, const rx_t *rx)
 
 //
 // RIT / XIT / duplex panel (AGC long): one offset for both, as on Icom radios,
-// RIT / XIT on or off, repeater duplex and its shift, the AM receive offset. Green.
+// RIT / XIT on or off, repeater duplex and its shift, the AM receive offset, the AGC
+// SLOW / FAST time constants and hang. Green.
 // Five rows in view, scrolling with the selection. MFK turn: offset in 10 Hz steps,
 // on / off on the RIT and XIT rows, AUTO / OFF / DUP- / DUP+, shift in 10 kHz steps,
-// AM offset in 10 Hz steps; push: next row; hold: offset 0 (CLEAR), duplex AUTO,
-// shift 100 kHz, AM offset 100 Hz.
+// AM offset in 10 Hz steps, AGC times in 10 ms (SLOW 50 ms from 1 s), hang on / off;
+// push: next row; hold: offset 0 (CLEAR), duplex AUTO,
+// shift 100 kHz, AM offset 100 Hz, AGC SLOW 250 / FAST 5 (x10 ms), hang off.
 //
 
 static void draw_rit_panel(x6100_lcd_t *lcd, const rx_t *rx)
 {
 	static const char *hint = "MFK: ADJUST  PUSH: NEXT  HOLD: CLEAR";
 	static const char *dups[DUP_COUNT] = { "AUTO", "OFF", "DUP-", "DUP+" };
-	static const char *names[TPARS] = { "OFFSET", "RIT  RX", "XIT  TX", "DUPLEX", "SHIFT", "AM OFFSET" };
+	static const char *names[TPARS] = { "OFFSET", "RIT  RX", "XIT  TX", "DUPLEX", "SHIFT", "AM OFFSET", "AGC SLOW",
+		"AGC FAST", "AGC HANG" };
 	const int vis = 5, px = LBL_W + 8, py = SPEC_Y + 16, pw = 480, ph = 134;
 	const int top = clampi(rx->tedit_par - 2, 0, TPARS - vis);
 	const uint32_t bg = 0x0C180C, green = 0x60D060, sel = 0x1C3A1C, dim = 0x80A080, white = 0xF0F0F0;
@@ -6225,6 +6269,10 @@ static void draw_rit_panel(x6100_lcd_t *lcd, const rx_t *rx)
 	else
 		snprintf(v[5], sizeof(v[5]), "OFF");
 
+	snprintf(v[6], sizeof(v[6]), "%d X10 MS", g_agc_slow);
+	snprintf(v[7], sizeof(v[7]), "%d X10 MS", g_agc_fast);
+	snprintf(v[8], sizeof(v[8]), "%s", g_agc_hang ? "ON" : "OFF");
+
 	x6100_lcd_fill(lcd, px, py, pw, ph, bg);
 	x6100_lcd_fill(lcd, px, py, 3, ph, green);
 	x6100_lcd_hline(lcd, px, px + pw - 1, py, 0x2A4A2A);
@@ -6237,7 +6285,8 @@ static void draw_rit_panel(x6100_lcd_t *lcd, const rx_t *rx)
 
 	for (int i = top; i < top + vis; i++) {
 		const bool lit[TPARS] = { true, rx->rit, rx->xit, shift != 0, rx->dup == DUP_MINUS || rx->dup == DUP_PLUS,
-			g_am_ofs > 0 && rx->mode == X6100_MODE_AM };
+			g_am_ofs > 0 && rx->mode == X6100_MODE_AM, rx->agc == X6100_AGC_SLOW, rx->agc == X6100_AGC_FAST,
+			g_agc_hang != 0 };
 		int y = py + 30 + (i - top) * 21;
 		uint32_t c = i == 0 ? white : lit[i] ? on : off;
 
@@ -8541,6 +8590,29 @@ static bool console_line(rx_t *rx, char *line)
 			continue;
 		}
 
+		// agcslow / agcfast <x10 ms>, agchang on | off: AGC time constants and hang (AGC long)
+		if (strcasecmp(t, "agcslow") == 0 || strcasecmp(t, "agcfast") == 0) {
+			bool slow = strcasecmp(t, "agcslow") == 0;
+
+			want_lvl = slow ? &g_agc_slow : &g_agc_fast;
+			lvl_min = slow ? AGC_SLOW_MIN : AGC_FAST_MIN;
+			lvl_max = slow ? AGC_SLOW_MAX : AGC_FAST_MAX;
+			continue;
+		}
+
+		if (strcasecmp(t, "agchang") == 0) {
+			const char *v = strtok(NULL, " \t\r\n");
+
+			if (v != NULL && (strcasecmp(v, "on") == 0 || strcasecmp(v, "off") == 0)) {
+				g_agc_hang = strcasecmp(v, "on") == 0;
+				changed = true;
+			} else {
+				fprintf(stderr, "\nagchang: on or off\n");
+			}
+
+			continue;
+		}
+
 		// hold on | off: scope HOLD, as CI-V 27 17 (console; not kept)
 		if (strcasecmp(t, "hold") == 0) {
 			const char *v = strtok(NULL, " \t\r\n");
@@ -8685,7 +8757,9 @@ static void state_write(const rx_t *rx)
 	fprintf(fp, "vfob %u %s fil%d vfo %s\n", (unsigned) rx->b_freq, modes[rx->b_mode], rx->b_fil + 1, rx->on_b ? "b" : "a");
 	fprintf(fp, "%s %s %s ritofs %d pbtin %d pbtout %d\n", rx->split ? "txsplit" : "notxsplit", rx->rit ? "rit" : "norit",
 		rx->xit ? "xit" : "noxit", rx->rit_hz, rx->pbt_in, rx->pbt_out);
-	fprintf(fp, "%s dupshift %d am_offset %d ifshift %d ifshift_tx %d\n", g_dup_tok[rx->dup], rx->dup_khz, g_am_ofs, g_ifshift, g_ifshift_tx);
+	fprintf(fp, "%s dupshift %d am_offset %d ifshift %d ifshift_tx %d agcslow %d agcfast %d agchang %s\n",
+		g_dup_tok[rx->dup], rx->dup_khz, g_am_ofs, g_ifshift, g_ifshift_tx, g_agc_slow, g_agc_fast,
+		g_agc_hang ? "on" : "off");
 	fprintf(fp, "vol %d %s rfg %d pwr %.1f\n", rx->vol, rx->mute ? "mute" : "nomute", rx->rfg, rx->txpwr / 10.0);
 	fprintf(fp, "keytype %d wpm %d iambic %d cwpitch %d cwvol %d qsk %d ratio %d.%d\n", rx->keymode, rx->wpm, rx->iambic,
 		rx->cwtone, rx->cwvol, rx->qsk, rx->ratio / 10, rx->ratio % 10);
@@ -10974,7 +11048,9 @@ int main(int argc, char **argv)
 			scr.alc = frame.alc_level;
 			scr.vbat = frame.vbat * 0.1;
 			scr.vext = frame.vext * 0.1;
-			scr.batcap = frame.batcap;
+			// The gauge tops out at 99: the stock UI and IU1WXY show that as 100 %
+			scr.batcap = frame.batcap >= 99 ? 100 : frame.batcap;
+			scr.charging = (frame.flags & X6100_FLOW_CHARGING) != 0;
 			scr.ext = (frame.flags & X6100_FLOW_VEXT) != 0;
 
 			//

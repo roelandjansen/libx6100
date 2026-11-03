@@ -251,7 +251,9 @@ Bluetooth are the image's own (NetworkManager, bluez) and keep their state thems
 brightness, CAT, NTP and the birdie switches go to `x6100_trx.state` at exit. A row set in `x6100_trx.conf` shows CONF and
 cannot be changed here: the conf wins at start, so change it there.
 
-GEN long: status page (IP address, battery with charge and external supply, CAT, last
+GEN long: status page (IP address, battery with charge (the gauge tops out at 99: shown as
+100 %, as the stock UI does) and external supply, CHARGING / FULL / NOT CHARGING from the
+flow charging flag, CAT, last
 NTP result, region, uptime, build).
 
 ![GEN status](images/x6100_trx_status.png)
@@ -501,6 +503,8 @@ nothing changes until a value is set. Ranges and register layout as in X6100Cont
 | VOX DELAY | 100-2000 ms in 50 ms steps (500) | 22 [29:16] |
 | MONITOR | ON / OFF (ON) | 29 (0 when off) |
 | MONI LEVEL | 0-100 (30) | 29 |
+| LINE IN | 0-36 (10, as stock) | 20 [7:0]: audio from the codec into the baseband TX (DATA MOD USB, wfserver) |
+| LINE OUT | 0-36 (10) | 20 [15:8] |
 | SQUELCH | 0-100 (0 = open) | 21 [15:8] |
 | TX TIMEOUT | OFF, 1, 3, 5 MIN (3) | none: x6100_trx |
 
@@ -510,7 +514,7 @@ settings are still written, for a later baseband. Were it to work: VOX keys the 
 with split or duplex the first few ms go out on the RX frequency. Kept in the state
 file. Console: `mic int|hand|auto`, `imicg 30`, `hmicg 20`, `comp on|off`,
 `complvl 1:2|1:4|1:8`, `vox on|off`, `voxg 50`, `antivox 0`, `voxdly 500`,
-`moni on|off`, `monilvl 30`, `sql 0`, `tot off|1|3|5`. CI-V: 14 03 / 0B / 0E / 15 / 16 / 17 (squelch,
+`moni on|off`, `monilvl 30`, `linein 10`, `lineout 10`, `sql 0`, `tot off|1|3|5`. CI-V: 14 03 / 0B / 0E / 15 / 16 / 17 (squelch,
 mic gain, compressor level, monitor, VOX gain, anti-VOX), 16 44 / 45 / 46
 (compressor, monitor, VOX).
 
@@ -577,6 +581,12 @@ there is no local backup.
   receive offset, 0-1000 Hz in 10 Hz steps (100), MFK long = 100; green in AM.
 
   ![AM offset](images/x6100_trx_am_offset.png)
+
+- AGC SLOW, AGC FAST, AGC HANG, the last rows of the same panel (2026-11-03, as the stock
+  UI 1.2.0 RADIO SETTING1): the AGC time constants in units of 10 ms, SLOW 20-1000
+  (250 = 2.5 s; 10 ms steps, 50 ms from 1 s), FAST 1-100 (5 = 50 ms), and hang on /
+  off (off); MFK long = default. Registers 28 (slow / mid / fast; mid, for AUTO, stays
+  50) and 27 bit 12. Console / conf / state: `agcslow 250`, `agcfast 5`, `agchang off`.
 
 - Top left of the spectrum (amber): `SPLIT TX 7.120.00 LSB  RIT +120` or
   `DUP- TX 29.520.00` while in use; on

@@ -26,6 +26,16 @@ Status: 2026-11-03 (v0.17.3). Summary and next steps: `STATUS.md`.
 - GEN rows saved 2 s after a change (2026-11-03; before only at exit: a GEN BLUETOOTH
   OFF was lost once). `bt off` in the state after a quit and Bluetooth off after a reboot: verified
   2026-11-03. Still to check: switch a row, wait 2 s, kill x6100_trx: the state has it.
+- AGC SLOW / FAST times and HANG (AGC long panel, rows 7-9) and LINE IN / LINE OUT
+  (TX panel), as the stock UI 1.2.0 (2026-11-03): registers 28, 27 bit 12, 20 [15:0].
+  To check on the radio: SLOW 250 vs 50 audible on a fading signal, HANG, LINE IN with
+  wfserver TX audio (DATA MOD USB: ALC / power follow it).
+- Battery (2026-11-03): the gauge reads 99 when full (stock UI and IU1WXY show 100):
+  shown as 100 now; CHARGING / FULL / NOT CHARGING from flow flag bit 4 (X6100Control
+  calls it charging): to check on the radio, on external power, full and charging.
+- Hand mic keys (to do): the flow frame carries them in `hkey` (X6100Control: F1 0x48,
+  F2 0x44, UP 0x84, DOWN 0x04, V/M 0x81, 0-9, MODE, FIL, ...); the stock UI 1.2.0 lets
+  HANDLE F1 / F2 do PRE, NR etc. First: log hkey on the radio while pressing them.
 - Clock from CAT (2026-11-03): 1A 05 0165 / 0166 / 0170 (wfview Set Clock, set radio time
   on connect) set the Linux clock while NTP does not keep it (cattime unsynced, the
   default; GEN row CAT CLOCK). To check on the radio: no WiFi after a cold start (clock
