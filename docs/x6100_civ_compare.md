@@ -113,6 +113,7 @@ every row there with **?** may be another gap.
 |---|---|---|---|---|---|
 | 11 | ATT off / on, read | y | ? | v | |
 | 17 | send CW (text), FF stops | y | ? | y | buffered as on an Icom |
+| 28 00 | voice TX memory T1-T8, 00 stops | y | ? | y | x6100_trx: message M1-M8 (voice WAV or CW); for hamlib `send_voice_mem`, the wfview GUI does not use it |
 | 19 00 | transceiver ID | y | y | v | also answered to a broadcast (00): wfview auto-detect needs it |
 | 1A 01 | band stacking register | y | y (changelog) | v | wfview band buttons; IC-705 code 15 = GEN band |
 | 1A 03 | IF filter width | y | ? | y | |
@@ -178,7 +179,7 @@ These are not single commands but matter as much:
 
 ## 10. Not on the X6100 (answered NG)
 
-0E scan; 0C / 0D, 1B, 1F-24, 28 (duplex offset, tones, D-STAR, GPS, voice); 13 speech;
+0E scan; 0C / 0D, 1B, 1F-24 (duplex offset, tones, D-STAR, GPS); 13 speech;
 (these are also left out of the wfview rig file X6100.rig, with the other IC-705
 functions the X6100 lacks, so wfview neither polls them nor shows their controls);
 18 power on / off; 04 RTTY, 06 WFM, 08 RTTY-R, 17 DV modes; 15 14 / 16 meters.

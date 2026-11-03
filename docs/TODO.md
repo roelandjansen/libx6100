@@ -20,6 +20,9 @@ Status: 2026-11-03 (v0.17.3). Summary and next steps: `STATUS.md`.
   send upstream). Writes and clears from CAT only with catmem rw (GEN row CAT MEMORIES;
   default read only: NG). Read all verified 2026-11-02 (X6100.rig). To check on the
   radio: with rw write one, clear one; with ro both NG.
+- CI-V 28 00 (voice TX, 2026-11-03): 01-08 sends message M1-M8, 00 stops; for hamlib
+  `send_voice_mem` (wfview has no control for it). To check on the radio: `rigctl -m 3085
+  -r /tmp/x6100-civ` then `\send_voice_mem 1` (a voice message in USB) and `\stop_voice_mem`.
 - ATU key on (2026-11-02): a toast with the tuner memory in use (kHz, L, C, S) or
   ATU ON: NO MEMORY; verified on the radio 2026-11-02.
 - TX ranges config file and transverter profile (frequency offset, TX enable).
@@ -204,7 +207,7 @@ under GEN until a better key turns up.
   `mkrig.sh` from the IC-705 file; README there). Address 61 (odd: never a real Icom;
   Icom addresses are all even), `civaddr 61` in x6100_trx.conf, 19 00 also answered to
   a broadcast (wfview auto detect). The Icom way (wfview is Icom centred): the IC-705
-  commands and polls kept but the 29 functions the X6100 lacks (2026-11-02, no FA polls
+  commands and polls kept but the 28 functions the X6100 lacks (2026-11-02, no FA polls
   any more); transceive 0131; our spans,
   bands, modes. 1A 00 now the full IC-705 layout (A + B side, name at 100; B = split
   TX side), so the IC-705 file reads names too. Tested in wfview (2026-10-29). To do:

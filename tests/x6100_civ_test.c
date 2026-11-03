@@ -452,6 +452,15 @@ int main(void)
 		check(&civ, "1A 05 01 31", "1A 05 01 31 00");
 		check(&civ, "1A 05 01 31 02", "FA");
 
+		// 28 00: voice TX, messages 1-8 (the mock keeps the value)
+		check(&civ, "28 00 03", "FB");
+		check(&civ, "28 00", "28 00 03");
+		check(&civ, "28 00 00", "FB");
+		check(&civ, "28 00", "28 00 00");
+		check(&civ, "28 00 09", "FA");
+		check(&civ, "28 01 01", "FA");
+		check(&civ, "28", "FA");
+
 		check(&civ, "1A 05 01 18", "1A 05 01 18 00");
 		check(&civ, "1A 05 01 19", "1A 05 01 19 01");
 		check(&civ, "1A 05 01 18 01", "FB");

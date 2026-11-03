@@ -366,7 +366,8 @@ shows `MSG n` while sending, `MSG n AGAIN IN s S` between repeats.
 Console: `msg` (list), `msg <n> cw <text>`, `msg <n> voice <file>`, `msg <n> clear`,
 `msgrepeat <s>`, `msgsend <n>`, `msgstop`. CI-V 17 (send CW, from a logger or wfview) uses
 the same CW sender: its text is added while it sends, 17 FF stops; the scope shows
-`CAT CW`. `build.sh backup` / `restore` keep the
+`CAT CW`. CI-V 28 00 01-08 sends M1-M8 as the MSG panel does, 28 00 00 stops (hamlib
+`send_voice_mem`, voice TX memory T1-T8 on an Icom). `build.sh backup` / `restore` keep the
 messages and the WAV files.
 
 ## SWR scan (APP)

@@ -929,6 +929,31 @@ static size_t cmd_mem_content(req_t *r)
 	return out_end(r->o);
 }
 
+// 28 00: voice TX, IC-705 style: 28 00 01-08 sends voice memory T1-T8 (here message
+// M1-M8), 28 00 00 stops; 28 00 reads the one going out (00: none)
+static size_t cmd_voice(req_t *r)
+{
+	int32_t v;
+
+	if (r->n < 1 || r->d[0] != 0x00)
+		return reply_ng(r);
+
+	if (r->n == 1) {
+		if (!get(r, X6100_CIV_VOICE_TX, 0, &v))
+			return reply_ng(r);
+
+		reply_head(r);
+		out_byte(r->o, 0x28);
+		out_byte(r->o, 0x00);
+		out_byte(r->o, bcd_byte((unsigned) v));
+		return out_end(r->o);
+	}
+
+	int n = r->n == 2 ? bcd_val(r->d[1]) : -1;
+
+	return reply_ok(r, n >= 0 && n <= 8 && set(r, X6100_CIV_VOICE_TX, 0, n));
+}
+
 // 17: send CW, up to 30 characters (IC-705: 0-9 A-Z a-z space / ? . - , : ' ( ) = + " @,
 // ^ before two letters sends them as one sign); 17 FF stops
 static size_t cmd_send_cw(req_t *r)
@@ -1517,6 +1542,9 @@ size_t x6100_civ_process(x6100_civ_t *civ, const uint8_t *frame, size_t len, uin
 		break;
 	case 0x18:
 		n = cmd_power(&r);
+		break;
+	case 0x28:
+		n = cmd_voice(&r);
 		break;
 	case 0x27:
 		n = cmd_scope(&r);

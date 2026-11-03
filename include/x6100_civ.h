@@ -64,6 +64,8 @@
 //                      absolute frequency (27 1C)
 //   MOD_IN             TX audio input, vfo 0 = DATA OFF MOD (1A 05 0118), 1 = DATA MOD
 //                      (0119): 0 MIC, 1 USB (the codec: a Linux program such as wfserver)
+//   VOICE_TX           28 00: 1-8 start message M1-M8 (voice TX memory T1-T8 on an Icom),
+//                      0 stop; get: the message going out, 0 none
 //
 // The vfo argument: 0 = foreground (selected), 1 = background (unselected).
 //
@@ -147,6 +149,7 @@ typedef enum
 	X6100_CIV_VFO_MODE,		/* 07: back to VFO mode */
 	X6100_CIV_BKIN,			/* 16 47: break-in 00 off, 01 semi, 02 full */
 	X6100_CIV_DASH_RATIO,		/* 1A 05 0252: dash ratio x10, 28-45 */
+	X6100_CIV_VOICE_TX,		/* 28 00: message 1-8 playing / start, 0 none / stop */
 	X6100_CIV_ITEM_COUNT
 } x6100_civ_item_t;
 

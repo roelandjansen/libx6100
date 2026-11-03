@@ -9095,6 +9095,9 @@ static bool cat_get(void *ctx, x6100_civ_item_t item, int vfo, int32_t *v)
 	case X6100_CIV_DASH_RATIO:	/* 1A 05 0252: the keyer RATIO, x10 */
 		*v = rx->ratio;
 		return true;
+	case X6100_CIV_VOICE_TX:	/* 28 00: the message going out (CI-V 17 text is 0: none) */
+		*v = rx->send == SEND_MSG ? g_send.msg : 0;
+		return true;
 	case X6100_CIV_MOD_IN:		/* vfo 0 DATA OFF MOD, 1 DATA MOD */
 		*v = g_modin[vfo != 0];
 		return true;
@@ -9131,6 +9134,17 @@ static bool cat_set(void *ctx, x6100_civ_item_t item, int vfo, int32_t v)
 		break;
 	case X6100_CIV_DASH_RATIO:	/* 28-45, the keyer panel takes 25-45 */
 		rx->ratio = clampi(v, 25, 45);
+		break;
+	case X6100_CIV_VOICE_TX:	/* 28 00 01-08: message M1-M8 as the MSG key (voice: not in CW;
+				   CW: CW mode only); 00 stops a message going out */
+		if (v == 0) {
+			if (rx->send == SEND_MSG && g_send.msg > 0)
+				send_stop(rx);
+			break;
+		}
+
+		if (!msg_start(rx, v))
+			return false;
 		break;
 	case X6100_CIV_VFO_MODE:	/* 07: back to the VFO as it was */
 		mem_mode_off(rx);
