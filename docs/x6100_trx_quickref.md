@@ -216,6 +216,9 @@ Values are kept in the last state (see Settings); defaults NR 20, NB 10 / 10, no
 
 ## Settings panel (GEN)
 
+
+Changed rows go into the state file 2 s after the last change (not only at exit), so a
+kill or a power loss keeps them; a row set in `x6100_trx.conf` cannot be changed here.
 ![GEN settings](images/x6100_trx_gen.png)
 
 | Row | Values | When |

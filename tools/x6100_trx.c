@@ -614,6 +614,8 @@ enum { GEN_BRIGHT, GEN_CAT, GEN_CIVADDR, GEN_CATMEM, GEN_CATTIME, GEN_MODOFF, GE
 	GEN_BTDEV, GEN_BSCAN, GEN_BMARK, GEN_BNOTCH, GEN_ROWS };	/* GEN rows */
 
 static void gen_adjust(int row, int dir, bool def);
+static uint64_t g_gen_save_at;	/* GEN setting changed: the state goes to disk at this time (ms), 0 none */
+#define GEN_SAVE_MS	2000		/* after the last GEN change: one write for a run of MFK steps */
 
 static void on_signal(int sig)
 {
@@ -5705,6 +5707,8 @@ static void gen_adjust(int row, int dir, bool def)
 	if (g_conf_set & (1u << row))
 		return;
 
+	g_gen_save_at = now_ms() + GEN_SAVE_MS;	/* on disk soon, not only at exit */
+
 	switch (row) {
 	case GEN_BRIGHT:
 		g_bright = def ? 100 : clampi((g_bright > 0 ? g_bright : 100) + dir * 5, 5, 100);
@@ -10696,6 +10700,12 @@ int main(int argc, char **argv)
 		if ((rx.gedit && t - rx.gedit_since >= 10000) || (rx.ginfo && t - rx.ginfo_since >= 30000)) {
 			rx.gedit = rx.ginfo = false;
 			dirty = true;
+		}
+
+		// A GEN setting changed: the state on disk (a kill or power loss keeps it)
+		if (g_gen_save_at != 0 && t >= g_gen_save_at) {
+			g_gen_save_at = 0;
+			state_save(&rx);
 		}
 
 		// Birdie scan asked for (GEN row, console): start / stop here, with rx at hand

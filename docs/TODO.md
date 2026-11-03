@@ -23,6 +23,9 @@ Status: 2026-11-03 (v0.17.3). Summary and next steps: `STATUS.md`.
 - CI-V 28 00 (voice TX, 2026-11-03): 01-08 sends message M1-M8, 00 stops; for hamlib
   `send_voice_mem` (wfview has no control for it). To check on the radio: `rigctl -m 3085
   -r /tmp/x6100-civ` then `\send_voice_mem 1` (a voice message in USB) and `\stop_voice_mem`.
+- GEN rows saved 2 s after a change (2026-11-03; before only at exit: a GEN BLUETOOTH
+  OFF was lost once). `bt off` in the state verified after a quit. To check: switch a
+  row, wait 2 s, kill x6100_trx: the state has it; Bluetooth comes up off after a reboot.
 - Clock from CAT (2026-11-03): 1A 05 0165 / 0166 / 0170 (wfview Set Clock, set radio time
   on connect) set the Linux clock while NTP does not keep it (cattime unsynced, the
   default; GEN row CAT CLOCK). To check on the radio: no WiFi after a cold start (clock
