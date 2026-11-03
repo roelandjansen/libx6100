@@ -70,6 +70,9 @@ BEGIN {
 	set["Commands", "CIV Transceive", "String"] = "\\\\x1a\\\\x05\\\\x01\\\\x31"
 	# The IC-705 file has \\x1a\\00 (the x missing): wfview sends 1A 5C 30 30, NG
 	set["Commands", "Memory Contents", "String"] = "\\\\x1a\\\\x00"
+	# 16 12 is the AGC select (FAST / MID / SLOW): wfview calls that AGC Status (as in its
+	# IC-7300 file); the IC-705 file files it under AGC Time Constant, which is 1A 04
+	set["Commands", "AGC Time Constant", "Type"] = "AGC Status"
 	set["Commands", "Preamp Status", "Max"] = "1"
 	set["Commands", "Scope Span", "Max"] = "5"
 	set["Commands", "Tuning Step", "Max"] = "13"
