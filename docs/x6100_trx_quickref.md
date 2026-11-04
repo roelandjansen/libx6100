@@ -38,7 +38,7 @@ Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
 | VOL knob | volume; push = mute | |
 | MFK knob | RF gain or TX power | |
 | MFK push | RF gain 100 / TX power 5.0 W | switch RF gain <-> TX power |
-| BAND- / BAND+ | previous / next band (last frequency per band kept): 160m .. 6m, 4m (70.0-70.5 MHz, receive; TX not in the band plan) with GEN in between at its frequency (GEN 5450 kHz: .. 60m, GEN, 40m ..; below 160m or above 4m: between 4m and 160m); GEN is everything outside the ham bands (last frequency and mode there; 10.000 MHz AM out of the box; state `gen <Hz> <mode>`) | |
+| BAND- / BAND+ | previous / next band (last frequency per band kept): 160m .. 6m, 4m (70.0-70.5 MHz; TX in region nl only, check the output first: it is past the 6 m low-pass filters) with GEN in between at its frequency (GEN 5450 kHz: .. 60m, GEN, 40m ..; below 160m or above 4m: between 4m and 160m); GEN is everything outside the ham bands (last frequency and mode there; 10.000 MHz AM out of the box; state `gen <Hz> <mode>`) | |
 | SSB / CW / AM-FM | USB <-> LSB / CW <-> CWR / AM <-> NFM | |
 | A/B | VFO A <-> B (frequency, mode, filter) | A=B: the other VFO takes the one in use |
 | PRE | attenuator on / off (~12 dB) | preamp on / off |
@@ -349,7 +349,7 @@ The status line starts with the VFO in use (A / B); with split, RIT or XIT it ad
 | `birdiescan [all]`, `birdiestop`, `birdies`, `birdieclear` | birdie scan (this band / all), stop, list, clear |
 | `birdiemarks`, `nobirdiemarks`, `birdienotch`, `nobirdienotch` | birdie ticks, automatic notch on / off |
 | `vfob 7074000 lsb fil1`, `vfo a\|b` | the VFO not in use; which one is in use (state file) |
-| `region r1\|r2\|r3\|nl` | transmit allocations for the TX check and the OOB marker (default r1) |
+| `region r1\|r2\|r3\|nl` | transmit allocations for the TX check and the OOB marker (default r1); nl also has 4 m (70.0-70.5 MHz) |
 | `oob`, `nolimit` | as `--oob` / `--no-limit` (settings file): warned at every start, red OOB on the dial |
 | `freqmin 148500`, `freqmax 75000000` | tuning range in Hz (VFO, CAT, memories), each within 5 kHz - 75 MHz, freqmin below freqmax; default 148.5 kHz (the LW broadcast band edge; below it MW bleeds through, 77.5 kHz tried) - 75 MHz (RX and TX work up to there, 2026-11-04; TX above 54 MHz is past the low-pass filters: into a dummy load only); kept in the state; below the IF shift (a few kHz) the LO goes above the receive frequency |
 

@@ -407,7 +407,9 @@ _Static_assert(sizeof(g_bands) / sizeof(g_bands[0]) == BAND_MAX, "band_freq[] in
 // selected region (conf token region); g_bands above stays the band memory and
 // BAND key range. Sources: ITU RR / IARU band plans; NL: Regeling gebruik van
 // frequentieruimte zonder vergunning en met meldingsplicht (stcrt 2015-3772,
-// 2021-31799) for F registration, 60 m per WRC-15.
+// 2021-31799) for F registration, 60 m per WRC-15, 4 m 70.0-70.5 MHz. TX above 54 MHz
+// is past the X6100's low-pass filters: check the output on a spectrum analyser before
+// going on air there.
 //
 
 typedef struct
@@ -438,7 +440,8 @@ static const region_t g_regions[] = {
 	{ "nl", {
 		{ 1810000, 1880000 }, { 3500000, 3800000 }, { 5351500, 5366500 }, { 7000000, 7200000 },
 		{ 10100000, 10150000 }, { 14000000, 14350000 }, { 18068000, 18168000 }, { 21000000, 21450000 },
-		{ 24890000, 24990000 }, { 28000000, 29700000 }, { 50000000, 52000000 } } },
+		{ 24890000, 24990000 }, { 28000000, 29700000 }, { 50000000, 52000000 },
+		{ 70000000, 70500000 } } },	/* 4 m (2026-11-04); no ITU allocation, so not in r1-r3 */
 };
 
 #define REGION_COUNT	((int) (sizeof(g_regions) / sizeof(g_regions[0])))
