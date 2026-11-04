@@ -36,7 +36,7 @@
  * Console (ssh):
  *   x6100_trx [freq] [mode]           start values, e.g. x6100_trx 7074000 lsb
  *   x6100_trx --oob ...               no band check before TX (test use; legal limits are yours)
- *   x6100_trx --no-limit ...          tune 10 kHz - 100 MHz instead of 0.5 - 56 MHz (baseband probe)
+ *   x6100_trx --no-limit ...          tune 10 kHz - 100 MHz instead of freqmin - freqmax (baseband probe)
  *   type a line + Enter while running:
  *     7074000 | 7.074 | 7074k         frequency (Hz, MHz with '.', or kHz with 'k')
  *     usb lsb cw cwr am nfm           mode
@@ -99,13 +99,14 @@ static bool g_cat_log;	/* --cat-log: print CI-V frames in and out */
 
 //
 // Tuning range: freqmin / freqmax (conf, console, state), within FREQ_LIM_LO - FREQ_LIM_HI
-// while the limits the baseband takes are found out (2026-11-04); default 500 kHz -
-// 56 MHz as before. --no-limit: 10 kHz - 100 MHz, to probe the baseband
+// while the limits the baseband takes are found out (2026-11-04). Default 148.5 kHz, the
+// LW broadcast band edge (below it MW bleeds through: 77.5 kHz tried, 2026-11-04), to
+// 56 MHz. --no-limit: 10 kHz - 100 MHz, to probe the baseband
 //
 
 #define FREQ_LIM_LO	5000u
 #define FREQ_LIM_HI	75000000u
-#define FREQ_MIN_DEF	500000u
+#define FREQ_MIN_DEF	148500u
 #define FREQ_MAX_DEF	56000000u
 
 static uint32_t g_freq_min = FREQ_MIN_DEF;
@@ -8051,7 +8052,7 @@ static bool console_line(rx_t *rx, char *line)
 		}
 
 		// freqmin / freqmax <Hz>: the tuning range, within 5 kHz - 75 MHz while the limits
-		// the baseband takes are found out; default 500 kHz - 56 MHz (conf, console, state)
+		// the baseband takes are found out; default 148.5 kHz - 56 MHz (conf, console, state)
 		if (strcasecmp(t, "freqmin") == 0 || strcasecmp(t, "freqmax") == 0) {
 			bool lo = strcasecmp(t, "freqmin") == 0;
 			const char *v = strtok(NULL, " \t\r\n");

@@ -22,7 +22,7 @@ x6100_trx --oob 5450000 usb slow
 | Option | Effect |
 |---|---|
 | `--oob` | no band check before TX, baseband TX enabled everywhere (transverter, tests; legal limits are yours) |
-| `--no-limit` | tune 10 kHz - 100 MHz instead of `freqmin` - `freqmax` (default 0.5 - 56 MHz; baseband probe); put it before the frequency |
+| `--no-limit` | tune 10 kHz - 100 MHz instead of `freqmin` - `freqmax` (default 148.5 kHz - 56 MHz; baseband probe); put it before the frequency |
 | `--cat[=baud\|pty]` | CI-V as an IC-705 on /dev/ttyS2 (DEV USB-C, PC side the second CH342 port, e.g. ttyACM1), 4800-19200, default 19200 (the most the DEV port carries); `pty`: on a pseudo-terminal, /tmp/x6100-civ, any speed, for a client on the radio (wfserver, rigctld, socat). See `docs/x6100_civ.md` |
 | `--cat-log` | as `--cat`, and print CI-V commands (`>`) with our OK / NG reply (`<`); polls answered with data are not shown |
 | `--probe` | print the flow flag word on change, and every second the IQ peak and all flag bits seen (overflow hunt) |
@@ -351,7 +351,7 @@ The status line starts with the VFO in use (A / B); with split, RIT or XIT it ad
 | `vfob 7074000 lsb fil1`, `vfo a\|b` | the VFO not in use; which one is in use (state file) |
 | `region r1\|r2\|r3\|nl` | transmit allocations for the TX check and the OOB marker (default r1) |
 | `oob`, `nolimit` | as `--oob` / `--no-limit` (settings file): warned at every start, red OOB on the dial |
-| `freqmin 500000`, `freqmax 56000000` | tuning range in Hz (VFO, CAT, memories), each within 5 kHz - 75 MHz, freqmin below freqmax; default 500 kHz - 56 MHz (2026-11-04, while the limits the baseband takes are found out); kept in the state; below the IF shift (a few kHz) the LO goes above the receive frequency |
+| `freqmin 148500`, `freqmax 56000000` | tuning range in Hz (VFO, CAT, memories), each within 5 kHz - 75 MHz, freqmin below freqmax; default 148.5 kHz (the LW broadcast band edge; below it MW bleeds through, 77.5 kHz tried) - 56 MHz (2026-11-04); kept in the state; below the IF shift (a few kHz) the LO goes above the receive frequency |
 
 ## Messages (MSG)
 

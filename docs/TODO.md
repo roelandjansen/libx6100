@@ -34,7 +34,8 @@ Status: 2026-11-03 (v0.17.4). Summary and next steps: `STATUS.md`.
   kHz shift (a few Hz at most). Birdies found before this have their frequency off by up to 4 % of their
   distance from the scan centre (up to about 2 kHz): scan again (GEN BIRDIE SCAN).
 - Tuning range (2026-11-04): `freqmin` / `freqmax` (Hz, conf / console / state) within
-  5 kHz - 75 MHz, default 500 kHz - 56 MHz. To find out on the radio: where the baseband
+  5 kHz - 75 MHz, default 148.5 kHz (LW band edge: at 77.5 kHz MW bleeds through, LW 198
+  kHz fine) - 56 MHz. Still to find out: the upper end, where the baseband
   still tunes and receives (low end: LW / VLF, the LO above below 10 kHz; high end:
   56-75 MHz), then settle the defaults and the allowed range.
 - LAN and CAT indicators under the scope clock (2026-11-03): LAN while a wfview client is
