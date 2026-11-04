@@ -41,7 +41,7 @@ data are the IC-705's. Only the identity and what the radio can do differ:
 | CI-V transceive | 1A 05 0112 | 1A 05 0131 (the IC-705 item, as hamlib has it; 0112 is the IC-7610's) |
 | Tuning step | codes 0-8 | 0-13 (as the IC-705's step list in the same file) |
 | Scope spans | ±2.5-500 kHz | ±1.5, 3, 6, 12, 24, 48 kHz (the 96 kHz IQ); Scope Span max 5 |
-| Bands | HF, 6 m, 2 m, 70 cm, air, WFM, LF | HF, 60 m, 6 m; Gen 0.1485-54 MHz |
+| Bands | HF, 6 m, 2 m, 70 cm, air, WFM, LF | HF, 60 m, 6 m; Gen 0.1485-75 MHz |
 | Modes | 10 | LSB, USB, AM, CW, FM, CW-R; AM filter up to 6 kHz |
 | Preamp | off, 1, 2 | off, on (Preamp Status max 1) |
 | Inputs | MIC, USB, M/U, WLAN | MIC, USB |

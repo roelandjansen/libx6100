@@ -101,13 +101,14 @@ static bool g_cat_log;	/* --cat-log: print CI-V frames in and out */
 // Tuning range: freqmin / freqmax (conf, console, state), within FREQ_LIM_LO - FREQ_LIM_HI
 // while the limits the baseband takes are found out (2026-11-04). Default 148.5 kHz, the
 // LW broadcast band edge (below it MW bleeds through: 77.5 kHz tried, 2026-11-04), to
-// 56 MHz. --no-limit: 10 kHz - 100 MHz, to probe the baseband
+// 75 MHz (RX works up to there, 4 m included, 2026-11-04). --no-limit: 10 kHz - 100 MHz,
+// to probe the baseband
 //
 
 #define FREQ_LIM_LO	5000u
 #define FREQ_LIM_HI	75000000u
 #define FREQ_MIN_DEF	148500u
-#define FREQ_MAX_DEF	56000000u
+#define FREQ_MAX_DEF	75000000u
 
 static uint32_t g_freq_min = FREQ_MIN_DEF;
 static uint32_t g_freq_max = FREQ_MAX_DEF;
@@ -3478,10 +3479,10 @@ static bool on_key(rx_t *rx, int key)
 				: rx->step == 9000 ? 10000 : rx->step == 10000 ? 100000 : 100;
 		else if (on_60m(rx))	/* 60 m: CH steps through the channel list */
 			rx->step = rx->step == 10 ? 100 : rx->step == 100 ? 1000 : rx->step == 1000 ? 5000
-				: rx->step == 5000 ? STEP_CH : rx->step == STEP_CH ? 100000 : 10;
+				: rx->step == 5000 ? STEP_CH : rx->step == STEP_CH ? 10000 : rx->step == 10000 ? 100000 : 10;
 		else
 			rx->step = rx->step == 10 ? 100 : rx->step == 100 ? 1000 : rx->step == 1000 ? 5000
-				: rx->step == 5000 ? 100000 : 10;
+				: rx->step == 5000 ? 10000 : rx->step == 10000 ? 100000 : 10;
 		break;
 	case X6100_KEY_BAND_UP:
 		band_step(rx, +1);
@@ -8055,7 +8056,7 @@ static bool console_line(rx_t *rx, char *line)
 		}
 
 		// freqmin / freqmax <Hz>: the tuning range, within 5 kHz - 75 MHz while the limits
-		// the baseband takes are found out; default 148.5 kHz - 56 MHz (conf, console, state)
+		// the baseband takes are found out; default 148.5 kHz - 75 MHz (conf, console, state)
 		if (strcasecmp(t, "freqmin") == 0 || strcasecmp(t, "freqmax") == 0) {
 			bool lo = strcasecmp(t, "freqmin") == 0;
 			const char *v = strtok(NULL, " \t\r\n");

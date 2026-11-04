@@ -78,7 +78,7 @@ BEGIN {
 	set["Commands", "Scope Span", "Max"] = "5"
 	set["Commands", "Tuning Step", "Max"] = "13"
 	set["Bands", "Gen", "Start"] = "148500"	# x6100_trx freqmin default (LW)
-	set["Bands", "Gen", "End"] = "54000000"
+	set["Bands", "Gen", "End"] = "75000000"	# x6100_trx freqmax default
 	set["Modes", "AM", "Max"] = "6000"
 	set["Preamps", "1", "Name"] = "PREAMP"
 	# Header
