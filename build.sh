@@ -216,13 +216,36 @@ deploy() {
 
 	settings_seed
 	deploy_wfserver
+	deploy_rade
+}
 
-	# The RADE benchmark (contrib/rade/build.sh), when built: small, copied every time
-	if [[ -x "${C_OUT}/rade/rade_tx_wav" ]]; then
-		ssh -- "${G_HOST}" "mkdir -p /root/rade"
-		scp -q -- "${C_OUT}"/rade/* "${G_HOST}:/root/rade/"
-		printf 'deployed %s to %s:/root/rade (run /root/rade/rade_bench.sh)\n' "${C_OUT}/rade" "${G_HOST}"
+#
+# The RADE benchmark (contrib/rade/build.sh), when built: copied only when it changed
+# (the model makes it tens of MB: a long wait over WiFi every deploy). A checksum over
+# the files is kept on the radio in /root/rade/.sum
+#
+
+deploy_rade() {
+	local L_SUM
+	local L_HAVE
+
+	if [[ ! -x "${C_OUT}/rade/rade_tx_wav" ]]; then
+		return 0
 	fi
+
+	L_SUM="$(cd -- "${C_OUT}/rade" && sha256sum -- * | sha256sum | cut -d ' ' -f 1)"
+	L_HAVE="$(ssh -- "${G_HOST}" "cat /root/rade/.sum 2>/dev/null" || true)"	# not there: empty
+
+	if [[ "${L_SUM}" == "${L_HAVE}" ]]; then
+		printf '%s\n' "rade: /root/rade up to date"
+		return 0
+	fi
+
+	printf '%s\n' "rade: sending ${C_OUT}/rade to ${G_HOST}"
+	ssh -- "${G_HOST}" "mkdir -p /root/rade && rm -f /root/rade/.sum"
+	scp -q -C -- "${C_OUT}"/rade/* "${G_HOST}:/root/rade/"
+	ssh -- "${G_HOST}" "printf '%s\n' ${L_SUM} > /root/rade/.sum"
+	printf 'deployed %s to %s:/root/rade (run /root/rade/rade_bench.sh)\n' "${C_OUT}/rade" "${G_HOST}"
 }
 
 #
