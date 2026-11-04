@@ -301,8 +301,8 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
 26. LAN / CAT indicators: LAN with wfview over the network verified 2026-11-04; still CAT
     with a client on the DEV port.
 
-27. 4 m: the band key works (2026-11-04); still receive on 70.0-70.5 MHz, the X6100.rig
-    4m button in wfview; TX only after a spectrum
+27. 4 m: the band key and the X6100.rig 4m button in wfview work (2026-11-04); still
+    receive on 70.0-70.5 MHz; TX only after a spectrum
     check (above the 6 m low-pass filters).
 28. FST cycle 10 / 100 / 1k / 5k / 10k / 100k; AGC MID in AUTO (MID 5 vs 300).
 29. Region uk: add the UK 60 m segments (Ofcom licence terms).
