@@ -43,7 +43,8 @@ Status: 2026-11-03 (v0.17.4). Summary and next steps: `STATUS.md`.
   TX allowed in regions nl and uk (70.0-70.5 MHz; NL: F registration; no ITU allocation, so
   not in r1-r3). The output above 54 MHz is past the 6 m low-pass filters: check it on
   a spectrum analyser (harmonics, power reading) before going on air. No IC-705 band
-  code for 4 m (1A 01), no fixed edge range (the IC-705 ranges end at 60 MHz).
+  code for 4 m (1A 01): X6100.rig has a 4m band as wfview's IC-7300 / 7100 files (BSR 0,
+  the button sets the frequency); no fixed edge range (the IC-705 ranges end at 60 MHz).
 - Region uk (2026-11-04): r1 with 4 m; 60 m as WRC-15 for now. The UK has its own 60 m
   segments (5258.5-5406.5 kHz, several pieces): to add from the Ofcom licence terms,
   then the 60 m channel list (FST CH) for uk as well.

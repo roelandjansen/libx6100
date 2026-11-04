@@ -136,7 +136,7 @@ FNR == NR {
 # Between the passes: what to keep, new numbers
 FNR == 1 {
 	for (s in last) {
-		cnt[s] = 0
+		cnt[s] = s == "Bands" ? 1 : 0	# Bands 1: 4m, added below (first, as in the IC-7300 file)
 		for (i = 1; i <= last[s]; i++) {
 			k = (s, i) in name ? name[s, i] : ""
 			if (!(s in keyf) || (s in all))
@@ -164,6 +164,17 @@ FNR == 1 {
 	}
 	if (match($0, /^[A-Za-z%0-9]+\\size=/)) {
 		s = substr($0, 1, index($0, "\\") - 1)
+		if (s == "Bands") {
+			# 4 m as wfview has it for the IC-7300 / IC-7100: no band stacking register
+			# (BSR 0: the button sets the frequency), Range 0 (no 13th fixed edge range).
+			# Index 1, the slot kept free above; the IC-705 bands follow from 2
+			c = 1
+			printf "Bands\\%d\\Region=\nBands\\%d\\Num=9\nBands\\%d\\BSR=0\n", c, c, c
+			printf "Bands\\%d\\Start=70000000\nBands\\%d\\End=70500000\nBands\\%d\\Range=0\n", c, c, c
+			printf "Bands\\%d\\MemoryGroup=-1\nBands\\%d\\Name=4m\nBands\\%d\\Bytes=5\n", c, c, c
+			printf "Bands\\%d\\Power=10\nBands\\%d\\Antennas=true\nBands\\%d\\Offset=0\n", c, c, c
+			printf "Bands\\%d\\Color=#ffffaaff\n", c
+		}
 		if (s == "Commands") {
 			# 14 0D notch position (manual notch frequency)
 			c = cnt[s]
