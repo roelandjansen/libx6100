@@ -36,7 +36,8 @@ Status: 2026-11-03 (v0.17.4). Summary and next steps: `STATUS.md`.
 - LAN and CAT indicators under the scope clock (2026-11-03): LAN while a wfview client is
   connected through wfserver (UDP rate from /proc/net/snmp, wfserver running), CAT while
   CI-V frames arrive (3 s; the pty only without wfserver, which polls it with no client
-  too: CAT was on with no client, 2026-11-03). To check: LAN comes when wfview connects over the network and
+  too: CAT was on with no client, 2026-11-03; blank with only wfserver verified 2026-11-04).
+  To check: LAN comes when wfview connects over the network and
   goes about 3 s after it disconnects; CAT with rigctl on the DEV port; no LAN with only
   NTP / DNS traffic.
 - AGC SLOW / FAST times and HANG (AGC long panel, rows 7-9) and LINE IN / LINE OUT
@@ -46,7 +47,7 @@ Status: 2026-11-03 (v0.17.4). Summary and next steps: `STATUS.md`.
 - Battery (2026-11-03): the gauge reads 99 when full (stock UI and IU1WXY show 100):
   shown as 100 now. Flow flag bit 4 ("charging" in X6100Control) tested on the radio: it
   stayed 0 while charging from 98 to 100 % on external power, so not used; CHARGING below
-  100 % on external power, else FULL, as before (to see once more: 98 % CHARGING, then FULL).
+  100 % on external power, else FULL, as before: verified 2026-11-04.
 - Hand mic keys (to do): the flow frame carries them in `hkey` (X6100Control: F1 0x48,
   F2 0x44, UP 0x84, DOWN 0x04, V/M 0x81, 0-9, MODE, FIL, ...); the stock UI 1.2.0 lets
   HANDLE F1 / F2 do PRE, NR etc. First: log hkey on the radio while pressing them.
