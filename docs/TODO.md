@@ -56,7 +56,9 @@ Status: 2026-11-04 (v0.17.5). Summary and next steps: `STATUS.md`.
   check: CAT with rigctl on the DEV port.
 - AGC SLOW / FAST times and HANG (AGC long panel, rows 7-9) and LINE IN / LINE OUT
   (TX panel), as the stock UI 1.2.0 (2026-11-03): registers 28, 27 bit 12, 20 [15:0].
-  To check on the radio: SLOW 250 vs 50 audible on a fading signal, HANG, LINE IN with
+  AUTO follows neither MID nor FAST (2026-11-04: by mode in the baseband; the MID row,
+  added that day, removed again). To check on the radio: SLOW 250 vs 50 audible on a
+  fading signal, HANG, LINE IN with
   wfserver TX audio (DATA MOD USB: ALC / power follow it).
 - Battery (2026-11-03): the gauge reads 99 when full (stock UI and IU1WXY show 100):
   shown as 100 now. Flow flag bit 4 ("charging" in X6100Control) tested on the radio: it

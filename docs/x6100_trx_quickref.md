@@ -587,7 +587,9 @@ there is no local backup.
 - AGC SLOW, AGC FAST, AGC HANG, the last rows of the same panel (2026-11-03, as the stock
   UI 1.2.0 RADIO SETTING1): the AGC time constants in units of 10 ms, SLOW 20-1000
   (250 = 2.5 s; 10 ms steps, 50 ms from 1 s), FAST 1-100 (5 = 50 ms), and hang on /
-  off (off); MFK long = default. Registers 28 (slow / mid / fast; mid, for AUTO, stays
+  off (off); MFK long = default. AGC AUTO follows none of them: it picks its time by mode
+  in the baseband (2026-11-04: MID and FAST changed in AUTO made no difference). Registers
+  28 (slow / mid / fast; mid stays
   50) and 27 bit 12. Console / conf / state: `agcslow 250`, `agcfast 5`, `agchang off`.
 
 - Top left of the spectrum (amber): `SPLIT TX 7.120.00 LSB  RIT +120` or

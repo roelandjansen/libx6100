@@ -1028,7 +1028,9 @@ static int g_am_ofs = AM_OFS_DEF;	/* conf / console token am_offset, 0 = off; AG
 //
 // AGC time constants (register 28, units of 10 ms) and hang (register 27 bit 12), as the
 // stock UI 1.2.0 has them (RADIO SETTING1: AGC SLOW 250, AGC FAST 5, AGC HANG OFF, the
-// values x6100_ctl_init writes). The middle one (AUTO, as we read it) stays at 50.
+// values x6100_ctl_init writes). The middle one stays at 50: AGC AUTO does not follow it
+// (nor FAST): AUTO picks its time by mode in the baseband, as tried 2026-11-04 (MID 5 / 300
+// and FAST 100 in AUTO: no difference; AUTO sounds as FAST in SSB).
 // AGC long panel rows; state / conf tokens agcslow, agcfast, agchang.
 //
 
@@ -8754,6 +8756,12 @@ static bool console_line(rx_t *rx, char *line)
 			want_lvl = slow ? &g_agc_slow : &g_agc_fast;
 			lvl_min = slow ? AGC_SLOW_MIN : AGC_FAST_MIN;
 			lvl_max = slow ? AGC_SLOW_MAX : AGC_FAST_MAX;
+			continue;
+		}
+
+		// agcmid <n>: in state files of 2026-11-04 (the MID / AUTO row, gone): read and dropped
+		if (strcasecmp(t, "agcmid") == 0) {
+			strtok(NULL, " \t\r\n");
 			continue;
 		}
 
