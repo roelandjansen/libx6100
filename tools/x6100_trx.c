@@ -3472,14 +3472,16 @@ static bool on_key(rx_t *rx, int key)
 		rx->nr = !rx->nr;
 		break;
 	case X6100_KEY_FST:
+		// The last step everywhere 100 kHz, to move across a band fast (2026-11-04)
 		if (am_broadcast(rx))	/* LW / MW in AM: channel steps 9 kHz (EU) and 10 kHz (US) */
 			rx->step = rx->step == 100 ? 1000 : rx->step == 1000 ? 5000 : rx->step == 5000 ? 9000
-				: rx->step == 9000 ? 10000 : 100;
+				: rx->step == 9000 ? 10000 : rx->step == 10000 ? 100000 : 100;
 		else if (on_60m(rx))	/* 60 m: CH steps through the channel list */
 			rx->step = rx->step == 10 ? 100 : rx->step == 100 ? 1000 : rx->step == 1000 ? 5000
-				: rx->step == 5000 ? STEP_CH : 10;
+				: rx->step == 5000 ? STEP_CH : rx->step == STEP_CH ? 100000 : 10;
 		else
-			rx->step = rx->step == 10 ? 100 : rx->step == 100 ? 1000 : rx->step == 1000 ? 5000 : 10;
+			rx->step = rx->step == 10 ? 100 : rx->step == 100 ? 1000 : rx->step == 1000 ? 5000
+				: rx->step == 5000 ? 100000 : 10;
 		break;
 	case X6100_KEY_BAND_UP:
 		band_step(rx, +1);
@@ -7885,11 +7887,12 @@ static bool console_line(rx_t *rx, char *line)
 
 			st = strcasecmp(t, "ch") == 0 ? STEP_CH : st;
 
-			if (st == 1 || st == 10 || st == 100 || st == 1000 || st == 5000 || st == 9000 || st == 10000 || st == STEP_CH) {
+			if (st == 1 || st == 10 || st == 100 || st == 1000 || st == 5000 || st == 9000 || st == 10000
+				|| st == 100000 || st == STEP_CH) {
 				rx->step = st;
 				changed = true;
 			} else {
-				fprintf(stderr, "\nstep must be 1, 10, 100, 1000, 5000 (9000, 10000 on LW / MW AM)\n");
+				fprintf(stderr, "\nstep must be 1, 10, 100, 1000, 5000, 100000 (9000, 10000 on LW / MW AM)\n");
 			}
 
 			continue;
