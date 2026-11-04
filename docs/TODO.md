@@ -40,10 +40,13 @@ Status: 2026-11-03 (v0.17.4). Summary and next steps: `STATUS.md`.
   a dummy load only, unless a spectrum check shows it clean. 4 m TX in the band plan:
   only after that check.
 - 4 m band (2026-11-04): 70.0-70.5 MHz after 6m on the band keys (70.200 USB to start).
-  TX allowed in region nl only (70.0-70.5 MHz, F registration; no ITU allocation, so
+  TX allowed in regions nl and uk (70.0-70.5 MHz; NL: F registration; no ITU allocation, so
   not in r1-r3). The output above 54 MHz is past the 6 m low-pass filters: check it on
   a spectrum analyser (harmonics, power reading) before going on air. No IC-705 band
   code for 4 m (1A 01), no fixed edge range (the IC-705 ranges end at 60 MHz).
+- Region uk (2026-11-04): r1 with 4 m; 60 m as WRC-15 for now. The UK has its own 60 m
+  segments (5258.5-5406.5 kHz, several pieces): to add from the Ofcom licence terms,
+  then the 60 m channel list (FST CH) for uk as well.
 - LAN and CAT indicators under the scope clock (2026-11-03): LAN while a wfview client is
   connected through wfserver (UDP rate from /proc/net/snmp, wfserver running), CAT while
   CI-V frames arrive (3 s; the pty only without wfserver, which polls it with no client

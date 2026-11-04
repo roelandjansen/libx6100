@@ -349,7 +349,7 @@ The status line starts with the VFO in use (A / B); with split, RIT or XIT it ad
 | `birdiescan [all]`, `birdiestop`, `birdies`, `birdieclear` | birdie scan (this band / all), stop, list, clear |
 | `birdiemarks`, `nobirdiemarks`, `birdienotch`, `nobirdienotch` | birdie ticks, automatic notch on / off |
 | `vfob 7074000 lsb fil1`, `vfo a\|b` | the VFO not in use; which one is in use (state file) |
-| `region r1\|r2\|r3\|nl` | transmit allocations for the TX check and the OOB marker (default r1); nl also has 4 m (70.0-70.5 MHz) |
+| `region r1\|r2\|r3\|nl\|uk` | transmit allocations for the TX check and the OOB marker (default r1); nl and uk also have 4 m (70.0-70.5 MHz); uk has 60 m as WRC-15 for now (its own segments 5258.5-5406.5 kHz not yet in) |
 | `oob`, `nolimit` | as `--oob` / `--no-limit` (settings file): warned at every start, red OOB on the dial |
 | `freqmin 148500`, `freqmax 75000000` | tuning range in Hz (VFO, CAT, memories), each within 5 kHz - 75 MHz, freqmin below freqmax; default 148.5 kHz (the LW broadcast band edge; below it MW bleeds through, 77.5 kHz tried) - 75 MHz (RX and TX work up to there, 2026-11-04; TX above 54 MHz is past the low-pass filters: into a dummy load only); kept in the state; below the IF shift (a few kHz) the LO goes above the receive frequency |
 
@@ -393,7 +393,7 @@ stays. The SWR trip is off during the scan (it measures).
 
 ## TX safety
 
-- TX only inside the allocations of the region (`region` in the conf: r1, r2, r3, nl; default r1) and a band the baseband transmits in, unless `oob`
+- TX only inside the allocations of the region (`region` in the conf: r1, r2, r3, nl, uk; default r1) and a band the baseband transmits in, unless `oob`
 - TX timeout (TX panel, `tot`: off, 1, 3, 5 min; 3 out of the box): our PTT (key, CAT) drops;
   a TX keyed outside Linux (hand mic, VOX) cannot be dropped: TX enable (registers 0 / 6)
   goes off and the power to the minimum, and TX stays blocked until a key is pressed

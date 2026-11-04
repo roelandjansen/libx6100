@@ -442,6 +442,11 @@ static const region_t g_regions[] = {
 		{ 10100000, 10150000 }, { 14000000, 14350000 }, { 18068000, 18168000 }, { 21000000, 21450000 },
 		{ 24890000, 24990000 }, { 28000000, 29700000 }, { 50000000, 52000000 },
 		{ 70000000, 70500000 } } },	/* 4 m (2026-11-04); no ITU allocation, so not in r1-r3 */
+	{ "uk", {	/* 60 m as WRC-15 here: the UK has its own segments 5258.5-5406.5 kHz (to add) */
+		{ 1810000, 2000000 }, { 3500000, 3800000 }, { 5351500, 5366500 }, { 7000000, 7200000 },
+		{ 10100000, 10150000 }, { 14000000, 14350000 }, { 18068000, 18168000 }, { 21000000, 21450000 },
+		{ 24890000, 24990000 }, { 28000000, 29700000 }, { 50000000, 52000000 },
+		{ 70000000, 70500000 } } },	/* 4 m */
 };
 
 #define REGION_COUNT	((int) (sizeof(g_regions) / sizeof(g_regions[0])))
@@ -8562,7 +8567,7 @@ static bool console_line(rx_t *rx, char *line)
 			continue;
 		}
 
-		// region r1|r2|r3|nl: transmit allocations for the TX check and OOB marker
+		// region r1|r2|r3|nl|uk: transmit allocations for the TX check and OOB marker
 		if (strcasecmp(t, "region") == 0) {
 			const char *v = strtok(NULL, " \t\r\n");
 			int r = -1;
@@ -8574,7 +8579,7 @@ static bool console_line(rx_t *rx, char *line)
 				g_region = r;
 				changed = true;
 			} else {
-				fprintf(stderr, "\nregion: r1, r2, r3 or nl\n");
+				fprintf(stderr, "\nregion: r1, r2, r3, nl or uk\n");
 			}
 
 			continue;
