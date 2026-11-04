@@ -991,26 +991,30 @@ static int dup_shift(const rx_t *rx)
 
 #define AM_OFS_DEF	100
 #define AM_OFS_MAX	1000
-#define TPARS		9	/* rows of the RIT / XIT / duplex panel (AGC long): ..., AM OFFSET, AGC SLOW / FAST / HANG */
+#define TPARS		10	/* rows of the RIT / XIT / duplex panel (AGC long): ..., AM OFFSET, AGC SLOW / MID / FAST / HANG */
 
 static int g_am_ofs = AM_OFS_DEF;	/* conf / console token am_offset, 0 = off; AGC long panel */
 
 //
 // AGC time constants (register 28, units of 10 ms) and hang (register 27 bit 12), as the
 // stock UI 1.2.0 has them (RADIO SETTING1: AGC SLOW 250, AGC FAST 5, AGC HANG OFF, the
-// values x6100_ctl_init writes). The middle one (AUTO, as we read it) stays at 50.
-// AGC long panel rows; state / conf tokens agcslow, agcfast, agchang.
+// values x6100_ctl_init writes). The middle one (50 = 500 ms, as x6100_ctl_init) is
+// taken to be the one AUTO uses: the stock UI does not show it. AGC long panel rows;
+// state / conf tokens agcslow, agcmid, agcfast, agchang.
 //
 
 #define AGC_SLOW_DEF	250
 #define AGC_SLOW_MIN	20
 #define AGC_SLOW_MAX	1000
+#define AGC_MID_DEF	50
+#define AGC_MID_MIN	5
+#define AGC_MID_MAX	500
 #define AGC_FAST_DEF	5
 #define AGC_FAST_MIN	1
 #define AGC_FAST_MAX	100
-#define AGC_MID		50
 
 static int g_agc_slow = AGC_SLOW_DEF;
+static int g_agc_mid = AGC_MID_DEF;
 static int g_agc_fast = AGC_FAST_DEF;
 static int g_agc_hang;
 
@@ -1438,7 +1442,7 @@ static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 
 	// AGC: hang (knee -60, slope 6 as x6100_ctl_init) and the time constants
 	x6100_ctl_set(ctl, X6100_REG_AGC, X6100_R27(-60, 6, g_agc_hang));
-	x6100_ctl_set(ctl, X6100_REG_AGC_TC, X6100_R28(g_agc_slow, AGC_MID, g_agc_fast));
+	x6100_ctl_set(ctl, X6100_REG_AGC_TC, X6100_R28(g_agc_slow, g_agc_mid, g_agc_fast));
 
 	x6100_set_filter(ctl, mode, low, high);
 	x6100_ctl_set(ctl, X6100_REG_RXVOL, rx->mute ? 0 : (uint32_t) rx->vol);
@@ -3646,8 +3650,10 @@ static bool on_long_key(rx_t *rx, int key)
 			else if (rx->tedit_par == 6)
 				g_agc_slow = AGC_SLOW_DEF;
 			else if (rx->tedit_par == 7)
-				g_agc_fast = AGC_FAST_DEF;
+				g_agc_mid = AGC_MID_DEF;
 			else if (rx->tedit_par == 8)
+				g_agc_fast = AGC_FAST_DEF;
+			else if (rx->tedit_par == 9)
 				g_agc_hang = 0;
 			else if (rx->tedit_par == 5)
 				g_am_ofs = AM_OFS_DEF;
@@ -3926,7 +3932,9 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 			else if (rx->tedit_par == 6)		/* 10 ms steps, 50 ms from 1 s */
 				g_agc_slow = clampi(g_agc_slow + value * X6100_DIR_MFK * (g_agc_slow >= 100 ? 5 : 1), AGC_SLOW_MIN,
 					AGC_SLOW_MAX);
-			else if (rx->tedit_par == 7)
+			else if (rx->tedit_par == 7)		/* 10 ms steps */
+				g_agc_mid = clampi(g_agc_mid + value * X6100_DIR_MFK, AGC_MID_MIN, AGC_MID_MAX);
+			else if (rx->tedit_par == 8)
 				g_agc_fast = clampi(g_agc_fast + value * X6100_DIR_MFK, AGC_FAST_MIN, AGC_FAST_MAX);
 			else
 				g_agc_hang = dir > 0;
@@ -6304,12 +6312,12 @@ static void draw_mem_panel(x6100_lcd_t *lcd, const rx_t *rx)
 //
 // RIT / XIT / duplex panel (AGC long): one offset for both, as on Icom radios,
 // RIT / XIT on or off, repeater duplex and its shift, the AM receive offset, the AGC
-// SLOW / FAST time constants and hang. Green.
+// SLOW / MID (AUTO) / FAST time constants and hang. Green.
 // Five rows in view, scrolling with the selection. MFK turn: offset in 10 Hz steps,
 // on / off on the RIT and XIT rows, AUTO / OFF / DUP- / DUP+, shift in 10 kHz steps,
 // AM offset in 10 Hz steps, AGC times in 10 ms (SLOW 50 ms from 1 s), hang on / off;
-// push: next row; hold: offset 0 (CLEAR), duplex AUTO,
-// shift 100 kHz, AM offset 100 Hz, AGC SLOW 250 / FAST 5 (x10 ms), hang off.
+// push: next row; hold: offset 0 (CLEAR), duplex AUTO, shift 100 kHz, AM offset
+// 100 Hz, AGC SLOW 250 / MID 50 / FAST 5 (x10 ms), hang off.
 //
 
 static void draw_rit_panel(x6100_lcd_t *lcd, const rx_t *rx)
@@ -6317,7 +6325,7 @@ static void draw_rit_panel(x6100_lcd_t *lcd, const rx_t *rx)
 	static const char *hint = "MFK: ADJUST  PUSH: NEXT  HOLD: CLEAR";
 	static const char *dups[DUP_COUNT] = { "AUTO", "OFF", "DUP-", "DUP+" };
 	static const char *names[TPARS] = { "OFFSET", "RIT  RX", "XIT  TX", "DUPLEX", "SHIFT", "AM OFFSET", "AGC SLOW",
-		"AGC FAST", "AGC HANG" };
+		"AGC MID / AUTO", "AGC FAST", "AGC HANG" };	/* the panel font has no ( ) */
 	const int vis = 5, px = LBL_W + 8, py = SPEC_Y + 16, pw = 480, ph = 134;
 	const int top = clampi(rx->tedit_par - 2, 0, TPARS - vis);
 	const uint32_t bg = 0x0C180C, green = 0x60D060, sel = 0x1C3A1C, dim = 0x80A080, white = 0xF0F0F0;
@@ -6342,8 +6350,9 @@ static void draw_rit_panel(x6100_lcd_t *lcd, const rx_t *rx)
 		snprintf(v[5], sizeof(v[5]), "OFF");
 
 	snprintf(v[6], sizeof(v[6]), "%d X10 MS", g_agc_slow);
-	snprintf(v[7], sizeof(v[7]), "%d X10 MS", g_agc_fast);
-	snprintf(v[8], sizeof(v[8]), "%s", g_agc_hang ? "ON" : "OFF");
+	snprintf(v[7], sizeof(v[7]), "%d X10 MS", g_agc_mid);
+	snprintf(v[8], sizeof(v[8]), "%d X10 MS", g_agc_fast);
+	snprintf(v[9], sizeof(v[9]), "%s", g_agc_hang ? "ON" : "OFF");
 
 	x6100_lcd_fill(lcd, px, py, pw, ph, bg);
 	x6100_lcd_fill(lcd, px, py, 3, ph, green);
@@ -6357,8 +6366,8 @@ static void draw_rit_panel(x6100_lcd_t *lcd, const rx_t *rx)
 
 	for (int i = top; i < top + vis; i++) {
 		const bool lit[TPARS] = { true, rx->rit, rx->xit, shift != 0, rx->dup == DUP_MINUS || rx->dup == DUP_PLUS,
-			g_am_ofs > 0 && rx->mode == X6100_MODE_AM, rx->agc == X6100_AGC_SLOW, rx->agc == X6100_AGC_FAST,
-			g_agc_hang != 0 };
+			g_am_ofs > 0 && rx->mode == X6100_MODE_AM, rx->agc == X6100_AGC_SLOW, rx->agc == X6100_AGC_AUTO,
+			rx->agc == X6100_AGC_FAST, g_agc_hang != 0 };
 		int y = py + 30 + (i - top) * 21;
 		uint32_t c = i == 0 ? white : lit[i] ? on : off;
 
@@ -8683,13 +8692,14 @@ static bool console_line(rx_t *rx, char *line)
 			continue;
 		}
 
-		// agcslow / agcfast <x10 ms>, agchang on | off: AGC time constants and hang (AGC long)
-		if (strcasecmp(t, "agcslow") == 0 || strcasecmp(t, "agcfast") == 0) {
-			bool slow = strcasecmp(t, "agcslow") == 0;
+		// agcslow / agcmid / agcfast <x10 ms>, agchang on | off: AGC time constants and
+		// hang (AGC long)
+		if (strcasecmp(t, "agcslow") == 0 || strcasecmp(t, "agcmid") == 0 || strcasecmp(t, "agcfast") == 0) {
+			int k = strcasecmp(t, "agcslow") == 0 ? 0 : strcasecmp(t, "agcmid") == 0 ? 1 : 2;
 
-			want_lvl = slow ? &g_agc_slow : &g_agc_fast;
-			lvl_min = slow ? AGC_SLOW_MIN : AGC_FAST_MIN;
-			lvl_max = slow ? AGC_SLOW_MAX : AGC_FAST_MAX;
+			want_lvl = k == 0 ? &g_agc_slow : k == 1 ? &g_agc_mid : &g_agc_fast;
+			lvl_min = k == 0 ? AGC_SLOW_MIN : k == 1 ? AGC_MID_MIN : AGC_FAST_MIN;
+			lvl_max = k == 0 ? AGC_SLOW_MAX : k == 1 ? AGC_MID_MAX : AGC_FAST_MAX;
 			continue;
 		}
 
@@ -8850,8 +8860,8 @@ static void state_write(const rx_t *rx)
 	fprintf(fp, "vfob %u %s fil%d vfo %s\n", (unsigned) rx->b_freq, modes[rx->b_mode], rx->b_fil + 1, rx->on_b ? "b" : "a");
 	fprintf(fp, "%s %s %s ritofs %d pbtin %d pbtout %d\n", rx->split ? "txsplit" : "notxsplit", rx->rit ? "rit" : "norit",
 		rx->xit ? "xit" : "noxit", rx->rit_hz, rx->pbt_in, rx->pbt_out);
-	fprintf(fp, "%s dupshift %d am_offset %d ifshift %d ifshift_tx %d agcslow %d agcfast %d agchang %s\n",
-		g_dup_tok[rx->dup], rx->dup_khz, g_am_ofs, g_ifshift, g_ifshift_tx, g_agc_slow, g_agc_fast,
+	fprintf(fp, "%s dupshift %d am_offset %d ifshift %d ifshift_tx %d agcslow %d agcmid %d agcfast %d agchang %s\n",
+		g_dup_tok[rx->dup], rx->dup_khz, g_am_ofs, g_ifshift, g_ifshift_tx, g_agc_slow, g_agc_mid, g_agc_fast,
 		g_agc_hang ? "on" : "off");
 	fprintf(fp, "vol %d %s rfg %d pwr %.1f\n", rx->vol, rx->mute ? "mute" : "nomute", rx->rfg, rx->txpwr / 10.0);
 	fprintf(fp, "keytype %d wpm %d iambic %d cwpitch %d cwvol %d qsk %d ratio %d.%d\n", rx->keymode, rx->wpm, rx->iambic,
