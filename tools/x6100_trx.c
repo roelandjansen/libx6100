@@ -3472,7 +3472,7 @@ static bool on_key(rx_t *rx, int key)
 		am_mode(rx, rx->mode == X6100_MODE_AM ? X6100_MODE_NFM : X6100_MODE_AM);
 		break;
 	case X6100_KEY_PRE:
-		rx->pre = !rx->pre;
+		rx->att = !rx->att;	/* short: ATT, the one used more (2026-11-04; was PRE) */
 		break;
 	case X6100_KEY_AGC:
 		rx->agc = (x6100_agc_t) ((rx->agc + 1) % 4);
@@ -3582,7 +3582,7 @@ static bool on_long_key(rx_t *rx, int key)
 
 	switch (key) {
 	case X6100_KEY_PRE:
-		rx->att = !rx->att;
+		rx->pre = !rx->pre;	/* long: PRE */
 		return true;
 	case X6100_KEY_F1:
 		// Long: scope panel (mode, VBW, averaging, waveform, colours, waterfall)
