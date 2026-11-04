@@ -584,13 +584,11 @@ there is no local backup.
 
   ![AM offset](images/x6100_trx_am_offset.png)
 
-- AGC SLOW, AGC MID / AUTO, AGC FAST, AGC HANG, the last rows of the same panel
-  (2026-11-03, as the stock UI 1.2.0 RADIO SETTING1; MID added 2026-11-04, the stock UI
-  does not show it): the AGC time constants in units of 10 ms, SLOW 20-1000 (250 =
-  2.5 s; 10 ms steps, 50 ms from 1 s), MID 5-500 (50 = 500 ms; taken to be the one AUTO
-  uses), FAST 1-100 (5 = 50 ms), and hang on / off (off); MFK long = default; the row of
-  the AGC in use is green. Registers 28 (slow / mid / fast) and 27 bit 12. Console /
-  conf / state: `agcslow 250`, `agcmid 50`, `agcfast 5`, `agchang off`.
+- AGC SLOW, AGC FAST, AGC HANG, the last rows of the same panel (2026-11-03, as the stock
+  UI 1.2.0 RADIO SETTING1): the AGC time constants in units of 10 ms, SLOW 20-1000
+  (250 = 2.5 s; 10 ms steps, 50 ms from 1 s), FAST 1-100 (5 = 50 ms), and hang on /
+  off (off); MFK long = default. Registers 28 (slow / mid / fast; mid, for AUTO, stays
+  50) and 27 bit 12. Console / conf / state: `agcslow 250`, `agcfast 5`, `agchang off`.
 
 - Top left of the spectrum (amber): `SPLIT TX 7.120.00 LSB  RIT +120` or
   `DUP- TX 29.520.00` while in use; on

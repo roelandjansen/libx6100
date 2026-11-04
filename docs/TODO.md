@@ -54,12 +54,10 @@ Status: 2026-11-04 (v0.17.5). Summary and next steps: `STATUS.md`.
   too: CAT was on with no client, 2026-11-03; blank with only wfserver verified 2026-11-04).
   LAN on / off with wfview connecting and disconnecting: verified 2026-11-04. Still to
   check: CAT with rigctl on the DEV port.
-- AGC SLOW / MID / FAST times and HANG (AGC long panel, rows 7-10; MID 2026-11-04) and
-  LINE IN / LINE OUT (TX panel), as the stock UI 1.2.0 (2026-11-03): registers 28, 27
-  bit 12, 20 [15:0]. To check on the radio: SLOW 250 vs 50 audible on a fading signal;
-  does AGC AUTO follow MID (MID 5 vs 300 in AUTO)? If not, AUTO uses something else and
-  the row name changes; HANG; LINE IN with wfserver TX audio (DATA MOD USB: ALC /
-  power follow it).
+- AGC SLOW / FAST times and HANG (AGC long panel, rows 7-9) and LINE IN / LINE OUT
+  (TX panel), as the stock UI 1.2.0 (2026-11-03): registers 28, 27 bit 12, 20 [15:0].
+  To check on the radio: SLOW 250 vs 50 audible on a fading signal, HANG, LINE IN with
+  wfserver TX audio (DATA MOD USB: ALC / power follow it).
 - Battery (2026-11-03): the gauge reads 99 when full (stock UI and IU1WXY show 100):
   shown as 100 now. Flow flag bit 4 ("charging" in X6100Control) tested on the radio: it
   stayed 0 while charging from 98 to 100 % on external power, so not used; CHARGING below
