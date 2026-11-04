@@ -304,7 +304,7 @@ The status line starts with the VFO in use (A / B); with split, RIT or XIT it ad
 | `att noatt pre nopre` | attenuator / preamp |
 | `center scrollc fix scrollf` | scope mode |
 | `fil1 fil2 fil3` | receive filter |
-| `step 1\|10\|100\|1000\|5000\|9000\|10000\|100000` | tuning step (9000 / 10000 on LW / MW AM only) |
+| `step 1\|10\|100\|1000\|5000\|9000\|10000\|100000` | tuning step (9000 on LW / MW AM only) |
 | `pwr 0.1-10` | TX power in W |
 | `vol 0-100` | volume (also unmutes) |
 | `nr nonr nb nonb notch nonotch` | noise reduction / blanker / notch on, off |

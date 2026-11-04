@@ -7893,7 +7893,7 @@ static bool console_line(rx_t *rx, char *line)
 				rx->step = st;
 				changed = true;
 			} else {
-				fprintf(stderr, "\nstep must be 1, 10, 100, 1000, 5000, 100000 (9000, 10000 on LW / MW AM)\n");
+				fprintf(stderr, "\nstep must be 1, 10, 100, 1000, 5000, 10000, 100000 (9000 on LW / MW AM)\n");
 			}
 
 			continue;
@@ -10894,8 +10894,9 @@ int main(int argc, char **argv)
 				}
 			}
 
-			// Channel steps only where they make sense
-			if ((rx.step == 9000 || rx.step == 10000) && !am_broadcast(&rx))
+			// The 9 kHz channel step only where it makes sense (10 kHz is a normal step
+			// since 2026-11-04: it was set back to 1 kHz here, so FST went 5k, 10k, 1k)
+			if (rx.step == 9000 && !am_broadcast(&rx))
 				rx.step = 1000;
 
 			if (rx.step == STEP_CH && !on_60m(&rx))
