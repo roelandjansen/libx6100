@@ -96,8 +96,24 @@
 static bool g_no_limit;	/* --no-limit: tune 10 kHz - 100 MHz (test what the baseband accepts) */
 static bool g_probe;	/* --probe: print flow flags and peak IQ (overflow hunt) */
 static bool g_cat_log;	/* --cat-log: print CI-V frames in and out */
-#define FREQ_MIN	(g_no_limit ? 10000u : 500000u)	/* --no-limit: probe the baseband */
-#define FREQ_MAX	(g_no_limit ? 100000000u : 56000000u)
+
+//
+// Tuning range: freqmin / freqmax (conf, console, state), within FREQ_LIM_LO - FREQ_LIM_HI
+// while the limits the baseband takes are found out (2026-11-04); default 500 kHz -
+// 56 MHz as before. --no-limit: 10 kHz - 100 MHz, to probe the baseband
+//
+
+#define FREQ_LIM_LO	5000u
+#define FREQ_LIM_HI	75000000u
+#define FREQ_MIN_DEF	500000u
+#define FREQ_MAX_DEF	56000000u
+
+static uint32_t g_freq_min = FREQ_MIN_DEF;
+static uint32_t g_freq_max = FREQ_MAX_DEF;
+
+#define FREQ_MIN	(g_no_limit ? 10000u : g_freq_min)
+#define FREQ_MAX	(g_no_limit ? 100000000u : g_freq_max)
+
 #define POLL_MS		5
 #define LONG_PRESS_MS	600
 #define PWR_QUIT_MS	1500	/* PWR: shorter = display on / off; 1.5-4 s = quit on release */
@@ -1132,14 +1148,18 @@ static int64_t rx_lo(const rx_t *rx)
 	int64_t f = rx_hz(rx), s = lo_shift(rx), c, p, n;
 
 	if (s <= 0 || !scope_fixed(rx) || rx->fix_w <= 0)
-		return f - s;
+		return f - s >= 0 || s <= 0 ? f - s : f + s;	/* below the shift (freqmin): the LO above */
 
 	c = rx->fix_lo + rx->fix_w / 2;
 
 	// Nearest the centre with a positive shift (LO in [f - max, f - s]) and with a
-	// negative one (LO in [f + s, f + max]); the positive one on a tie (verified)
+	// negative one (LO in [f + s, f + max]); the positive one on a tie (verified).
+	// Never an LO below 0 Hz (a receive frequency of a few kHz: freqmin)
 	p = c < f - IFSHIFT_DYN_MAX ? f - IFSHIFT_DYN_MAX : c > f - s ? f - s : c;
 	n = c < f + s ? f + s : c > f + IFSHIFT_DYN_MAX ? f + IFSHIFT_DYN_MAX : c;
+
+	if (p < 0)
+		return n;
 
 	return llabs(p - c) <= llabs(n - c) ? p : n;
 }
@@ -8030,6 +8050,33 @@ static bool console_line(rx_t *rx, char *line)
 			continue;
 		}
 
+		// freqmin / freqmax <Hz>: the tuning range, within 5 kHz - 75 MHz while the limits
+		// the baseband takes are found out; default 500 kHz - 56 MHz (conf, console, state)
+		if (strcasecmp(t, "freqmin") == 0 || strcasecmp(t, "freqmax") == 0) {
+			bool lo = strcasecmp(t, "freqmin") == 0;
+			const char *v = strtok(NULL, " \t\r\n");
+			char *end = NULL;
+			unsigned long hz = v != NULL ? strtoul(v, &end, 10) : 0;
+
+			if (v == NULL || *end != '\0' || hz < FREQ_LIM_LO || hz > FREQ_LIM_HI
+				|| (lo ? hz >= g_freq_max : hz <= g_freq_min)) {
+				fprintf(stderr, "\n%s: %u - %u Hz, freqmin below freqmax (now %u - %u)\n", t, FREQ_LIM_LO,
+					FREQ_LIM_HI, (unsigned) g_freq_min, (unsigned) g_freq_max);
+				continue;
+			}
+
+			if (lo)
+				g_freq_min = (uint32_t) hz;
+			else
+				g_freq_max = (uint32_t) hz;
+
+			if (!g_conf_loading)
+				set_freq(rx, rx->freq);	/* console: the VFO into the new range */
+
+			changed = true;
+			continue;
+		}
+
 		// catmem ro | rw: may CAT (wfview, rigctl, any client on the DEV port or the pty)
 		// write and clear memory channels (09, 0B, 1A 00 with content)? Default ro: reading
 		// and using them (08, 0A, 1A 00) only. GEN row CAT MEMORIES too; the conf fixes it.
@@ -8842,6 +8889,9 @@ static void state_write(const rx_t *rx)
 
 	fprintf(fp, "# x6100_trx last state, written at exit. Do not edit: put your own\n"
 		"# settings in x6100_trx.conf, which is read after this file.\n\n");
+
+	// The tuning range first: the frequencies below are checked against it as they are read
+	fprintf(fp, "freqmin %u freqmax %u\n", (unsigned) g_freq_min, (unsigned) g_freq_max);
 
 	for (int i = 0; i < BAND_COUNT; i++)
 		fprintf(fp, "band %s %u\n", g_bands[i].name, (unsigned) rx->band_freq[i]);

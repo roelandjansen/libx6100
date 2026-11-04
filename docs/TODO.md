@@ -33,6 +33,10 @@ Status: 2026-11-03 (v0.17.4). Summary and next steps: `STATUS.md`.
   100000 now (also x6100_iqcal). Verified 2026-11-03: the carrier on the dial line at 10 / 20 / 40
   kHz shift (a few Hz at most). Birdies found before this have their frequency off by up to 4 % of their
   distance from the scan centre (up to about 2 kHz): scan again (GEN BIRDIE SCAN).
+- Tuning range (2026-11-04): `freqmin` / `freqmax` (Hz, conf / console / state) within
+  5 kHz - 75 MHz, default 500 kHz - 56 MHz. To find out on the radio: where the baseband
+  still tunes and receives (low end: LW / VLF, the LO above below 10 kHz; high end:
+  56-75 MHz), then settle the defaults and the allowed range.
 - LAN and CAT indicators under the scope clock (2026-11-03): LAN while a wfview client is
   connected through wfserver (UDP rate from /proc/net/snmp, wfserver running), CAT while
   CI-V frames arrive (3 s; the pty only without wfserver, which polls it with no client
