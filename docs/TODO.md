@@ -37,9 +37,8 @@ Status: 2026-11-03 (v0.17.4). Summary and next steps: `STATUS.md`.
   connected through wfserver (UDP rate from /proc/net/snmp, wfserver running), CAT while
   CI-V frames arrive (3 s; the pty only without wfserver, which polls it with no client
   too: CAT was on with no client, 2026-11-03; blank with only wfserver verified 2026-11-04).
-  To check: LAN comes when wfview connects over the network and
-  goes about 3 s after it disconnects; CAT with rigctl on the DEV port; no LAN with only
-  NTP / DNS traffic.
+  LAN on / off with wfview connecting and disconnecting: verified 2026-11-04. Still to
+  check: CAT with rigctl on the DEV port.
 - AGC SLOW / FAST times and HANG (AGC long panel, rows 7-9) and LINE IN / LINE OUT
   (TX panel), as the stock UI 1.2.0 (2026-11-03): registers 28, 27 bit 12, 20 [15:0].
   To check on the radio: SLOW 250 vs 50 audible on a fading signal, HANG, LINE IN with
