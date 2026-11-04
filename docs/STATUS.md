@@ -1,6 +1,11 @@
 # libx6100 / x6100_trx — status
 
-Snapshot: 2026-11-03. Last tag: v0.17.4 (2026-11-03; the scope frequency scale fixed: the
+Snapshot: 2026-11-04. Last tag: v0.17.5 (2026-11-04; LAN and CAT indicators (verified);
+tuning range 148.5 kHz - 75 MHz (`freqmin` / `freqmax`, RX and TX found working to 75
+MHz); the 4 m band (band keys, regions nl and uk, X6100.rig 4m button); 10 and 100 kHz
+steps; PRE key short = ATT, long = PRE; AGC MID / AUTO; the charging flag dropped
+(not on 1.1.9); RADE deployed only when changed), on v0.17.4 (2026-11-03; the scope
+frequency scale fixed: the
 IQ is 100 kHz wide, not 96 (verified); AGC SLOW / FAST times and HANG, LINE IN / OUT as the
 stock UI 1.2.0; CI-V 28 00 voice TX (messages M1-M8) and the clock from CAT (1A 05 0165 /
 0166 / 0170, `cattime`); GEN rows saved 2 s after a change; battery 99 shown as 100 %, the
@@ -65,6 +70,11 @@ Verified on the radio:
   side (2026-11-02, after the 1A 00 group and Memory Contents string fixes)
 - ATU key on: the toast with the tuner memory in use (2026-11-02)
 - Bluetooth state (GEN row, state `bt`) applied at start: off after a reboot (2026-11-03)
+- LAN indicator with wfview over the network; CAT blank with only wfserver; battery
+  CHARGING below 100 % (2026-11-04)
+- PRE key short = ATT, long = PRE (2026-11-04)
+- tuning range: LW 198 kHz received (MW bleeds through at 77.5 kHz), RX and TX at 75 MHz
+  (2026-11-04)
 - scope frequency scale with the IQ 100 kHz wide: the carrier on the dial line with the IF
   shift at 10, 20 and 40 kHz (2026-11-03)
 - TX frequency on the display while keyed with a duplex shift (AUTO, DUP- / DUP+; PTT
@@ -290,6 +300,11 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
 25. Hand mic keys: log the flow `hkey` while pressing F1 / F2 (stock HANDLE F1 / F2).
 26. LAN / CAT indicators: LAN with wfview over the network verified 2026-11-04; still CAT
     with a client on the DEV port.
+
+27. 4 m: receive on 70.0-70.5 MHz; the X6100.rig 4m button; TX only after a spectrum
+    check (above the 6 m low-pass filters).
+28. FST cycle 10 / 100 / 1k / 5k / 10k / 100k; AGC MID in AUTO (MID 5 vs 300).
+29. Region uk: add the UK 60 m segments (Ofcom licence terms).
 
 ## Next steps (suggested order)
 
