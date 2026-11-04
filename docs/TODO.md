@@ -39,6 +39,11 @@ Status: 2026-11-03 (v0.17.4). Summary and next steps: `STATUS.md`.
   54 MHz is past the low-pass filters (harmonics, power reading, calibration unknown):
   a dummy load only, unless a spectrum check shows it clean. 4 m TX in the band plan:
   only after that check.
+- 4 m band (2026-11-04): 70.0-70.5 MHz after 6m on the band keys (70.200 USB to start),
+  for receiving. TX stays out of the band plan (OOB) until a spectrum check of the
+  output above the 6 m low-pass filters; then add 70.0-70.5 to the regions that have
+  it (NL F: yes). No IC-705 band code for 4 m (1A 01), no fixed edge range (the IC-705
+  ranges end at 60 MHz).
 - LAN and CAT indicators under the scope clock (2026-11-03): LAN while a wfview client is
   connected through wfserver (UDP rate from /proc/net/snmp, wfserver running), CAT while
   CI-V frames arrive (3 s; the pty only without wfserver, which polls it with no client

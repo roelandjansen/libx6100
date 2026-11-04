@@ -184,6 +184,8 @@ typedef enum
 
 enum { SEND_NONE, SEND_MSG, SEND_SCAN };	/* rx_t.send: our TX without the PTT key */
 
+#define BAND_MAX	12	/* entries of g_bands: 160m .. 6m, 4m */
+
 // The VFO as it was before memory mode (V/M, CI-V 08): back on V/M or CI-V 07
 typedef struct
 {
@@ -227,7 +229,7 @@ typedef struct
 	bool dedit;		/* DSP panel open (DFL long) */
 	int dedit_par;		/* selected value, index into g_dsp */
 	uint64_t dedit_since;	/* last panel activity, for the idle close */
-	uint32_t band_freq[11];
+	uint32_t band_freq[BAND_MAX];	/* last frequency per band, index into g_bands */
 	uint32_t gen_freq;	/* GEN band (outside the ham bands): last frequency there */
 	x6100_mode_t gen_mode;	/* and its mode */
 
@@ -394,9 +396,11 @@ static const band_t g_bands[] = {
 	{ "12m",  24890000, 24990000, 24915000 },
 	{ "10m",  28000000, 29700000, 28074000 },
 	{ "6m",   50000000, 54000000, 50313000 },
+	{ "4m",   70000000, 70500000, 70200000 },	/* 2026-11-04: RX works up to 75 MHz; TX: the band plan (region) decides */
 };
 
 #define BAND_COUNT	((int) (sizeof(g_bands) / sizeof(g_bands[0])))
+_Static_assert(sizeof(g_bands) / sizeof(g_bands[0]) == BAND_MAX, "band_freq[] in rx_t holds BAND_MAX bands");
 
 //
 // Transmit allocations per region (Hz). The TX check and the OOB marker use the
@@ -2074,7 +2078,7 @@ static void xpar_defaults(rx_t *rx)
 }
 
 //
-// Band keys: 160m .. 6m with GEN (everything outside the ham bands, as Icom's GENE)
+// Band keys: 160m .. 6m, 4m with GEN (everything outside the ham bands, as Icom's GENE)
 // in between at its frequency, round and round. GEN keeps the last frequency used
 // outside the bands and its mode: at 5450 kHz the order is .. 60m, GEN, 40m ..; at
 // 500 kHz or 60 MHz GEN sits between 6m and 160m.
