@@ -53,8 +53,9 @@ Status: 2026-11-05 (v0.17.7). Summary and next steps: `STATUS.md`.
   and console), `portraitrot 0|180`, `autolock <s>` (default 20 s): red TX line, arc
   meter, frequency, small scope / waterfall, battery, lock. Verified on the radio
   2026-11-05: rotation 180, scope and waterfall, GEN row and command line, the auto
-  lock, the frame rate, the console help; photo in the README. Still: the turn to
-  landscape and back with a panel open.
+  lock, the frame rate, the console help; photo in the README; with a panel open,
+  landscape until it closes (or times out), then portrait (`layout portrait` given with
+  a panel open waits for it the same way).
 - 4 m band (2026-11-04): 70.0-70.5 MHz after 6m on the band keys (70.200 USB to start).
   TX allowed in regions nl and uk (70.0-70.5 MHz; NL: F registration; no ITU allocation, so
   not in r1-r3). The output above 54 MHz is past the 6 m low-pass filters: check it on

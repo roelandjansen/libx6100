@@ -321,8 +321,8 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
 29. Region uk: add the UK 60 m segments (Ofcom licence terms).
 
 30. (done) Portrait: rotation 180, scope and waterfall, the GEN row and the command line,
-    the auto lock and the frame rate verified 2026-11-05. Still: the turn to landscape
-    and back with a panel open, if not seen yet.
+    the auto lock, the frame rate, and landscape while a panel is open (portrait again
+    when it closes or times out) verified 2026-11-05.
 31. Next baseband hang: `bbreset` first, and note time and what ran.
 
 ## Next steps (suggested order)
