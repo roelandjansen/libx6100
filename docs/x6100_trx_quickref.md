@@ -37,7 +37,7 @@ Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
 |---|---|---|
 | VFO knob | tune; past the top of the tuning range (`freqmax`) it goes round to `freqmin`, and the other way | |
 | FST | step 10 / 100 / 1000 / 5000 Hz / 10 kHz / 100 kHz; on LW / MW (any mode): 100 / 1k / 5k / 9k / 10k (channel raster) / 100k; 60 m: 10 / 100 / 1k / 5k / CH / 10k / 100k (MFK picks the 60 m channel, the VFO knob fine-tunes in 100 Hz) | 1 Hz step on / off |
-| VOL knob | volume; push = mute | |
+| VOL knob | volume (VOL long: squelch or RF gain, see right); push = mute (also while locked) | VOL / SQL / RFG for the knob, as printed on the radio; back to VOL 10 s after the last turn; the VOL column (portrait: the footer) shows which, in accent |
 | MFK knob | RF gain or TX power | |
 | MFK push | RF gain 100 / TX power 5.0 W | switch RF gain <-> TX power |
 | BAND- / BAND+ | previous / next band (last frequency per band kept): 160m .. 6m, 4m (70.0-70.5 MHz; TX in region nl only, check the output first: it is past the 6 m low-pass filters) with GEN in between at its frequency (GEN 5450 kHz: .. 60m, GEN, 40m ..; below 160m or above 4m: between 4m and 160m); GEN is everything outside the ham bands (last frequency and mode there; 10.000 MHz AM out of the box; state `gen <Hz> <mode>`) | |
@@ -55,7 +55,7 @@ Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
 | F5 | filter FIL1 / FIL2 / FIL3 | filter panel |
 | PTT | hold = TX; tap (< 400 ms) = latch, next press drops | |
 | ATU | tuner in / out; on shows the tuner memory it uses, nearest the TX frequency within 0.5 % (`ATU 14074 L 23 C 112 S 1`), or `ATU ON: NO MEMORY` (straight through until a tune) | tune (keys TX at tune power); the result becomes a tuner memory |
-| LOCK | lock knobs and keys (PTT and the volume still work; the volume since 2026-11-05) | |
+| LOCK | lock knobs and keys (PTT, the volume and mute still work; since 2026-11-05) | |
 | PWR | display on / off | release after 1.5-4 s: quit; hold 4 s: power off (as the stock UI). TX is dropped and filters saved first |
 | GEN | settings panel: brightness, CAT, wfserver, NTP (MFK turn = change, push = next row, long = default; GEN, other key or 10 s idle closes) | status page: IP, uptime, battery, CAT, NTP result, build (any key or 30 s closes) |
 | KEY | key type: straight / paddle / paddle reversed | keyer panel |
@@ -235,7 +235,9 @@ verified). Top to bottom (on the radio, MW AM, locked; and the mock-up in RX and
 - the frequency, MHz.kHz.10 Hz, large (to the Hz with the 1 Hz step, FST long)
 - mode, filter, step; under it AGC, ATT / PRE / NB / NR / ATU when on, SPLIT or DUP
 - a small scope (its mode label top right) and the waterfall
-- footer: LOCK, or the auto lock count-down (LOCK IN n S), and the volume
+- footer: LOCK, or the auto lock count-down (LOCK IN n); RF gain (and squelch when not 0)
+  in the middle, in accent below 100; the volume (MUTE when muted), or SQL / RFG while
+  the VOL knob is set to them (VOL long)
 
 Auto lock: after `autolock` seconds (default 20, 0 = off) without a knob turn or key, the
 VFO and MFK lock; LOCK unlocks. PTT and the volume always work. Back to landscape

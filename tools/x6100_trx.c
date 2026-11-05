@@ -122,6 +122,12 @@ static int g_autolock_s = 20;	/* conf autolock <s>, 0 off: portrait only, the VF
 static uint64_t g_last_turn_ms;	/* last knob turn or key: the auto lock counts from it */
 static bool g_lock_auto;		/* the lock in force is the auto lock: released when leaving portrait */
 
+// VOL knob function (VOL long, as the VOL / SQL / RFG print on the radio): 0 volume,
+// 1 squelch, 2 RF gain; back to the volume VOL_FN_MS after the last turn (2026-11-05)
+#define VOL_FN_MS	10000
+static int g_vol_fn;
+static uint64_t g_vol_fn_ms;
+
 //
 // Baseband reset line (2026-11-05): GPIO 204 on gpiochip1, high = the STM32 in reset, as
 // X6100Control (LGPL-2.1, X6100_PIN_BB_RESET; its firmware update pulses it). Only that
@@ -3507,7 +3513,7 @@ static bool on_key(rx_t *rx, int key)
 			rx->dedit = false;
 	}
 
-	if (rx->lock && key != X6100_KEY_LOCK)
+	if (rx->lock && key != X6100_KEY_LOCK && key != X6100_KEY_VOL_PUSH)	/* mute works locked, as the volume */
 		return false;
 
 	switch (key) {
@@ -3670,7 +3676,7 @@ static bool has_long(int key)
 		|| key == X6100_KEY_F1 || key == X6100_KEY_F2 || key == X6100_KEY_F3 || key == X6100_KEY_F4 || key == X6100_KEY_F5 || key == X6100_KEY_DFN || key == X6100_KEY_DFL
 		|| key == X6100_KEY_GEN || key == X6100_KEY_AB
 		|| key == X6100_KEY_VM || key == X6100_KEY_AGC || key == X6100_KEY_KEY || key == X6100_KEY_MSG
-		|| key == X6100_KEY_APP;
+		|| key == X6100_KEY_APP || key == X6100_KEY_VOL_PUSH;
 }
 
 static bool on_long_key(rx_t *rx, int key)
@@ -3695,6 +3701,11 @@ static bool on_long_key(rx_t *rx, int key)
 	switch (key) {
 	case X6100_KEY_PRE:
 		rx->pre = !rx->pre;	/* long: PRE */
+		return true;
+	case X6100_KEY_VOL_PUSH:	/* long: the VOL knob to VOL / SQL / RFG (short: mute) */
+		g_vol_fn = (g_vol_fn + 1) % 3;
+		g_vol_fn_ms = now_ms();
+		toast(g_vol_fn == 0 ? "KNOB: VOLUME" : g_vol_fn == 1 ? "KNOB: SQUELCH" : "KNOB: RF GAIN");
 		return true;
 	case X6100_KEY_F1:
 		// Long: scope panel (mode, VBW, averaging, waveform, colours, waterfall)
@@ -3978,7 +3989,15 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 		return true;
 	}
 	case IN_VOL:
-		rx->vol = clampi(rx->vol + value * X6100_DIR_VOL, 0, 100);
+		// VOL long chose squelch or RF gain; locked, the knob is always the volume
+		if (g_vol_fn == 1 && !rx->lock)
+			rx->sql = clampi(rx->sql + value * X6100_DIR_VOL, 0, 100);
+		else if (g_vol_fn == 2 && !rx->lock)
+			rx->rfg = clampi(rx->rfg + value * X6100_DIR_VOL * 2, 0, 100);
+		else
+			rx->vol = clampi(rx->vol + value * X6100_DIR_VOL, 0, 100);
+
+		g_vol_fn_ms = now_ms();
 		return true;
 	case IN_MFK:
 		if (rx->kedit) {
@@ -7134,12 +7153,28 @@ static void draw_portrait(screen_t *scr, const rx_t *rx)
 			uint64_t idle = now_ms() - g_last_turn_ms;
 			int left = idle >= (uint64_t) g_autolock_s * 1000u ? 0 : g_autolock_s - (int) (idle / 1000u);
 
-			snprintf(s, sizeof(s), "LOCK IN %d S", left);
+			snprintf(s, sizeof(s), "LOCK IN %d", left);	/* short: RFG / SQL in the middle */
 			x6100_lcd_text(lcd, 12, y + 2, 2, s, SCR_DIM);
 		}
 
-		snprintf(s, sizeof(s), "VOL %d", rx->vol);
-		x6100_lcd_text(lcd, W - 12 - x6100_lcd_text_width(s, 2), y + 2, 2, s, rx->mute ? SCR_WARN : SCR_DIM);
+		// Right: what the VOL knob turns (VOL long: SQL / RFG, accent); middle: RF gain and
+		// squelch, which the MFK and VOL knob change without a panel (2026-11-05)
+		if (g_vol_fn == 1)
+			snprintf(s, sizeof(s), "SQL %d", rx->sql);
+		else if (g_vol_fn == 2)
+			snprintf(s, sizeof(s), "RFG %d", rx->rfg);
+		else
+			snprintf(s, sizeof(s), "%s %d", rx->mute ? "MUTE" : "VOL", rx->vol);
+
+		x6100_lcd_text(lcd, W - 12 - x6100_lcd_text_width(s, 2), y + 2, 2, s,
+			g_vol_fn != 0 ? SCR_ACCENT : rx->mute ? SCR_WARN : SCR_DIM);
+
+		if (rx->sql > 0)
+			snprintf(s, sizeof(s), "RFG %d  SQL %d", rx->rfg, rx->sql);
+		else
+			snprintf(s, sizeof(s), "RFG %d", rx->rfg);
+
+		x6100_lcd_text(lcd, (W - x6100_lcd_text_width(s, 2)) / 2, y + 2, 2, s, rx->rfg < 100 ? SCR_ACCENT : SCR_DIM);
 	}
 }
 
@@ -7284,8 +7319,15 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 	else
 		snprintf(s, sizeof(s), "STEP %4d", rx->step);
 	x6100_lcd_text(lcd, INFO_COL_STEP, INFO_Y, 2, s, SCR_DIM);
-	snprintf(s, sizeof(s), "VOL %3d", rx->vol);
-	x6100_lcd_text(lcd, INFO_COL_VOL, INFO_Y, 2, s, rx->mute ? SCR_WARN : SCR_DIM);
+	// The VOL column shows what the VOL knob turns now (VOL long: SQL / RFG, accent)
+	if (g_vol_fn == 1)
+		snprintf(s, sizeof(s), "SQL %3d", rx->sql);
+	else if (g_vol_fn == 2)
+		snprintf(s, sizeof(s), "RFG*%3d", rx->rfg);
+	else
+		snprintf(s, sizeof(s), "VOL %3d", rx->vol);
+
+	x6100_lcd_text(lcd, INFO_COL_VOL, INFO_Y, 2, s, g_vol_fn != 0 ? SCR_ACCENT : rx->mute ? SCR_WARN : SCR_DIM);
 
 	if (rx->mfk_pwr) {
 		snprintf(s, sizeof(s), "PWR %2d.%dW", rx->txpwr / 10, rx->txpwr % 10);
@@ -11873,6 +11915,12 @@ int main(int argc, char **argv)
 			&& t - g_last_turn_ms >= (uint64_t) g_autolock_s * 1000u) {
 			rx.lock = true;
 			g_lock_auto = true;
+			dirty = true;
+		}
+
+		// VOL knob back to the volume VOL_FN_MS after its last turn as SQL / RFG
+		if (g_vol_fn != 0 && t - g_vol_fn_ms >= VOL_FN_MS) {
+			g_vol_fn = 0;
 			dirty = true;
 		}
 
