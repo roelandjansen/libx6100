@@ -27,6 +27,7 @@ x6100_trx --oob 5450000 usb slow
 | `--cat-log` | as `--cat`, and print CI-V commands (`>`) with our OK / NG reply (`<`); polls answered with data are not shown |
 | `--probe` | print the flow flag word on change, and every second the IQ peak and all flag bits seen (overflow hunt) |
 | `--bbreset` | reset the baseband first (GPIO 204 on gpiochip1, as X6100Control), for a baseband that does not answer on I2C (2026-11-05) |
+| `--help`, `-h`, `help`, `?` | the options in short, and exit (2026-11-05) |
 
 Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
 
@@ -315,7 +316,8 @@ sh ./build.sh deploy     # also puts back settings the radio lacks (conf, memori
 
 ## Console (ssh)
 
-Type a line + Enter while running; tokens can be combined (`14074000 usb`).
+Type a line + Enter while running; tokens can be combined (`14074000 usb`). `help` or `?`
+lists the commands in short, grouped (also while locked, as `layout`).
 
 What you type is shown at the end of the status line (`> memw 5`), so redraws do not
 wipe it; Backspace and ^U (clear) work, Enter runs it and keeps it on its own line.

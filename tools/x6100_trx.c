@@ -7981,8 +7981,58 @@ static double iq_level_db(const x6100_flow_frame_t *f)
 // Console commands: frequency, mode and step tokens
 //
 
+//
+// Help: the start options (x6100_trx --help / -h / help / ?) and the console commands
+// (help / ? on the console). In short; all of it in docs/x6100_trx_quickref.md
+//
+
+static void help_options(FILE *fp, const char *argv0)
+{
+	fprintf(fp, "usage: %s [options] [freq] [mode] [agc] [att|noatt] [pre|nopre] [vol 0-100]\n"
+		"       [layout portrait|landscape]\n\n"
+		"options:\n"
+		"  --oob             band check off (you are responsible for where you transmit)\n"
+		"  --no-limit        tune 10 kHz - 100 MHz (baseband probe)\n"
+		"  --cat[=baud|pty]  CI-V on the DEV port (4800-19200), or the pty only\n"
+		"  --cat-log         print CI-V commands and refusals\n"
+		"  --probe           print the flow flags and IQ peak (overflow hunt)\n"
+		"  --bbreset         reset the baseband first (when it does not answer on I2C)\n"
+		"  --help, -h, ?     this text\n\n"
+		"freq 7074000 | 7.074 | 7074k   mode usb lsb cw cwr am nfm   agc off slow fast auto\n"
+		"While running: type help on the console for its commands.\n", argv0);
+}
+
+static void help_console(void)
+{
+	printf("\nconsole commands (tokens can be combined: 14074000 usb):\n"
+		"  tune      7074000 | 7.074 | 7074k   usb lsb cw cwr am nfm   fil1 fil2 fil3\n"
+		"            step 1|10|100|1000|5000|9000|10000|100000|ch   ab   a=b   vfo a|b\n"
+		"  receive   off slow fast auto   att noatt pre nopre   rfg 0-100   vol 0-100   mute nomute\n"
+		"            nr nonr nb nonb notch nonotch   nrl nbl nbw ntf ntw <n>   pbtin pbtout <Hz>\n"
+		"            agcslow agcfast <x10 ms>   agchang on|off   ifshift <Hz>   am_offset <Hz>\n"
+		"  transmit  pwr 0.1-10   atu noatu   meter po|swr|alc   txsplit notxsplit\n"
+		"            rit norit xit noxit ritofs <Hz>   dupauto dupoff dup- dup+ dupshift <kHz>\n"
+		"            mic int|hand|auto imicg hmicg comp complvl vox voxg moni monilvl linein lineout sql tot\n"
+		"  scope     center scrollc fix scrollf   span <Hz>   edge 1-4   ref aref <dB>   rf af split\n"
+		"            af3 af6   hold on|off   fixedge <range> <edge> <lo> <hi>\n"
+		"  memory    memr [n]   memw n   memc n   mem n <Hz> <mode> fil<n> [...] [name text]\n"
+		"  messages  msg   msg n cw <text> | voice <file> | clear   msgsend n   msgstop   msgrepeat <s>\n"
+		"  birdies   birdiescan [all]   birdiestop   birdies   birdieclear   birdiemarks   birdienotch\n"
+		"  cat       cat <baud>|off   catpty on|off   civaddr a4|61   catmem ro|rw   cattime off|unsynced|on\n"
+		"            modin mic|usb mic|usb\n"
+		"  system    layout portrait|landscape   portraitrot 0|180   autolock <s>   bright 5-100\n"
+		"            region r1|r2|r3|nl|uk   freqmin freqmax <Hz>   time <UTC>   ntp on|off|<server>\n"
+		"            bt on|off   btauto <MAC>|off   bbreset   oob   nolimit\n"
+		"  help, ?   this list (all of it: docs/x6100_trx_quickref.md)\n");
+}
+
 static bool console_token(rx_t *rx, const char *t)
 {
+	if (strcasecmp(t, "help") == 0 || strcmp(t, "?") == 0) {
+		help_console();
+		return true;
+	}
+
 	static const struct { const char *name; x6100_mode_t mode; } modes[] = {
 		{ "lsb", X6100_MODE_LSB }, { "usb", X6100_MODE_USB }, { "cw", X6100_MODE_CW },
 		{ "cwr", X6100_MODE_CWR }, { "am", X6100_MODE_AM }, { "nfm", X6100_MODE_NFM },
@@ -9361,8 +9411,8 @@ static bool console_read(rx_t *rx, char *buf, size_t size, size_t *len)
 			buf[*len] = '\0';
 			printf("\r> %s\033[K\n", buf);	/* the typed line stays visible above the output */
 
-			// Locked: the console waits too, except for layout (portrait locks itself)
-			if (rx->lock && strncasecmp(buf, "layout ", 7) != 0)
+			// Locked: the console waits too, except for layout (portrait locks itself) and help
+			if (rx->lock && strncasecmp(buf, "layout ", 7) != 0 && strcasecmp(buf, "help") != 0 && strcmp(buf, "?") != 0)
 				fprintf(stderr, "locked\n");
 			else if (*len > 0)
 				changed |= console_line(rx, buf);
@@ -10830,6 +10880,15 @@ int main(int argc, char **argv)
 		.nr_lvl = 20, .nb_lvl = 10, .nb_w = 10, .dnf_f = 1000, .dnf_w = 50 };	/* defaults: g_dsp[] */
 	int rc;
 
+	// --help / -h / help / ?: the options, before anything is read or opened
+	for (int i = 1; i < argc; i++) {
+		if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0 || strcasecmp(argv[i], "help") == 0
+			|| strcmp(argv[i], "?") == 0) {
+			help_options(stdout, argv[0]);
+			return 0;
+		}
+	}
+
 	fil_load();
 
 	for (int i = 0; i < BAND_COUNT; i++)
@@ -10929,7 +10988,7 @@ int main(int argc, char **argv)
 		}
 
 		if (!console_token(&rx, argv[i])) {
-			fprintf(stderr, "usage: %s [--oob] [--no-limit] [--cat[=baud|pty]] [--cat-log] [--probe] [--bbreset] [freq] [usb|lsb|cw|cwr|am|nfm] [off|slow|fast|auto] [att|noatt] [pre|nopre] [vol 0-100] [layout portrait|landscape]\n", argv[0]);
+			help_options(stderr, argv[0]);
 			return 1;
 		}
 	}
