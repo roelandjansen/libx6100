@@ -280,6 +280,23 @@ int x6100_lcd_open(x6100_lcd_t *lcd, int rotation)
 	return 0;
 }
 
+//
+// Change the rotation of an open display: the canvas keeps its pixels (same size), its
+// width and height swap between landscape and portrait; the caller redraws it all
+//
+
+int x6100_lcd_rotate(x6100_lcd_t *lcd, int rotation)
+{
+	if (rotation != 0 && rotation != 90 && rotation != 180 && rotation != 270)
+		return -EINVAL;
+
+	lcd->rot = rotation;
+	lcd->w = rotation % 180 ? lcd->mode.vdisplay : lcd->mode.hdisplay;
+	lcd->h = rotation % 180 ? lcd->mode.hdisplay : lcd->mode.vdisplay;
+
+	return 0;
+}
+
 void x6100_lcd_close(x6100_lcd_t *lcd)
 {
 	free(lcd->pix);

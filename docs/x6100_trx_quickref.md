@@ -53,7 +53,7 @@ Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
 | F5 | filter FIL1 / FIL2 / FIL3 | filter panel |
 | PTT | hold = TX; tap (< 400 ms) = latch, next press drops | |
 | ATU | tuner in / out; on shows the tuner memory it uses, nearest the TX frequency within 0.5 % (`ATU 14074 L 23 C 112 S 1`), or `ATU ON: NO MEMORY` (straight through until a tune) | tune (keys TX at tune power); the result becomes a tuner memory |
-| LOCK | lock knobs and keys (PTT still works) | |
+| LOCK | lock knobs and keys (PTT and the volume still work; the volume since 2026-11-05) | |
 | PWR | display on / off | release after 1.5-4 s: quit; hold 4 s: power off (as the stock UI). TX is dropped and filters saved first |
 | GEN | settings panel: brightness, CAT, wfserver, NTP (MFK turn = change, push = next row, long = default; GEN, other key or 10 s idle closes) | status page: IP, uptime, battery, CAT, NTP result, build (any key or 30 s closes) |
 | KEY | key type: straight / paddle / paddle reversed | keyer panel |
@@ -215,6 +215,32 @@ Values are kept in the last state (see Settings); defaults NR 20, NB 10 / 10, no
 - Clock under the filter label: system time, UTC, ISO 8601 (`2026-10-24T10:08:27Z`); hidden behind the filter panel while that is open. At start x6100_trx runs one NTP sync with the image's busybox `ntpd -q` (server: `ntp` in the conf, else /etc/ntp.conf, else pool.ntp.org) and reports the result on the console (a failure as a warning); skipped when the image syncs itself (init.d S48sntp / S49ntp, as on IU1WXY), when a time daemon runs, or with `ntp off`. The clock is grey once the time is known (NTP synced, synced by the OS, or set by hand) and amber while not (NTP failed, off or still running, or a time before 2026: a clock never set, e.g. no network in the field). Set it by hand on the console: `time 2026-10-31T10:15:00Z` (UTC; the Z may be left out) or `time 10:15[:00]` for today; not from the settings or state file. From CAT (wfview Set Clock or "set radio time on connect": 1A 05 0170 UTC offset, 0166 time, 0165 date): only while NTP does not keep the clock (`cattime`, GEN row CAT CLOCK); the status page then says "set by CAT"
 - Under the clock, right aligned (2026-11-03): **LAN** (green) while a wfview client is connected through wfserver, as the LAN icon on an Icom (wfserver pings each client every 100 ms: some 30 UDP datagrams a second while one is there; off 3 s after it goes), and **CAT** while CI-V frames come in (the last 3 s) on the DEV port, or on the pty while wfserver is not running: wfserver polls the radio over the pty with no client too (2026-11-03), so a client through it shows as LAN instead
 
+
+## Portrait (handheld)
+
+GEN row LAYOUT: PORTRAIT, for the radio held upright with its left side up (the mic at
+the VFO knob on top), e.g. with a telescopic antenna on the ATU (2026-11-05). The
+panel is natively portrait, so it is only another rotation. Top to bottom (mock-up, RX
+and TX; the radio itself to be photographed):
+
+![portrait mock-up](images/x6100_trx_portrait_mock.png)
+
+
+- status line: RX (green), band, VFO, battery V and %; the whole line red with TX (or
+  TUNE) while transmitting
+- the arc meter: S in RX, the F4 meter (PO / SWR / ALC) in TX
+- the frequency, MHz.kHz.10 Hz, large
+- mode, filter, step; under it AGC, ATT / PRE / NB / NR / ATU when on, SPLIT or DUP
+- a small scope (its mode label top right) and the waterfall
+- footer: LOCK, or the auto lock count-down (LOCK IN n S), and the volume
+
+Auto lock: after `autolock` seconds (default 10, 0 = off) without a knob turn or key, the
+VFO and MFK lock; LOCK unlocks. PTT and the volume always work. Panels (GEN, filter,
+DSP, ...) are landscape: while one is open the screen turns back to landscape, and to
+portrait when it closes (the scope and waterfall start again). The tune panel is left
+out in portrait: TUNE shows in the red line. Conf: `layout portrait`, `portraitrot 180`
+(the left side up; 0 for the right side up), `autolock 10`; LAYOUT is kept in the state.
+
 ## Settings panel (GEN)
 
 Changed rows go into the state file 2 s after the last change (not only at exit), so a
@@ -225,6 +251,7 @@ kill or a power loss keeps them; a row set in `x6100_trx.conf` cannot be changed
 | Row | Values | When |
 |---|---|---|
 | BRIGHTNESS | 5-100 % in steps of 5 (default 100) | at once |
+| LAYOUT | LANDSCAPE (default) / PORTRAIT: the radio upright, its left side up, as a handheld (see Portrait); `layout` in the conf fixes it | when the panel closes |
 | CAT (CI-V) | the DEV port: OFF, 4800, 9600, 19200 (default 19200: the most it carries). The pty /tmp/x6100-civ (wfserver, rigctld, socat) is served at the same time, at any speed (`catpty off` in the conf turns it off); each has its own scope and transceive settings | next start |
 | CI-V ADDRESS | IC-705 A4 (default) / X6100 61 (wfview with `contrib/wfview/X6100.rig`); `civaddr` in the conf fixes it | at once |
 | CAT MEMORIES | READ ONLY (default) / READ / WRITE: may a CAT client (wfview, rigctl) write and clear memory channels (09, 0B, 1A 00 with content)? Read only: those answer NG, reading and using channels (08, 0A, 1A 00) still works; `catmem` in the conf fixes it | at once |

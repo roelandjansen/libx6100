@@ -74,6 +74,7 @@ typedef struct
 //
 
 int x6100_lcd_open(x6100_lcd_t *lcd, int rotation);
+int x6100_lcd_rotate(x6100_lcd_t *lcd, int rotation);
 void x6100_lcd_close(x6100_lcd_t *lcd);
 int x6100_lcd_flush(x6100_lcd_t *lcd);
 

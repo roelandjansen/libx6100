@@ -113,6 +113,13 @@ static bool g_cat_log;	/* --cat-log: print CI-V frames in and out */
 static uint32_t g_freq_min = FREQ_MIN_DEF;
 static uint32_t g_freq_max = FREQ_MAX_DEF;
 
+// Portrait layout and its auto lock (see draw_portrait); rotation 180 puts the radio's
+// left side up (the landscape canvas is rotation 270: its top is the panel's left column)
+static bool g_layout_portrait;	/* conf / state layout landscape | portrait; GEN row LAYOUT */
+static int g_layout_rot = 180;	/* conf portraitrot 0 | 180: 180 = the left side up */
+static int g_autolock_s = 10;	/* conf autolock <s>, 0 off: portrait only, the VFO / MFK lock */
+static uint64_t g_last_turn_ms;	/* last knob turn or key: the auto lock counts from it */
+
 #define FREQ_MIN	(g_no_limit ? 10000u : g_freq_min)
 #define FREQ_MAX	(g_no_limit ? 100000000u : g_freq_max)
 
@@ -642,7 +649,7 @@ static bool cat_time_set(bool date, int32_t v)
 	return true;
 }
 
-enum { GEN_BRIGHT, GEN_CAT, GEN_CIVADDR, GEN_CATMEM, GEN_CATTIME, GEN_MODOFF, GEN_MODDATA, GEN_WFS, GEN_NTP, GEN_WIFI, GEN_WNET, GEN_BT, GEN_BTPAIR,
+enum { GEN_BRIGHT, GEN_LAYOUT, GEN_CAT, GEN_CIVADDR, GEN_CATMEM, GEN_CATTIME, GEN_MODOFF, GEN_MODDATA, GEN_WFS, GEN_NTP, GEN_WIFI, GEN_WNET, GEN_BT, GEN_BTPAIR,
 	GEN_BTDEV, GEN_BSCAN, GEN_BMARK, GEN_BNOTCH, GEN_ROWS };	/* GEN rows */
 
 static void gen_adjust(int row, int dir, bool def);
@@ -3850,6 +3857,8 @@ static bool on_ptt(rx_t *rx, int value)
 
 static bool on_keypad(rx_t *rx, hold_t *hold, int key, int value)
 {
+	g_last_turn_ms = now_ms();	/* the portrait auto lock counts from the last key or turn */
+
 	if (key == X6100_KEY_PTT)
 		return on_ptt(rx, value);
 
@@ -3875,8 +3884,13 @@ static bool on_keypad(rx_t *rx, hold_t *hold, int key, int value)
 
 static bool on_knob(rx_t *rx, input_t in, int value)
 {
-	if (rx->lock)
+	// The lock holds the VFO and MFK; the volume always works (2026-11-05, for the
+	// portrait auto lock; before, LOCK held the volume too)
+	if (rx->lock && in != IN_VOL)
 		return false;
+
+	if (!rx->lock)
+		g_last_turn_ms = now_ms();
 
 	if (bscan_running() && in != IN_VOL)
 		return true;	/* the scan owns the VFO; volume still works */
@@ -4071,8 +4085,9 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 #define SBAR_SWR_Y	153
 #define SBAR_SWR_LBL_Y	158
 #define TOP_H		176
-#define VU_X		500
-#define VU_Y		4
+static int g_vu_x = 500, g_vu_y = 4;	/* arc meter origin: landscape top right, portrait top centre */
+#define VU_X		g_vu_x
+#define VU_Y		g_vu_y
 #define OVF_POWER	0.178f	/* |IQ|^2 at -7.5 dB: flow IQ clips at about -6.3 dB */
 #define VU_W		296
 #define VU_H		168
@@ -4082,12 +4097,31 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 #define AS_DB_MAX	-10.0f
 #define AS_RANGE_DB	80.0f		/* normalised window height */
 #define AS_FLOOR_DB	10.0f		/* window bottom under the audio floor */
-#define SPEC_Y		180
+static int g_spec_y = 180;	/* RF / audio scope top: under the landscape top, lower in portrait */
+#define SPEC_Y		g_spec_y
 static int g_spec_h = 150;	/* RF / audio scope height: the scope panel WATERFALL SIZE */
 #define SPEC_H		g_spec_h
 #define WF_Y		(SPEC_Y + SPEC_H + 4)
-#define TAG_H		20		/* F1-F5 tags along the bottom edge */
+static int g_tag_h = 20;	/* F1-F5 tags along the bottom edge; in portrait the footer */
+#define TAG_H		g_tag_h
 #define WF_H(lcd)	((lcd)->h - WF_Y - TAG_H)
+
+//
+// Portrait layout (GEN row LAYOUT, conf token layout landscape | portrait; the radio
+// held upright, its left side up, as a handheld with a telescopic antenna): a red TX
+// bar, the arc meter, the frequency, mode / filter / step, a small scope and waterfall,
+// battery, the lock. Panels open in landscape: while one is open the screen turns back.
+// The panel is natively portrait (480 x 800), so this is only another rotation.
+//
+
+#define P_BAR_H		34		/* status line, red while transmitting */
+#define P_VU_Y		40		/* arc meter */
+#define P_FREQ_Y	222		/* frequency, the 73 px font */
+#define P_INFO_Y	306		/* mode, filter, step */
+#define P_NOTE_Y	342		/* AGC, ATT / PRE, NB / NR, split / duplex */
+#define P_SPEC_Y	372
+#define P_SPEC_H	110
+#define P_FOOT_H	40		/* lock and volume */
 
 // Tag centre x above F1-F5 (screen 800 px); F3 slightly left of centre, F1 / F5
 // further out than a 160 px grid
@@ -5279,8 +5313,9 @@ static void draw_filter_panel(x6100_lcd_t *lcd, const rx_t *rx)
 //
 
 static const char *g_gen_name[GEN_ROWS] = {
-	"BRIGHTNESS", "CAT CI-V", "CI-V ADDRESS", "CAT MEMORIES", "CAT CLOCK", "DATA OFF MOD", "DATA MOD", "WFSERVER",
-	"NTP SYNC", "WIFI", "WIFI NETWORK", "BLUETOOTH", "BT PAIRING", "BT DEVICE", "BIRDIE SCAN", "BIRDIE MARKS", "BIRDIE NOTCH",
+	"BRIGHTNESS", "LAYOUT", "CAT CI-V", "CI-V ADDRESS", "CAT MEMORIES", "CAT CLOCK", "DATA OFF MOD", "DATA MOD",
+	"WFSERVER", "NTP SYNC", "WIFI", "WIFI NETWORK", "BLUETOOTH", "BT PAIRING", "BT DEVICE", "BIRDIE SCAN",
+	"BIRDIE MARKS", "BIRDIE NOTCH",
 };
 static const int g_cat_rates[] = { 0, 4800, 9600, 19200 };	/* the DEV port carries no more than 19200 */
 
@@ -5724,6 +5759,9 @@ static void gen_value(int row, char *s, size_t n)
 		else
 			snprintf(s, n, "AS OS");
 		break;
+	case GEN_LAYOUT:
+		snprintf(s, n, "%s", g_layout_portrait ? "PORTRAIT" : "LANDSCAPE");
+		break;
 	case GEN_CAT:
 		if (g_cat_baud > 0)
 			snprintf(s, n, "%d", g_cat_baud);
@@ -5788,6 +5826,12 @@ static void gen_hint(int row, char *s, size_t n)
 	bool cur = g_sys.nnet > 0 && strcmp(g_sys.ssid, g_sys.net_id[g_sys.net_sel]) == 0;
 
 	switch (row) {
+	case GEN_LAYOUT:
+		if (g_autolock_s > 0)
+			snprintf(s, n, "PORTRAIT: LEFT SIDE UP, AUTO LOCK %d S", g_autolock_s);
+		else
+			snprintf(s, n, "PORTRAIT: LEFT SIDE UP, NO AUTO LOCK");
+		break;
 	case GEN_CAT:
 		snprintf(s, n, "DEV PORT, NEXT START; PTY %s", g_cat_pty ? "ALWAYS ON" : "OFF");
 		break;
@@ -5864,6 +5908,9 @@ static void gen_adjust(int row, int dir, bool def)
 	case GEN_BRIGHT:
 		g_bright = def ? 100 : clampi((g_bright > 0 ? g_bright : 100) + dir * 5, 5, 100);
 		backlight_level(g_bright);
+		break;
+	case GEN_LAYOUT:	/* landscape <-> portrait; default landscape; shown once the panel closes */
+		g_layout_portrait = def ? false : !g_layout_portrait;
 		break;
 	case GEN_CAT: {
 		int i = 0;
@@ -6874,11 +6921,160 @@ static void wf_shift(x6100_lcd_t *lcd, int y0, int h, int dx, int w)
 	}
 }
 
+// A panel or page open: they are drawn for landscape, so portrait turns back meanwhile
+static bool panel_open(const rx_t *rx)
+{
+	return rx->fedit || rx->dedit || rx->tedit || rx->eedit || rx->medit || rx->kedit || rx->xedit || rx->sedit
+		|| rx->msedit || rx->apedit || rx->gedit || rx->ginfo || rx->redit;
+}
+
+//
+// Portrait layout: everything above the scope and the footer under the waterfall (the
+// scope and waterfall are the landscape code's, at P_SPEC_Y). See g_layout_portrait.
+//
+
+static void draw_portrait(screen_t *scr, const rx_t *rx)
+{
+	x6100_lcd_t *lcd = &scr->lcd;
+	const int W = lcd->w, red = 0xE02020;
+	bool on = scr->tx || rx->tuning;
+	char s[64];
+
+	x6100_lcd_fill(lcd, 0, 0, W, SPEC_Y, SCR_BG);
+	x6100_lcd_fill(lcd, 0, lcd->h - TAG_H, W, TAG_H, SCR_BG);
+
+	//
+	// Status line: the full width red while transmitting (TUNE while the tuner searches),
+	// RX in green otherwise; band, VFO; battery on the right
+	//
+	if (on)
+		x6100_lcd_fill(lcd, 0, 0, W, P_BAR_H, red);
+
+	x6100_lcd_text(lcd, 12, 6, 3, rx->tuning ? "TUNE" : scr->tx ? "TX" : "RX", on ? 0xFFFFFF : 0x3CC83C);
+	snprintf(s, sizeof(s), "%s  %s", rx->band >= 0 ? g_bands[rx->band].name : "GEN",
+		rx->mem_mode ? "M" : rx->on_b ? "B" : "A");
+	x6100_lcd_text(lcd, 110, 10, 2, s, on ? 0xFFFFFF : SCR_DIM);
+
+	{
+		uint32_t c = on ? 0xFFFFFF : scr->ext ? 0x3CC83C : scr->batcap > 0 && scr->batcap < 10 ? SCR_WARN
+			: scr->batcap > 0 && scr->batcap < 20 ? 0xFFB020 : SCR_DIM;
+
+		snprintf(s, sizeof(s), "%.1fV %d%%", scr->vbat, scr->batcap);
+		x6100_lcd_text(lcd, W - 12 - x6100_lcd_text_width(s, 2), 10, 2, s, c);
+	}
+
+	//
+	// Arc meter, the landscape one moved to the top centre: S in RX, the F4 meter in TX
+	//
+	g_vu_x = (W - VU_W) / 2;
+	g_vu_y = P_VU_Y;
+
+	if (scr->tx != scr->was_tx || rx->meter != scr->was_meter) {
+		scr->vu_peak = 0.0;
+		scr->was_tx = scr->tx;
+		scr->was_meter = rx->meter;
+	}
+
+	if (scr->tx) {
+		char l1[16], l2[24];
+		int alc = scr->alc >= 100 ? 0 : scr->alc;
+		double target = rx->meter == 1 ? swr_frac(scr->swr) : rx->meter == 2 ? alc / 100.0 * 0.34 : scr->pwr / 10.0 * 0.97;
+		vu_scale_t scale = rx->meter == 1 ? VU_SCALE_SWR : rx->meter == 2 ? VU_SCALE_ALC : VU_SCALE_PO;
+
+		snprintf(l1, sizeof(l1), rx->meter == 1 ? "SWR %.1f" : "%.1fW", rx->meter == 1 ? scr->swr : scr->pwr);
+		snprintf(l2, sizeof(l2), rx->meter == 1 ? "%.1fW" : "SWR %.1f", rx->meter == 1 ? scr->pwr : scr->swr);
+		vu_update(scr, target, now_ms());
+		draw_vu(lcd, scr->needle, scr->vu_peak, scale, l1, l2);
+	} else {
+		char l1[16], l2[16];
+
+		vu_update(scr, meter_frac(scr->sig_dbm), now_ms());
+		s_reading(scr->sig_dbm, l1, sizeof(l1));
+		snprintf(l2, sizeof(l2), "%4.0fdBm", scr->sig_dbm);
+		draw_vu(lcd, scr->needle, scr->vu_peak, VU_SCALE_S, l1, l2);
+
+		if (now_ms() < scr->ovf_until)
+			x6100_lcd_text(lcd, VU_X + 8, VU_Y + 6, 2, "OVF", SCR_WARN);
+	}
+
+	//
+	// Frequency (the TX frequency while keyed with split or a duplex shift), centred
+	//
+	{
+		uint32_t f = rx->send == SEND_SCAN && rx->tx_hz_ovr != 0 ? rx->tx_hz_ovr
+			: !on ? rx->freq : rx->split ? rx->b_freq : (uint32_t) ((int64_t) rx->freq + dup_shift(rx));
+
+		snprintf(s, sizeof(s), "%u.%03u.%02u", f / 1000000, f / 1000 % 1000, f % 1000 / 10);
+		x6100_lcd_text_aa(lcd, &x6100_font_freq, (W - x6100_lcd_text_aa_width(&x6100_font_freq, s)) / 2,
+			P_FREQ_Y, s, SCR_FREQ);
+	}
+
+	//
+	// Mode, filter, step; then AGC and the switches that are on, and split / duplex
+	//
+	{
+		char st[16];
+
+		if (rx->step == STEP_CH)
+			snprintf(st, sizeof(st), "CH");
+		else if (rx->step >= 1000 && rx->step % 1000 == 0)
+			snprintf(st, sizeof(st), "%dK", rx->step / 1000);
+		else
+			snprintf(st, sizeof(st), "%d", rx->step);
+
+		snprintf(s, sizeof(s), "%s   FIL%d   STEP %s", mode_name(rx->mode), rx->fil + 1, st);
+		x6100_lcd_text(lcd, (W - x6100_lcd_text_width(s, 3)) / 2, P_INFO_Y, 3, s, SCR_ACCENT);
+	}
+
+	{
+		int n = snprintf(s, sizeof(s), "AGC %s", agc_name(rx->agc));
+
+		n += snprintf(s + n, sizeof(s) - (size_t) n, "%s%s%s%s%s", rx->att ? "  ATT" : "", rx->pre ? "  PRE" : "",
+			rx->nb ? "  NB" : "", rx->nr ? "  NR" : "", rx->atu_on ? "  ATU" : "");
+
+		if (rx->split)
+			snprintf(s + n, sizeof(s) - (size_t) n, "  SPLIT");
+		else if (dup_shift(rx) != 0)
+			snprintf(s + n, sizeof(s) - (size_t) n, "  DUP%c %dK", dup_shift(rx) < 0 ? '-' : '+', abs(dup_shift(rx)) / 1000);
+
+		x6100_lcd_text(lcd, (W - x6100_lcd_text_width(s, 2)) / 2, P_NOTE_Y, 2, s, SCR_DIM);
+	}
+
+	//
+	// Footer: the lock (or the auto lock count-down), the volume
+	//
+	{
+		int y = lcd->h - TAG_H + 10;
+
+		if (rx->lock) {
+			x6100_lcd_text(lcd, 12, y - 2, 3, "LOCK", SCR_WARN);
+		} else if (g_autolock_s > 0) {
+			uint64_t idle = now_ms() - g_last_turn_ms;
+			int left = idle >= (uint64_t) g_autolock_s * 1000u ? 0 : g_autolock_s - (int) (idle / 1000u);
+
+			snprintf(s, sizeof(s), "LOCK IN %d S", left);
+			x6100_lcd_text(lcd, 12, y + 2, 2, s, SCR_DIM);
+		}
+
+		snprintf(s, sizeof(s), "VOL %d", rx->vol);
+		x6100_lcd_text(lcd, W - 12 - x6100_lcd_text_width(s, 2), y + 2, 2, s, rx->mute ? SCR_WARN : SCR_DIM);
+	}
+}
+
 static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 {
 	x6100_lcd_t *lcd = &scr->lcd;
 	int W = lcd->w;
 	char s[64];
+	const bool portrait = lcd->h > lcd->w;
+
+	//
+	// Layout geometry: the scope under the landscape top, or lower in portrait
+	//
+	g_spec_y = portrait ? P_SPEC_Y : 180;
+	g_tag_h = portrait ? P_FOOT_H : 20;
+	g_vu_x = 500;
+	g_vu_y = 4;
 
 	//
 	// Scope panel: waterfall off (cleared once, no new lines) or slower (a line on
@@ -6901,11 +7097,17 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 
 	// Waterfall size: the scope above gives or takes the rows (small waterfall = tall scope)
 	static const int spec_h[3] = { 190, 150, 110 };
+	int want_h = portrait ? P_SPEC_H : spec_h[g_sp[SP_WF_SIZE]];	/* portrait: a small scope */
 
-	if (g_spec_h != spec_h[g_sp[SP_WF_SIZE]]) {
-		g_spec_h = spec_h[g_sp[SP_WF_SIZE]];
+	if (g_spec_h != want_h) {
+		g_spec_h = want_h;
 		x6100_lcd_fill(lcd, 0, SPEC_Y, W, lcd->h - TAG_H - SPEC_Y, 0x000000);
 		scr->wf_scope = (scope_mode_t) -1;	/* waterfall re-aligns */
+	}
+
+	if (portrait) {
+		draw_portrait(scr, rx);
+		goto scope;
 	}
 
 	//
@@ -7136,6 +7338,7 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 		x6100_lcd_text(lcd, VU_X + 8, VU_Y + VU_H - 20, 2, meter_names[rx->meter], SCR_DIM);
 	}
 
+scope:
 	if (!scr->spec_valid)
 		return;
 
@@ -7466,7 +7669,7 @@ overlays:
 	//
 	// Filter label under the scope mode: FILn and its width
 	//
-	{
+	if (!portrait) {	/* portrait: in the info lines, or left out */
 		uint32_t lo, hi;
 		char m[32], w[12];
 		int tw;
@@ -7483,7 +7686,7 @@ overlays:
 	// Clock under the filter label: system time, UTC, ISO 8601; amber while not known
 	// to be right (time_ok). Drawn before the panels, which cover it while open.
 	//
-	{
+	if (!portrait) {	/* portrait: in the info lines, or left out */
 		time_t now = time(NULL);
 		struct tm tm;
 		char m[32];
@@ -7500,7 +7703,7 @@ overlays:
 	// LAN (a wfview client through wfserver) and CAT (CI-V traffic in the last 3 s), right
 	// aligned under the clock, as the LAN icon on an Icom
 	//
-	{
+	if (!portrait) {	/* portrait: in the info lines, or left out */
 		// wfserver polls the radio over the pty with no client too (2026-11-03): pty
 		// traffic counts only without it; a client through wfserver shows as LAN
 		uint64_t ms = now_ms();
@@ -7567,7 +7770,7 @@ overlays:
 	if (rx->ginfo)
 		draw_gen_info(lcd, scr);
 
-	if (rx->tuning || (rx->tune_done && now_ms() - rx->tune_done < TUNE_SHOW_MS))
+	if (!portrait && (rx->tuning || (rx->tune_done && now_ms() - rx->tune_done < TUNE_SHOW_MS)))	/* portrait: TUNE in the bar */
 		draw_tune_panel(lcd, rx, scr);
 
 	//
@@ -8060,6 +8263,29 @@ static bool console_line(rx_t *rx, char *line)
 			continue;
 		}
 
+
+		// layout landscape | portrait (GEN row LAYOUT; the conf fixes it), portraitrot 0 |
+		// 180 (which side is up; 180: the left side), autolock <s> (portrait: the VFO / MFK
+		// lock after s seconds without a turn or key, 0 off; default 10)
+		if (strcasecmp(t, "layout") == 0 || strcasecmp(t, "portraitrot") == 0 || strcasecmp(t, "autolock") == 0) {
+			const char *v = strtok(NULL, " \t\r\n");
+			char *end = NULL;
+			long n = v != NULL ? strtol(v, &end, 10) : -1;
+
+			if (strcasecmp(t, "layout") == 0 && v != NULL && (strcasecmp(v, "landscape") == 0 || strcasecmp(v, "portrait") == 0)) {
+				g_layout_portrait = strcasecmp(v, "portrait") == 0;
+				g_conf_set |= g_conf_reading ? 1u << GEN_LAYOUT : 0;	/* the conf fixes the GEN row */
+			} else if (strcasecmp(t, "portraitrot") == 0 && v != NULL && *end == '\0' && (n == 0 || n == 180)) {
+				g_layout_rot = (int) n;
+			} else if (strcasecmp(t, "autolock") == 0 && v != NULL && *end == '\0' && n >= 0 && n <= 600) {
+				g_autolock_s = (int) n;
+			} else {
+				fprintf(stderr, "\nlayout landscape|portrait, portraitrot 0|180, autolock 0-600 (s)\n");
+			}
+
+			changed = true;
+			continue;
+		}
 		// freqmin / freqmax <Hz>: the tuning range, within 5 kHz - 75 MHz while the limits
 		// the baseband takes are found out; default 148.5 kHz - 75 MHz (conf, console, state)
 		if (strcasecmp(t, "freqmin") == 0 || strcasecmp(t, "freqmax") == 0) {
@@ -8963,6 +9189,7 @@ static void state_write(const rx_t *rx)
 
 	fprintf(fp, "civaddr %02x ", g_civ_addr);
 	fprintf(fp, "catmem %s ", g_cat_mem_rw ? "rw" : "ro");
+	fprintf(fp, "layout %s ", g_layout_portrait ? "portrait" : "landscape");
 	fprintf(fp, "cattime %s ", g_cat_time == CT_OFF ? "off" : g_cat_time == CT_ON ? "on" : "unsynced");
 	fprintf(fp, "modin %s %s ", g_modin[0] ? "usb" : "mic", g_modin[1] ? "usb" : "mic");
 	fprintf(fp, "ntp %s", strcmp(g_ntp_server, "off") == 0 ? "off" : "on");
@@ -10757,6 +10984,8 @@ int main(int argc, char **argv)
 	uint64_t last_refresh = now_ms();
 	uint64_t last_meter = last_refresh;
 	uint64_t last_disp = last_refresh;
+
+	g_last_turn_ms = now_ms();	/* the portrait auto lock counts from the start */
 	double level = 0.0;
 	int level_n = 0;
 	bool new_frame = false;
@@ -11368,6 +11597,27 @@ int main(int argc, char **argv)
 			level = 0.0;
 			level_n = 0;
 			last_meter = t;
+			dirty = true;
+		}
+
+		// Layout: portrait while no panel is open (they are landscape); a turn clears the
+		// canvas and starts the scope and waterfall again
+		{
+			int rot = g_layout_portrait && !panel_open(&rx) ? g_layout_rot : X6100_LCD_ROTATION;
+
+			if (scr.lcd.rot != rot && x6100_lcd_rotate(&scr.lcd, rot) == 0) {
+				x6100_lcd_fill(&scr.lcd, 0, 0, scr.lcd.w, scr.lcd.h, 0x000000);
+				g_spec_h = 0;			/* re-laid out on the next draw */
+				scr.wf_view = -1;
+				dirty = true;
+			}
+		}
+
+		// Auto lock in portrait: the VFO and MFK lock after g_autolock_s without a turn or
+		// a key; LOCK unlocks (PTT and volume always work)
+		if (g_layout_portrait && g_autolock_s > 0 && !rx.lock && !panel_open(&rx) && !rx.ptt
+			&& t - g_last_turn_ms >= (uint64_t) g_autolock_s * 1000u) {
+			rx.lock = true;
 			dirty = true;
 		}
 

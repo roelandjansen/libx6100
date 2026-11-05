@@ -39,6 +39,11 @@ Status: 2026-11-04 (v0.17.5). Summary and next steps: `STATUS.md`.
   54 MHz is past the low-pass filters (harmonics, power reading, calibration unknown):
   a dummy load only, unless a spectrum check shows it clean. 4 m TX in the band plan:
   only after that check.
+- Portrait layout (2026-11-05): GEN row LAYOUT, `layout portrait`, `portraitrot 0|180`,
+  `autolock <s>` (layout A of the mock-ups: red TX line, arc meter, frequency, small
+  scope / waterfall, battery, lock). To check on the radio: 180 is the left side up (0 if
+  not), the scope and waterfall in portrait, the turn to landscape and back with a
+  panel, the auto lock (LOCK unlocks, PTT and volume free), CPU / frame rate.
 - 4 m band (2026-11-04): 70.0-70.5 MHz after 6m on the band keys (70.200 USB to start).
   TX allowed in regions nl and uk (70.0-70.5 MHz; NL: F registration; no ITU allocation, so
   not in r1-r3). The output above 54 MHz is past the 6 m low-pass filters: check it on
