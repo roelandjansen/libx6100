@@ -82,6 +82,8 @@ Verified on the radio:
   CHARGING below 100 % (2026-11-04)
 - PRE key short = ATT, long = PRE (2026-11-04)
 - bbreset: the baseband reset over its GPIO line comes back (2026-11-05)
+- portrait layout (rotation 180, GEN row and command line, auto lock, frame rate) and the
+  console help (2026-11-05)
 - tuning range: LW 198 kHz received (MW bleeds through at 77.5 kHz), RX and TX at 75 MHz
   (2026-11-04)
 - scope frequency scale with the IQ 100 kHz wide: the carrier on the dial line with the IF
@@ -317,8 +319,9 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     constants do not change it, 2026-11-04.)
 29. Region uk: add the UK 60 m segments (Ofcom licence terms).
 
-30. Portrait: rotation 180 (left side up), scope and waterfall verified 2026-11-05; still the turn to
-    landscape and back with a panel, the auto lock, frame rate.
+30. (done) Portrait: rotation 180, scope and waterfall, the GEN row and the command line,
+    the auto lock and the frame rate verified 2026-11-05. Still: the turn to landscape
+    and back with a panel open, if not seen yet.
 31. Next baseband hang: `bbreset` first, and note time and what ran.
 
 ## Next steps (suggested order)
