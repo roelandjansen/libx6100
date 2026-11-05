@@ -118,7 +118,7 @@ static uint32_t g_freq_max = FREQ_MAX_DEF;
 // left side up (the landscape canvas is rotation 270: its top is the panel's left column)
 static bool g_layout_portrait;	/* conf / state layout landscape | portrait; GEN row LAYOUT */
 static int g_layout_rot = 180;	/* conf portraitrot 0 | 180: 180 = the left side up */
-static int g_autolock_s = 10;	/* conf autolock <s>, 0 off: portrait only, the VFO / MFK lock */
+static int g_autolock_s = 20;	/* conf autolock <s>, 0 off: portrait only, the VFO / MFK lock */
 static uint64_t g_last_turn_ms;	/* last knob turn or key: the auto lock counts from it */
 
 //
@@ -3960,12 +3960,20 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 		return true;	/* the scan owns the VFO; volume still works */
 
 	switch (in) {
-	case IN_VFO:
-		if (rx->step == STEP_CH)
-			set_freq(rx, (int64_t) rx->freq - rx->freq % 100 + (int64_t) value * X6100_DIR_VFO * 100);
-		else
-			set_freq(rx, (int64_t) rx->freq - rx->freq % (uint32_t) rx->step + (int64_t) value * X6100_DIR_VFO * rx->step);
+	case IN_VFO: {
+		int64_t f = rx->step == STEP_CH ? (int64_t) rx->freq - rx->freq % 100 + (int64_t) value * X6100_DIR_VFO * 100
+			: (int64_t) rx->freq - rx->freq % (uint32_t) rx->step + (int64_t) value * X6100_DIR_VFO * rx->step;
+
+		// Past an end of the tuning range the dial goes round to the other end (2026-11-05;
+		// it stopped there). Only from the end itself: a turn that overshoots lands on it
+		if (f > (int64_t) FREQ_MAX)
+			f = rx->freq >= FREQ_MAX ? (int64_t) FREQ_MIN : (int64_t) FREQ_MAX;
+		else if (f < (int64_t) FREQ_MIN)
+			f = rx->freq <= FREQ_MIN ? (int64_t) FREQ_MAX : (int64_t) FREQ_MIN;
+
+		set_freq(rx, f);
 		return true;
+	}
 	case IN_VOL:
 		rx->vol = clampi(rx->vol + value * X6100_DIR_VOL, 0, 100);
 		return true;
@@ -7086,7 +7094,9 @@ static void draw_portrait(screen_t *scr, const rx_t *rx)
 		else
 			snprintf(st, sizeof(st), "%d", rx->step);
 
-		snprintf(s, sizeof(s), "%s   FIL%d   STEP %s", mode_name(rx->mode), rx->fil + 1, st);
+		// Fixed widths (the font is monospaced), so a new mode or step does not move the
+		// line: centred on a width that stays the same (2026-11-05)
+		snprintf(s, sizeof(s), "%-5s  FIL%d  STEP %-4s", mode_name(rx->mode), rx->fil + 1, st);
 		x6100_lcd_text(lcd, (W - x6100_lcd_text_width(s, 3)) / 2, P_INFO_Y, 3, s, SCR_ACCENT);
 	}
 
@@ -8350,7 +8360,7 @@ static bool console_line(rx_t *rx, char *line)
 
 		// layout landscape | portrait (GEN row LAYOUT; the conf fixes it), portraitrot 0 |
 		// 180 (which side is up; 180: the left side), autolock <s> (portrait: the VFO / MFK
-		// lock after s seconds without a turn or key, 0 off; default 10)
+		// lock after s seconds without a turn or key, 0 off; default 20)
 		if (strcasecmp(t, "layout") == 0 || strcasecmp(t, "portraitrot") == 0 || strcasecmp(t, "autolock") == 0) {
 			const char *v = strtok(NULL, " \t\r\n");
 			char *end = NULL;

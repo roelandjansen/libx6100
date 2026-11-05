@@ -34,7 +34,7 @@ Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
 
 | Control | Short | Long |
 |---|---|---|
-| VFO knob | tune | |
+| VFO knob | tune; past the top of the tuning range (`freqmax`) it goes round to `freqmin`, and the other way | |
 | FST | step 10 / 100 / 1000 / 5000 Hz / 10 kHz / 100 kHz; AM on LW / MW: 100 / 1k / 5k / 9k / 10k (channel raster) / 100k; 60 m: 10 / 100 / 1k / 5k / CH / 10k / 100k (MFK picks the 60 m channel, the VFO knob fine-tunes in 100 Hz) | 1 Hz step on / off |
 | VOL knob | volume; push = mute | |
 | MFK knob | RF gain or TX power | |
@@ -235,12 +235,12 @@ and TX; the radio itself to be photographed):
 - a small scope (its mode label top right) and the waterfall
 - footer: LOCK, or the auto lock count-down (LOCK IN n S), and the volume
 
-Auto lock: after `autolock` seconds (default 10, 0 = off) without a knob turn or key, the
+Auto lock: after `autolock` seconds (default 20, 0 = off) without a knob turn or key, the
 VFO and MFK lock; LOCK unlocks. PTT and the volume always work. Panels (GEN, filter,
 DSP, ...) are landscape: while one is open the screen turns back to landscape, and to
 portrait when it closes (the scope and waterfall start again). The tune panel is left
 out in portrait: TUNE shows in the red line. Conf: `layout portrait`, `portraitrot 180`
-(the left side up; 0 for the right side up), `autolock 10`; LAYOUT is kept in the state.
+(the left side up; 0 for the right side up), `autolock 20`; LAYOUT is kept in the state.
 
 ## Settings panel (GEN)
 

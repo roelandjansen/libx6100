@@ -49,7 +49,7 @@ Status: 2026-11-04 (v0.17.5). Summary and next steps: `STATUS.md`.
   if it helps, an automatic reset after N s of no flow. Cause unknown: note the time and
   what ran (wfview, BT, WiFi) on the next one.
 - Portrait layout (2026-11-05): GEN row LAYOUT, `layout portrait`, `portraitrot 0|180`,
-  `autolock <s>` (layout A of the mock-ups: red TX line, arc meter, frequency, small
+  `autolock <s>` (default 20 s) (layout A of the mock-ups: red TX line, arc meter, frequency, small
   scope / waterfall, battery, lock). To check on the radio: 180 is the left side up (0 if
   not), the scope and waterfall in portrait, the turn to landscape and back with a
   panel, the auto lock (LOCK unlocks, PTT and volume free), CPU / frame rate.
