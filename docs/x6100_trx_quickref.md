@@ -235,9 +235,10 @@ verified). Top to bottom (on the radio, MW AM, locked; and the mock-up in RX and
 - the frequency, MHz.kHz.10 Hz, large (to the Hz with the 1 Hz step, FST long)
 - mode, filter, step; under it AGC, ATT / PRE / NB / NR / ATU when on, SPLIT or DUP
 - a small scope (its mode label top right) and the waterfall
-- footer: LOCK, or the auto lock count-down (LOCK IN n); RF gain (and squelch when not 0)
-  in the middle, in accent below 100; the volume (MUTE when muted), or SQL / RFG while
-  the VOL knob is set to them (VOL long)
+- footer, in fixed columns: LOCK (amber) or the auto lock count-down (LOCK IN n), then
+  `RFG 100  SQL   0  VOL  32`, always all three; the one the VOL knob turns (VOL long)
+  stands out (accent for SQL / RFG), the volume amber when muted, RF gain brighter
+  below 100
 
 Auto lock: after `autolock` seconds (default 20, 0 = off) without a knob turn or key, the
 VFO and MFK lock; LOCK unlocks. PTT and the volume always work. Back to landscape

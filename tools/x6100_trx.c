@@ -7142,39 +7142,35 @@ static void draw_portrait(screen_t *scr, const rx_t *rx)
 	}
 
 	//
-	// Footer: the lock (or the auto lock count-down), the volume
+	// Footer in fixed columns, so nothing moves (2026-11-05): the lock (or the auto lock
+	// count-down), then RF gain, squelch and volume, each always there. The one the VOL
+	// knob turns now (VOL long) in accent, the volume amber when muted, RF gain brighter
+	// below 100
 	//
 	{
-		int y = lcd->h - TAG_H + 10;
+		static const int col[3] = { 156, 264, 372 };	/* RFG, SQL, VOL: 7 characters at 12 px */
+		const int y = lcd->h - TAG_H + 12;
+		const int val[3] = { rx->rfg, rx->sql, rx->vol };
+		static const char *name[3] = { "RFG", "SQL", "VOL" };
 
 		if (rx->lock) {
-			x6100_lcd_text(lcd, 12, y - 2, 3, "LOCK", SCR_WARN);
+			x6100_lcd_text(lcd, 12, y, 2, "LOCK", SCR_WARN);
 		} else if (g_autolock_s > 0) {
 			uint64_t idle = now_ms() - g_last_turn_ms;
 			int left = idle >= (uint64_t) g_autolock_s * 1000u ? 0 : g_autolock_s - (int) (idle / 1000u);
 
-			snprintf(s, sizeof(s), "LOCK IN %d", left);	/* short: RFG / SQL in the middle */
-			x6100_lcd_text(lcd, 12, y + 2, 2, s, SCR_DIM);
+			snprintf(s, sizeof(s), "LOCK IN %d", left);
+			x6100_lcd_text(lcd, 12, y, 2, s, SCR_DIM);
 		}
 
-		// Right: what the VOL knob turns (VOL long: SQL / RFG, accent); middle: RF gain and
-		// squelch, which the MFK and VOL knob change without a panel (2026-11-05)
-		if (g_vol_fn == 1)
-			snprintf(s, sizeof(s), "SQL %d", rx->sql);
-		else if (g_vol_fn == 2)
-			snprintf(s, sizeof(s), "RFG %d", rx->rfg);
-		else
-			snprintf(s, sizeof(s), "%s %d", rx->mute ? "MUTE" : "VOL", rx->vol);
+		for (int i = 0; i < 3; i++) {
+			int knob = i == 0 ? 2 : i == 1 ? 1 : 0;		/* g_vol_fn of this field */
+			uint32_t c = g_vol_fn == knob ? (knob == 0 && rx->mute ? SCR_WARN : g_vol_fn != 0 ? SCR_ACCENT : SCR_FG)
+				: i == 2 && rx->mute ? SCR_WARN : i == 0 && rx->rfg < 100 ? SCR_FG : SCR_DIM;
 
-		x6100_lcd_text(lcd, W - 12 - x6100_lcd_text_width(s, 2), y + 2, 2, s,
-			g_vol_fn != 0 ? SCR_ACCENT : rx->mute ? SCR_WARN : SCR_DIM);
-
-		if (rx->sql > 0)
-			snprintf(s, sizeof(s), "RFG %d  SQL %d", rx->rfg, rx->sql);
-		else
-			snprintf(s, sizeof(s), "RFG %d", rx->rfg);
-
-		x6100_lcd_text(lcd, (W - x6100_lcd_text_width(s, 2)) / 2, y + 2, 2, s, rx->rfg < 100 ? SCR_ACCENT : SCR_DIM);
+			snprintf(s, sizeof(s), "%s %3d", name[i], val[i]);
+			x6100_lcd_text(lcd, col[i], y, 2, s, c);
+		}
 	}
 }
 
