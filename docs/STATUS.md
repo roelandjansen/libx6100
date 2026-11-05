@@ -330,8 +330,8 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
 31. Next baseband hang: `bbreset` first, and note time and what ran.
 
 32. (done) VOL knob: VOL / SQL / RFG switching, the fall-back to VOL after 10 s, mute (also
-    locked) and the portrait footer verified 2026-11-05. Locked, the knob is the volume
-    only (VOL long does nothing then), by design.
+    locked) and the portrait footer verified 2026-11-05. Locked, the knob does VOL and
+    SQL (VOL long switches between them; RF gain stays locked), since 2026-11-05.
 
 ## Next steps (suggested order)
 

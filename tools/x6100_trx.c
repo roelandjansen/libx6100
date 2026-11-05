@@ -3695,17 +3695,21 @@ static bool on_long_key(rx_t *rx, int key)
 	if (send_stop(rx))	/* a message or the SWR scan */
 		return true;
 
+	// VOL long: the VOL knob to VOL / SQL / RFG (short: mute). Locked, VOL / SQL only: the
+	// squelch stays free with the volume (2026-11-05), the RF gain stays locked
+	if (key == X6100_KEY_VOL_PUSH) {
+		g_vol_fn = rx->lock ? (g_vol_fn == 1 ? 0 : 1) : (g_vol_fn + 1) % 3;
+		g_vol_fn_ms = now_ms();
+		toast(g_vol_fn == 0 ? "KNOB: VOLUME" : g_vol_fn == 1 ? "KNOB: SQUELCH" : "KNOB: RF GAIN");
+		return true;
+	}
+
 	if (rx->lock)
 		return false;
 
 	switch (key) {
 	case X6100_KEY_PRE:
 		rx->pre = !rx->pre;	/* long: PRE */
-		return true;
-	case X6100_KEY_VOL_PUSH:	/* long: the VOL knob to VOL / SQL / RFG (short: mute) */
-		g_vol_fn = (g_vol_fn + 1) % 3;
-		g_vol_fn_ms = now_ms();
-		toast(g_vol_fn == 0 ? "KNOB: VOLUME" : g_vol_fn == 1 ? "KNOB: SQUELCH" : "KNOB: RF GAIN");
 		return true;
 	case X6100_KEY_F1:
 		// Long: scope panel (mode, VBW, averaging, waveform, colours, waterfall)
@@ -3989,8 +3993,8 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 		return true;
 	}
 	case IN_VOL:
-		// VOL long chose squelch or RF gain; locked, the knob is always the volume
-		if (g_vol_fn == 1 && !rx->lock)
+		// VOL long chose squelch or RF gain; locked, volume and squelch only (RF gain locked)
+		if (g_vol_fn == 1)
 			rx->sql = clampi(rx->sql + value * X6100_DIR_VOL, 0, 100);
 		else if (g_vol_fn == 2 && !rx->lock)
 			rx->rfg = clampi(rx->rfg + value * X6100_DIR_VOL * 2, 0, 100);
