@@ -221,11 +221,12 @@ Values are kept in the last state (see Settings); defaults NR 20, NB 10 / 10, no
 
 GEN row LAYOUT: PORTRAIT, for the radio held upright with its left side up (the mic at
 the VFO knob on top), e.g. with a telescopic antenna on the ATU (2026-11-05). The
-panel is natively portrait, so it is only another rotation. Top to bottom (mock-up, RX
-and TX; the radio itself to be photographed):
+panel is natively portrait, so it is only another rotation (180, the left side up:
+verified). Top to bottom (on the radio, MW AM, locked; and the mock-up in RX and TX):
+
+<img src="images/x6100_trx_portrait.jpg" alt="portrait on the radio" width="280">
 
 ![portrait mock-up](images/x6100_trx_portrait_mock.png)
-
 
 - status line: RX (green), band, VFO, battery V and %; the whole line red with TX (or
   TUNE) while transmitting

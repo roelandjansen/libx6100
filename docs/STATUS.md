@@ -314,7 +314,7 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     constants do not change it, 2026-11-04.)
 29. Region uk: add the UK 60 m segments (Ofcom licence terms).
 
-30. Portrait: the rotation (180 = left side up), scope and waterfall, the turn to
+30. Portrait: rotation 180 (left side up), scope and waterfall verified 2026-11-05; still the turn to
     landscape and back with a panel, the auto lock, frame rate; a photo for the docs.
 31. Next baseband hang: `bbreset` first, and note time and what ran.
 

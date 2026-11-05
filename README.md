@@ -13,6 +13,13 @@ independent, documented library, as the base for a new front end.
 ATU and ATT on, 2026-11-01. Key reference
 in `docs/x6100_trx_quickref.md`.
 
+<img src="docs/images/x6100_trx_portrait.jpg" alt="x6100_trx in portrait on the radio" width="320">
+
+Portrait layout (GEN row LAYOUT), the radio held upright as a handheld, left side up:
+a status line that turns red with TX, the arc meter, the frequency, mode / filter /
+step, a small scope and waterfall, battery and the auto lock. MW AM on 1395 kHz with
+the 9 kHz step, locked, 2026-11-05.
+
 ![x6100_trx receive screen](docs/images/x6100_trx.png)
 
 The same screen rendered by its own drawing code, with 20 m SSB activity modelled
