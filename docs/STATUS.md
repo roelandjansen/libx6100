@@ -1,6 +1,11 @@
 # libx6100 / x6100_trx — status
 
-Snapshot: 2026-11-04. Last tag: v0.17.5 (2026-11-04; LAN and CAT indicators (verified);
+Snapshot: 2026-11-05. Last tag: v0.17.6 (2026-11-05; the portrait layout for handheld use
+(GEN LAYOUT, red TX line, arc meter, small scope, auto lock 20 s); baseband watchdog
+(BASEBAND NOT RESPONDING) and `bbreset` / `--bbreset` over its GPIO reset line
+(verified); the VFO goes round at the range ends; 9 kHz step on LW / MW in any mode;
+the AGC MID row dropped (AUTO is by mode in the baseband); the volume free under LOCK),
+on v0.17.5 (2026-11-04; LAN and CAT indicators (verified);
 tuning range 148.5 kHz - 75 MHz (`freqmin` / `freqmax`, RX and TX found working to 75
 MHz); the 4 m band (band keys, regions nl and uk, X6100.rig 4m button); 10 and 100 kHz
 steps; PRE key short = ATT, long = PRE; AGC MID / AUTO; the charging flag dropped
@@ -73,6 +78,7 @@ Verified on the radio:
 - LAN indicator with wfview over the network; CAT blank with only wfserver; battery
   CHARGING below 100 % (2026-11-04)
 - PRE key short = ATT, long = PRE (2026-11-04)
+- bbreset: the baseband reset over its GPIO line comes back (2026-11-05)
 - tuning range: LW 198 kHz received (MW bleeds through at 77.5 kHz), RX and TX at 75 MHz
   (2026-11-04)
 - scope frequency scale with the IQ 100 kHz wide: the carrier on the dial line with the IF
@@ -307,6 +313,10 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
 28. FST cycle 10 / 100 / 1k / 5k / 10k / 100k. (AGC AUTO: by mode in the baseband, our time
     constants do not change it, 2026-11-04.)
 29. Region uk: add the UK 60 m segments (Ofcom licence terms).
+
+30. Portrait: the rotation (180 = left side up), scope and waterfall, the turn to
+    landscape and back with a panel, the auto lock, frame rate; a photo for the docs.
+31. Next baseband hang: `bbreset` first, and note time and what ran.
 
 ## Next steps (suggested order)
 
