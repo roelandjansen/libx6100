@@ -41,7 +41,8 @@ Status: 2026-11-05 (v0.17.8). Summary and next steps: `STATUS.md`.
   only after that check.
 - VOL knob as VOL / SQL / RFG (2026-11-05): VOL long cycles it, back to VOL 10 s after the
   last turn; mute on a short push (now on release), also while locked. Portrait footer
-  in fixed columns: LOCK, RFG, SQL, VOL. To check on the radio (STATUS item 32).
+  in fixed columns: LOCK, RFG, SQL, VOL. Verified on the radio 2026-11-05; locked, the
+  knob is the volume only (SQL / RFG need LOCK off), by design.
 - Baseband hang (2026-11-04 night): after hours idle (5450 kHz USB) the baseband stopped:
   no flow (iq -260 dB, the screen stood still) and NAKs on I2C for 6.8 h; a new start
   got ENXIO on every read; a power cycle needed. Built 2026-11-05: a flow watchdog (5 s:
