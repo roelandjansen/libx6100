@@ -26,6 +26,7 @@ x6100_trx --oob 5450000 usb slow
 | `--cat[=baud\|pty]` | CI-V as an IC-705 on /dev/ttyS2 (DEV USB-C, PC side the second CH342 port, e.g. ttyACM1), 4800-19200, default 19200 (the most the DEV port carries); `pty`: on a pseudo-terminal, /tmp/x6100-civ, any speed, for a client on the radio (wfserver, rigctld, socat). See `docs/x6100_civ.md` |
 | `--cat-log` | as `--cat`, and print CI-V commands (`>`) with our OK / NG reply (`<`); polls answered with data are not shown |
 | `--probe` | print the flow flag word on change, and every second the IQ peak and all flag bits seen (overflow hunt) |
+| `--bbreset` | reset the baseband first (GPIO 204 on gpiochip1, as X6100Control), for a baseband that does not answer on I2C (2026-11-05) |
 
 Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
 
@@ -369,6 +370,7 @@ The status line starts with the VFO in use (A / B); with split, RIT or XIT it ad
 | `ifshift 10000` | IF shift, -40000 to 40000 Hz (0 = off): the LO that far below the receive frequency, the DC spike out of the passband |
 | `ifshift_tx 1` | keep the IF shift while transmitting (verified); 0: off in TX and in CW |
 | `hold on`, `hold off` | scope HOLD (as CI-V 27 17 from wfview): scope and waterfall frozen, the S-meter goes on; label HOLD; not kept |
+| `bbreset` | reset the baseband (its GPIO reset line, 100 ms) and send it everything again; the calibration is read again (kept when that fails). For a hung baseband: no flow for 5 s shows BASEBAND NOT RESPONDING in red on the screen (redrawn every second), and the console says so once (2026-11-05) |
 | `step ch` | 60 m channel steps |
 | `memr` | list the used memory channels |
 | `memr 5`, `memw 5`, `memc 5` | recall / write the VFO into / clear memory channel 5 |

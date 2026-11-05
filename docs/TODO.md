@@ -39,6 +39,15 @@ Status: 2026-11-04 (v0.17.5). Summary and next steps: `STATUS.md`.
   54 MHz is past the low-pass filters (harmonics, power reading, calibration unknown):
   a dummy load only, unless a spectrum check shows it clean. 4 m TX in the band plan:
   only after that check.
+- Baseband hang (2026-11-04 night): after hours idle (5450 kHz USB) the baseband stopped:
+  no flow (iq -260 dB, the screen stood still) and NAKs on I2C for 6.8 h; a new start
+  got ENXIO on every read; a power cycle needed. Built 2026-11-05: a flow watchdog (5 s:
+  BASEBAND NOT RESPONDING on the screen, said once on the console; the i2c pending line
+  once a minute), console `bbreset` and `--bbreset` (GPIO 204 on gpiochip1, high 100 ms,
+  as X6100Control; the CW key line 203 left alone, it selects the bootloader). To check:
+  `bbreset` on a healthy baseband (RX back after about 1 s), then on the next hang;
+  if it helps, an automatic reset after N s of no flow. Cause unknown: note the time and
+  what ran (wfview, BT, WiFi) on the next one.
 - Portrait layout (2026-11-05): GEN row LAYOUT, `layout portrait`, `portraitrot 0|180`,
   `autolock <s>` (layout A of the mock-ups: red TX line, arc meter, frequency, small
   scope / waterfall, battery, lock). To check on the radio: 180 is the left side up (0 if

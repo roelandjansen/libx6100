@@ -65,6 +65,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <ifaddrs.h>
+#include <linux/gpio.h>
 #include <linux/input.h>
 #include <math.h>
 #include <netinet/in.h>
@@ -119,6 +120,69 @@ static bool g_layout_portrait;	/* conf / state layout landscape | portrait; GEN 
 static int g_layout_rot = 180;	/* conf portraitrot 0 | 180: 180 = the left side up */
 static int g_autolock_s = 10;	/* conf autolock <s>, 0 off: portrait only, the VFO / MFK lock */
 static uint64_t g_last_turn_ms;	/* last knob turn or key: the auto lock counts from it */
+
+//
+// Baseband reset line (2026-11-05): GPIO 204 on gpiochip1, high = the STM32 in reset, as
+// X6100Control (LGPL-2.1, X6100_PIN_BB_RESET; its firmware update pulses it). Only that
+// line is touched: the update also pulls the CW key line (203) low, which is taken to
+// start the bootloader, so 203 is left alone. Once used, the line is held low (out of
+// reset) while x6100_trx runs, as X6100Control holds it, not left floating.
+//
+
+#define BB_RESET_CHIP	"/dev/gpiochip1"
+#define BB_RESET_LINE	204
+#define BB_RESET_MS	100		/* in reset */
+#define BB_BOOT_MS	1000		/* then the baseband starts before it answers */
+
+static int g_bb_reset_fd = -1;		/* line handle, held once requested */
+static bool g_bb_reset_req;		/* console bbreset: done in the main loop */
+static bool g_bb_dead;			/* no flow frames for BB_DEAD_MS: shown on screen */
+
+#define BB_DEAD_MS	5000		/* flow frames come every 35 ms */
+
+// Pulse the reset line; 0 or -errno
+static int bb_reset_pulse(void)
+{
+	struct gpiohandle_data d = { 0 };
+
+	if (g_bb_reset_fd < 0) {
+		struct gpiohandle_request req = { 0 };
+		int fd = open(BB_RESET_CHIP, O_RDWR | O_CLOEXEC);
+
+		if (fd < 0)
+			return -errno;
+
+		req.lineoffsets[0] = BB_RESET_LINE;
+		req.lines = 1;
+		req.flags = GPIOHANDLE_REQUEST_OUTPUT;
+		req.default_values[0] = 0;
+		snprintf(req.consumer_label, sizeof(req.consumer_label), "x6100_trx bb reset");
+
+		if (ioctl(fd, GPIO_GET_LINEHANDLE_IOCTL, &req) < 0) {
+			int e = errno;
+
+			close(fd);
+			return -e;
+		}
+
+		close(fd);
+		g_bb_reset_fd = req.fd;
+	}
+
+	d.values[0] = 1;
+
+	if (ioctl(g_bb_reset_fd, GPIOHANDLE_SET_LINE_VALUES_IOCTL, &d) < 0)
+		return -errno;
+
+	usleep(BB_RESET_MS * 1000);
+	d.values[0] = 0;
+
+	if (ioctl(g_bb_reset_fd, GPIOHANDLE_SET_LINE_VALUES_IOCTL, &d) < 0)
+		return -errno;
+
+	usleep(BB_BOOT_MS * 1000);
+	return 0;
+}
 
 #define FREQ_MIN	(g_no_limit ? 10000u : g_freq_min)
 #define FREQ_MAX	(g_no_limit ? 100000000u : g_freq_max)
@@ -7734,6 +7798,20 @@ overlays:
 		x6100_lcd_text(lcd, tx, ty, 3, g_toast, SCR_ACCENT);
 	}
 
+	//
+	// Baseband watchdog: no flow (and so no new scope lines), red in the middle of the
+	// waterfall, with what to do; the screen is redrawn every second meanwhile
+	//
+	if (g_bb_dead) {
+		static const char *l1 = "BASEBAND NOT RESPONDING", *l2 = "CONSOLE: BBRESET, ELSE A POWER CYCLE";
+		int w1 = x6100_lcd_text_width(l1, 3), w2 = x6100_lcd_text_width(l2, 2);
+		int bw = (w1 > w2 ? w1 : w2) + 28, y = WF_Y + 20;
+
+		x6100_lcd_fill(lcd, (W - bw) / 2, y, bw, 60, 0x400000);
+		x6100_lcd_text(lcd, (W - w1) / 2, y + 10, 3, l1, 0xFF4040);
+		x6100_lcd_text(lcd, (W - w2) / 2, y + 38, 2, l2, SCR_FG);
+	}
+
 	if (rx->fedit)
 		draw_filter_panel(lcd, rx);
 
@@ -8004,6 +8082,12 @@ static bool console_token(rx_t *rx, const char *t)
 	// Safety checks off, as --oob / --no-limit (the operator's responsibility)
 	if (strcasecmp(t, "oob") == 0) {
 		g_allow_oob = true;
+		return true;
+	}
+
+	// bbreset: reset the baseband (GPIO line) and send it everything again (main loop)
+	if (strcasecmp(t, "bbreset") == 0) {
+		g_bb_reset_req = true;
 		return true;
 	}
 
@@ -10794,6 +10878,11 @@ int main(int argc, char **argv)
 			continue;
 		}
 
+		if (strcmp(argv[i], "--bbreset") == 0) {	/* reset the baseband first (GPIO) */
+			g_bb_reset_req = true;
+			continue;
+		}
+
 		if (strcmp(argv[i], "--probe") == 0) {
 			g_probe = true;
 			continue;
@@ -10812,7 +10901,7 @@ int main(int argc, char **argv)
 		}
 
 		if (!console_token(&rx, argv[i])) {
-			fprintf(stderr, "usage: %s [--oob] [--no-limit] [--cat[=baud|pty]] [--cat-log] [--probe] [freq] [usb|lsb|cw|cwr|am|nfm] [off|slow|fast|auto] [att|noatt] [pre|nopre] [vol 0-100]\n", argv[0]);
+			fprintf(stderr, "usage: %s [--oob] [--no-limit] [--cat[=baud|pty]] [--cat-log] [--probe] [--bbreset] [freq] [usb|lsb|cw|cwr|am|nfm] [off|slow|fast|auto] [att|noatt] [pre|nopre] [vol 0-100]\n", argv[0]);
 			return 1;
 		}
 	}
@@ -10884,6 +10973,13 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
+	// --bbreset: a baseband that hangs (no answer on I2C, no flow) reset before the start
+	if (g_bb_reset_req) {
+		g_bb_reset_req = false;
+		rc = bb_reset_pulse();
+		fprintf(stderr, "bbreset: %s\n", rc < 0 ? strerror(-rc) : "baseband reset");
+	}
+
 	//
 	// The baseband right after another program let it go (the IU1WXY GUI, an x6100_trx
 	// that ended badly) may not answer on I2C for a while: the calibration read gave
@@ -10912,7 +11008,8 @@ int main(int argc, char **argv)
 	}
 
 	if (rc < 0) {
-		fprintf(stderr, "refresh: %s: the baseband does not answer on I2C; a reboot resets it\n", strerror(-rc));
+		fprintf(stderr, "refresh: %s: the baseband does not answer on I2C; try x6100_trx --bbreset, else a power cycle\n",
+			strerror(-rc));
 		return 1;
 	}
 
@@ -10990,6 +11087,7 @@ int main(int argc, char **argv)
 	int level_n = 0;
 	bool new_frame = false;
 	bool dirty = false;
+	uint64_t last_flow_ms = now_ms();	/* last flow frame: the baseband watchdog */
 	hold_t hold = { .key = -1 };
 	uint64_t pwr_since = 0;	/* PWR pressed at (ms), 0 = not held */
 	const char *pwr_msg = NULL;	/* the PWR hint we put in rx.warn */
@@ -11386,6 +11484,37 @@ int main(int argc, char **argv)
 		}
 
 		//
+		// Console bbreset: the baseband reset over its GPIO line, the calibration read
+		// again (kept when that fails), then every register sent again
+		//
+		if (g_bb_reset_req) {
+			x6100_cal_t c2;
+			int cr = -1;
+
+			g_bb_reset_req = false;
+			tx_drop(&rx, "BASEBAND RESET");
+
+			if ((rc = bb_reset_pulse()) < 0) {
+				fprintf(stderr, "\nbbreset: %s\n", strerror(-rc));
+				toast("BASEBAND RESET FAILED");
+			} else {
+				for (int n = 1; (cr = x6100_cal_read(&i2c, &c2)) < 0 && n < START_TRIES; n++)
+					usleep(START_WAIT_US);
+
+				if (cr == 0)
+					cal = c2;
+
+				printf("\nbbreset: baseband reset, calibration %s\n", cr == 0 ? "read again" : "kept (no answer)");
+				toast("BASEBAND RESET");
+				force_refresh = true;
+				last_flow_ms = now_ms();	/* the flow has a few seconds to come back */
+			}
+
+			t = now_ms();
+			dirty = true;
+		}
+
+		//
 		// Full refresh resends register 17 too: not while the tuner is searching
 		//
 		if ((t - last_refresh >= REFRESH_MS || force_refresh) && !rx.tuning) {
@@ -11401,8 +11530,20 @@ int main(int argc, char **argv)
 		}
 
 		if (ctl.resent > 0 || ctl.lost > 0) {
-			fprintf(stderr, "\ni2c: %u write(s) went through on a resend, %u still pending; all registers again\n",
-				ctl.resent, ctl.lost);
+			// Once, then a summary a minute: a hung baseband gave this line every few
+			// seconds for hours (2026-11-04 night)
+			static uint64_t last_said;
+			static unsigned quiet;
+
+			if (last_said == 0 || t - last_said >= 60000) {
+				fprintf(stderr, "\ni2c: %u write(s) went through on a resend, %u still pending; all registers again%s\n",
+					ctl.resent, ctl.lost, quiet > 0 ? " (and the same before, in the last minute)" : "");
+				last_said = t;
+				quiet = 0;
+			} else {
+				quiet++;
+			}
+
 			ctl.resent = 0;
 			ctl.lost = 0;
 			force_refresh = true;
@@ -11439,6 +11580,8 @@ int main(int argc, char **argv)
 		while ((rc = x6100_flow_read(&flow, &frame)) > 0) {
 			bool tx = (frame.flags & X6100_FLOW_TX) != 0;
 			double swr = frame.vswr * 0.1;
+
+			last_flow_ms = t;
 
 			if (tx != scr.tx)
 				dirty = true;
@@ -11598,6 +11741,27 @@ int main(int argc, char **argv)
 			level_n = 0;
 			last_meter = t;
 			dirty = true;
+		}
+
+		// Baseband watchdog: no flow frames for BB_DEAD_MS is a hung baseband (2026-11-04
+		// night: no flow and no I2C for 6.8 h, the screen stood still). Said once, shown on
+		// the screen, which is redrawn every second meanwhile; bbreset resets it
+		{
+			bool dead = t - last_flow_ms >= BB_DEAD_MS;
+
+			if (dead != g_bb_dead) {
+				if (dead)
+					fprintf(stderr, "\nbaseband: no flow for %d s, no answer? bbreset on the console resets it\n",
+						BB_DEAD_MS / 1000);
+				else
+					fprintf(stderr, "\nbaseband: flow again\n");
+
+				g_bb_dead = dead;
+				dirty = true;
+			}
+
+			if (dead && t - last_disp >= 1000)
+				dirty = true;
 		}
 
 		// Layout: portrait while no panel is open (they are landscape); a turn clears the
