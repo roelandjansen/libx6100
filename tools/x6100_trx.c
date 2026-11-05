@@ -120,6 +120,7 @@ static bool g_layout_portrait;	/* conf / state layout landscape | portrait; GEN 
 static int g_layout_rot = 180;	/* conf portraitrot 0 | 180: 180 = the left side up */
 static int g_autolock_s = 20;	/* conf autolock <s>, 0 off: portrait only, the VFO / MFK lock */
 static uint64_t g_last_turn_ms;	/* last knob turn or key: the auto lock counts from it */
+static bool g_lock_auto;		/* the lock in force is the auto lock: released when leaving portrait */
 
 //
 // Baseband reset line (2026-11-05): GPIO 204 on gpiochip1, high = the STM32 in reset, as
@@ -3512,6 +3513,7 @@ static bool on_key(rx_t *rx, int key)
 	switch (key) {
 	case X6100_KEY_LOCK:
 		rx->lock = !rx->lock;
+		g_lock_auto = false;	/* a lock by hand stays, also in landscape */
 		break;
 	case X6100_KEY_KEY:	/* short: key type straight / paddle / paddle reversed; long: keyer panel */
 		rx->keymode = (rx->keymode + 1) % 3;
@@ -10030,6 +10032,7 @@ static bool cat_set(void *ctx, x6100_civ_item_t item, int vfo, int32_t v)
 		break;
 	case X6100_CIV_LOCK:
 		rx->lock = v != 0;
+		g_lock_auto = false;	/* set by CAT: stays, as LOCK by hand */
 		break;
 	case X6100_CIV_LVL_AF:
 		rx->vol = v * 100 / 255;
@@ -11869,6 +11872,18 @@ int main(int argc, char **argv)
 		if (g_layout_portrait && g_autolock_s > 0 && !rx.lock && !panel_open(&rx) && !rx.ptt
 			&& t - g_last_turn_ms >= (uint64_t) g_autolock_s * 1000u) {
 			rx.lock = true;
+			g_lock_auto = true;
+			dirty = true;
+		}
+
+		// Back to landscape: the auto lock is portrait's, so it goes (2026-11-05: a portrait
+		// lock came along into landscape and caught the operator off guard); a lock set by
+		// hand (LOCK, CAT) stays
+		if (!g_layout_portrait && g_lock_auto) {
+			if (rx.lock)
+				rx.lock = false;
+
+			g_lock_auto = false;
 			dirty = true;
 		}
 

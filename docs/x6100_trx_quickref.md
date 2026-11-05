@@ -238,7 +238,9 @@ verified). Top to bottom (on the radio, MW AM, locked; and the mock-up in RX and
 - footer: LOCK, or the auto lock count-down (LOCK IN n S), and the volume
 
 Auto lock: after `autolock` seconds (default 20, 0 = off) without a knob turn or key, the
-VFO and MFK lock; LOCK unlocks. PTT and the volume always work. Panels (GEN, filter,
+VFO and MFK lock; LOCK unlocks. PTT and the volume always work. Back to landscape
+(`layout landscape`, GEN row) the auto lock is released; a lock set with LOCK stays.
+Panels (GEN, filter,
 DSP, ...) are landscape: while one is open the screen turns back to landscape, and to
 portrait when it closes (the scope and waterfall start again). The tune panel is left
 out in portrait: TUNE shows in the red line. Command line or console: `layout portrait` /
