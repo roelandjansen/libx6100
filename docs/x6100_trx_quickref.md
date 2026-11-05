@@ -14,7 +14,7 @@ the calibration read and the first register write 10 times over 5 s (console: ag
 if it still fails, a reboot resets the baseband.
 
 ```
-x6100_trx [--oob] [--no-limit] [--cat[=baud|pty]] [--cat-log] [--probe] [freq] [mode] [agc] [att|noatt] [pre|nopre] [vol 0-100]
+x6100_trx [--oob] [--no-limit] [--cat[=baud|pty]] [--cat-log] [--probe] [freq] [mode] [agc] [att|noatt] [pre|nopre] [vol 0-100] [layout portrait|landscape]
 x6100_trx 7074000 lsb vol 30
 x6100_trx --oob 5450000 usb slow
 ```
@@ -240,7 +240,8 @@ Auto lock: after `autolock` seconds (default 20, 0 = off) without a knob turn or
 VFO and MFK lock; LOCK unlocks. PTT and the volume always work. Panels (GEN, filter,
 DSP, ...) are landscape: while one is open the screen turns back to landscape, and to
 portrait when it closes (the scope and waterfall start again). The tune panel is left
-out in portrait: TUNE shows in the red line. Conf: `layout portrait`, `portraitrot 180`
+out in portrait: TUNE shows in the red line. Command line or console: `layout portrait` /
+`layout landscape` (the console takes it while locked too). Conf: `layout portrait`, `portraitrot 180`
 (the left side up; 0 for the right side up), `autolock 20`; LAYOUT is kept in the state.
 
 ## Settings panel (GEN)

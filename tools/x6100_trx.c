@@ -9361,7 +9361,8 @@ static bool console_read(rx_t *rx, char *buf, size_t size, size_t *len)
 			buf[*len] = '\0';
 			printf("\r> %s\033[K\n", buf);	/* the typed line stays visible above the output */
 
-			if (rx->lock)
+			// Locked: the console waits too, except for layout (portrait locks itself)
+			if (rx->lock && strncasecmp(buf, "layout ", 7) != 0)
 				fprintf(stderr, "locked\n");
 			else if (*len > 0)
 				changed |= console_line(rx, buf);
@@ -10916,8 +10917,19 @@ int main(int argc, char **argv)
 			continue;
 		}
 
+		// layout portrait | landscape on the command line (as the console token)
+		if (strcasecmp(argv[i], "layout") == 0 && i + 1 < argc) {
+			if (strcasecmp(argv[i + 1], "portrait") != 0 && strcasecmp(argv[i + 1], "landscape") != 0) {
+				fprintf(stderr, "layout: portrait or landscape\n");
+				return 1;
+			}
+
+			g_layout_portrait = strcasecmp(argv[++i], "portrait") == 0;
+			continue;
+		}
+
 		if (!console_token(&rx, argv[i])) {
-			fprintf(stderr, "usage: %s [--oob] [--no-limit] [--cat[=baud|pty]] [--cat-log] [--probe] [--bbreset] [freq] [usb|lsb|cw|cwr|am|nfm] [off|slow|fast|auto] [att|noatt] [pre|nopre] [vol 0-100]\n", argv[0]);
+			fprintf(stderr, "usage: %s [--oob] [--no-limit] [--cat[=baud|pty]] [--cat-log] [--probe] [--bbreset] [freq] [usb|lsb|cw|cwr|am|nfm] [off|slow|fast|auto] [att|noatt] [pre|nopre] [vol 0-100] [layout portrait|landscape]\n", argv[0]);
 			return 1;
 		}
 	}
