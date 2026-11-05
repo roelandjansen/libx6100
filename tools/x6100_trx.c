@@ -3115,10 +3115,11 @@ static int grid_step(int span)
 // (LW 153 kHz = 17 x 9, MW 531 = 59 x 9 kHz; US MW 530 = 53 x 10 kHz).
 //
 
-static bool am_broadcast(const rx_t *rx)
+// On the LW or MW broadcast band, in any mode: the FST channel steps 9 / 10 kHz there
+// (2026-11-05: in USB on 1400 kHz 9 kHz was missing; before, AM only)
+static bool lwmw(const rx_t *rx)
 {
-	return rx->mode == X6100_MODE_AM && ((rx->freq >= 148500 && rx->freq <= 283500)
-		|| (rx->freq >= 520000 && rx->freq <= 1710000));
+	return (rx->freq >= 148500 && rx->freq <= 283500) || (rx->freq >= 520000 && rx->freq <= 1710000);
 }
 
 //
@@ -3555,7 +3556,7 @@ static bool on_key(rx_t *rx, int key)
 		break;
 	case X6100_KEY_FST:
 		// The last step everywhere 100 kHz, to move across a band fast (2026-11-04)
-		if (am_broadcast(rx))	/* LW / MW in AM: channel steps 9 kHz (EU) and 10 kHz (US) */
+		if (lwmw(rx))	/* LW / MW, any mode: channel steps 9 kHz (EU) and 10 kHz (US) */
 			rx->step = rx->step == 100 ? 1000 : rx->step == 1000 ? 5000 : rx->step == 5000 ? 9000
 				: rx->step == 9000 ? 10000 : rx->step == 10000 ? 100000 : 100;
 		else if (on_60m(rx))	/* 60 m: CH steps through the channel list */
@@ -8195,7 +8196,7 @@ static bool console_line(rx_t *rx, char *line)
 				rx->step = st;
 				changed = true;
 			} else {
-				fprintf(stderr, "\nstep must be 1, 10, 100, 1000, 5000, 10000, 100000 (9000 on LW / MW AM)\n");
+				fprintf(stderr, "\nstep must be 1, 10, 100, 1000, 5000, 10000, 100000 (9000 on LW / MW)\n");
 			}
 
 			continue;
@@ -11243,7 +11244,7 @@ int main(int argc, char **argv)
 
 			// The 9 kHz channel step only where it makes sense (10 kHz is a normal step
 			// since 2026-11-04: it was set back to 1 kHz here, so FST went 5k, 10k, 1k)
-			if (rx.step == 9000 && !am_broadcast(&rx))
+			if (rx.step == 9000 && !lwmw(&rx))
 				rx.step = 1000;
 
 			if (rx.step == STEP_CH && !on_60m(&rx))

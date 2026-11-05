@@ -35,7 +35,7 @@ Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
 | Control | Short | Long |
 |---|---|---|
 | VFO knob | tune; past the top of the tuning range (`freqmax`) it goes round to `freqmin`, and the other way | |
-| FST | step 10 / 100 / 1000 / 5000 Hz / 10 kHz / 100 kHz; AM on LW / MW: 100 / 1k / 5k / 9k / 10k (channel raster) / 100k; 60 m: 10 / 100 / 1k / 5k / CH / 10k / 100k (MFK picks the 60 m channel, the VFO knob fine-tunes in 100 Hz) | 1 Hz step on / off |
+| FST | step 10 / 100 / 1000 / 5000 Hz / 10 kHz / 100 kHz; on LW / MW (any mode): 100 / 1k / 5k / 9k / 10k (channel raster) / 100k; 60 m: 10 / 100 / 1k / 5k / CH / 10k / 100k (MFK picks the 60 m channel, the VFO knob fine-tunes in 100 Hz) | 1 Hz step on / off |
 | VOL knob | volume; push = mute | |
 | MFK knob | RF gain or TX power | |
 | MFK push | RF gain 100 / TX power 5.0 W | switch RF gain <-> TX power |
@@ -332,7 +332,7 @@ The status line starts with the VFO in use (A / B); with split, RIT or XIT it ad
 | `att noatt pre nopre` | attenuator / preamp |
 | `center scrollc fix scrollf` | scope mode |
 | `fil1 fil2 fil3` | receive filter |
-| `step 1\|10\|100\|1000\|5000\|9000\|10000\|100000` | tuning step (9000 on LW / MW AM only) |
+| `step 1\|10\|100\|1000\|5000\|9000\|10000\|100000` | tuning step (9000 on LW / MW only) |
 | `pwr 0.1-10` | TX power in W |
 | `vol 0-100` | volume (also unmutes) |
 | `nr nonr nb nonb notch nonotch` | noise reduction / blanker / notch on, off |
