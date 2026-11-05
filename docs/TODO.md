@@ -48,12 +48,12 @@ Status: 2026-11-05 (v0.17.7). Summary and next steps: `STATUS.md`.
   on the radio 2026-11-05 (the baseband comes back). Still: on the next hang;
   if it helps, an automatic reset after N s of no flow. Cause unknown: note the time and
   what ran (wfview, BT, WiFi) on the next one.
-- Portrait layout (2026-11-05): GEN row LAYOUT, `layout portrait`, `portraitrot 0|180`,
-  `autolock <s>` (default 20 s) (layout A: red TX line, arc meter, frequency, small; rotation 180 and the
-  layout verified on the radio 2026-11-05, photo in the README;
-  scope / waterfall, battery, lock). Verified 2026-11-05: rotation 180, scope and
-  waterfall, the GEN row and the command line, the auto lock, the frame rate; the
-  console help. Still: the turn to landscape and back with a panel open.
+- Portrait layout (2026-11-05): GEN row LAYOUT, `layout portrait|landscape` (command line
+  and console), `portraitrot 0|180`, `autolock <s>` (default 20 s): red TX line, arc
+  meter, frequency, small scope / waterfall, battery, lock. Verified on the radio
+  2026-11-05: rotation 180, scope and waterfall, GEN row and command line, the auto
+  lock, the frame rate, the console help; photo in the README. Still: the turn to
+  landscape and back with a panel open.
 - 4 m band (2026-11-04): 70.0-70.5 MHz after 6m on the band keys (70.200 USB to start).
   TX allowed in regions nl and uk (70.0-70.5 MHz; NL: F registration; no ITU allocation, so
   not in r1-r3). The output above 54 MHz is past the 6 m low-pass filters: check it on
