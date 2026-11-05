@@ -1,6 +1,10 @@
 # libx6100 / x6100_trx — status
 
-Snapshot: 2026-11-05. Last tag: v0.17.7 (2026-11-05; portrait verified on the radio
+Snapshot: 2026-11-05. Last tag: v0.17.8 (2026-11-05; the VOL knob as VOL / SQL / RFG (VOL
+long, back to VOL after 10 s), mute and volume free under LOCK; the portrait footer in
+fixed columns: lock, RFG, SQL, VOL; the auto lock released on the way to landscape;
+portrait, auto lock, frame rate and console help verified), on v0.17.7 (2026-11-05;
+portrait verified on the radio
 (rotation 180, photo in the README); layout portrait | landscape on the command line and
 the console (also while locked); --help and console help), on v0.17.6 (2026-11-05; the
 portrait layout for handheld use
@@ -324,6 +328,9 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     the auto lock, the frame rate, and landscape while a panel is open (portrait again
     when it closes or times out) verified 2026-11-05.
 31. Next baseband hang: `bbreset` first, and note time and what ran.
+
+32. VOL knob: VOL long to SQL (squelch closes in FM) and RFG, back to VOL after 10 s;
+    mute on a short push, also locked; the portrait footer columns fit and read well.
 
 ## Next steps (suggested order)
 
