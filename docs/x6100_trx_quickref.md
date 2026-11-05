@@ -230,7 +230,7 @@ and TX; the radio itself to be photographed):
 - status line: RX (green), band, VFO, battery V and %; the whole line red with TX (or
   TUNE) while transmitting
 - the arc meter: S in RX, the F4 meter (PO / SWR / ALC) in TX
-- the frequency, MHz.kHz.10 Hz, large
+- the frequency, MHz.kHz.10 Hz, large (to the Hz with the 1 Hz step, FST long)
 - mode, filter, step; under it AGC, ATT / PRE / NB / NR / ATU when on, SPLIT or DUP
 - a small scope (its mode label top right) and the waterfall
 - footer: LOCK, or the auto lock count-down (LOCK IN n S), and the volume

@@ -7077,7 +7077,12 @@ static void draw_portrait(screen_t *scr, const rx_t *rx)
 		uint32_t f = rx->send == SEND_SCAN && rx->tx_hz_ovr != 0 ? rx->tx_hz_ovr
 			: !on ? rx->freq : rx->split ? rx->b_freq : (uint32_t) ((int64_t) rx->freq + dup_shift(rx));
 
-		snprintf(s, sizeof(s), "%u.%03u.%02u", f / 1000000, f / 1000 % 1000, f % 1000 / 10);
+		// 10 Hz digits; the Hz digit too with the 1 Hz step (FST long), else it hid the
+		// change (2026-11-05)
+		if (rx->step < 10)
+			snprintf(s, sizeof(s), "%u.%03u.%03u", f / 1000000, f / 1000 % 1000, f % 1000);
+		else
+			snprintf(s, sizeof(s), "%u.%03u.%02u", f / 1000000, f / 1000 % 1000, f % 1000 / 10);
 		x6100_lcd_text_aa(lcd, &x6100_font_freq, (W - x6100_lcd_text_aa_width(&x6100_font_freq, s)) / 2,
 			P_FREQ_Y, s, SCR_FREQ);
 	}
