@@ -1,6 +1,9 @@
 # libx6100 / x6100_trx — status
 
-Snapshot: 2026-11-05. Last tag: v0.17.6 (2026-11-05; the portrait layout for handheld use
+Snapshot: 2026-11-05. Last tag: v0.17.7 (2026-11-05; portrait verified on the radio
+(rotation 180, photo in the README); layout portrait | landscape on the command line and
+the console (also while locked); --help and console help), on v0.17.6 (2026-11-05; the
+portrait layout for handheld use
 (GEN LAYOUT, red TX line, arc meter, small scope, auto lock 20 s); baseband watchdog
 (BASEBAND NOT RESPONDING) and `bbreset` / `--bbreset` over its GPIO reset line
 (verified); the VFO goes round at the range ends; 9 kHz step on LW / MW in any mode;
