@@ -5,8 +5,8 @@ Snapshot: 2026-11-05. Last tag: v0.17.7 (2026-11-05; portrait verified on the ra
 the console (also while locked); --help and console help), on v0.17.6 (2026-11-05; the
 portrait layout for handheld use
 (GEN LAYOUT, red TX line, arc meter, small scope, auto lock 20 s); baseband watchdog
-(BASEBAND NOT RESPONDING) and `bbreset` / `--bbreset` over its GPIO reset line
-(verified); the VFO goes round at the range ends; 9 kHz step on LW / MW in any mode;
+(BASEBAND NOT RESPONDING) and `bbreset` / `--bbreset` over its GPIO reset line (works on a
+healthy baseband); the VFO goes round at the range ends; 9 kHz step on LW / MW in any mode;
 the AGC MID row dropped (AUTO is by mode in the baseband); the volume free under LOCK),
 on v0.17.5 (2026-11-04; LAN and CAT indicators (verified);
 tuning range 148.5 kHz - 75 MHz (`freqmin` / `freqmax`, RX and TX found working to 75
@@ -81,7 +81,8 @@ Verified on the radio:
 - LAN indicator with wfview over the network; CAT blank with only wfserver; battery
   CHARGING below 100 % (2026-11-04)
 - PRE key short = ATT, long = PRE (2026-11-04)
-- bbreset: the baseband reset over its GPIO line comes back (2026-11-05)
+- bbreset: the baseband resets over its GPIO line and comes back (2026-11-05, on a
+  healthy baseband; not yet on a real hang)
 - portrait layout (rotation 180, GEN row and command line, auto lock, frame rate) and the
   console help (2026-11-05)
 - tuning range: LW 198 kHz received (MW bleeds through at 77.5 kHz), RX and TX at 75 MHz

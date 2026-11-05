@@ -44,8 +44,9 @@ Status: 2026-11-05 (v0.17.7). Summary and next steps: `STATUS.md`.
   got ENXIO on every read; a power cycle needed. Built 2026-11-05: a flow watchdog (5 s:
   BASEBAND NOT RESPONDING on the screen, said once on the console; the i2c pending line
   once a minute), console `bbreset` and `--bbreset` (GPIO 204 on gpiochip1, high 100 ms,
-  as X6100Control; the CW key line 203 left alone, it selects the bootloader). bbreset verified
-  on the radio 2026-11-05 (the baseband comes back). Still: on the next hang;
+  as X6100Control; the CW key line 203 left alone, it selects the bootloader). bbreset tested
+  on the radio 2026-11-05 on a healthy baseband (it resets and comes back); not yet on a
+  real hang. Next hang: bbreset first;
   if it helps, an automatic reset after N s of no flow. Cause unknown: note the time and
   what ran (wfview, BT, WiFi) on the next one.
 - Portrait layout (2026-11-05): GEN row LAYOUT, `layout portrait|landscape` (command line
