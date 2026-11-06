@@ -1,6 +1,6 @@
 # libx6100 / x6100_trx — to do
 
-Status: 2026-11-05 (v0.17.8). Summary and next steps: `STATUS.md`.
+Status: 2026-11-06 (v0.17.9). Summary and next steps: `STATUS.md`.
 
 ## Display
 
@@ -39,6 +39,10 @@ Status: 2026-11-05 (v0.17.8). Summary and next steps: `STATUS.md`.
   54 MHz is past the low-pass filters (harmonics, power reading, calibration unknown):
   a dummy load only, unless a spectrum check shows it clean. 4 m TX in the band plan:
   only after that check.
+- Network line at the start (2026-11-06): IPv4 addresses (all but lo) and the wfserver UDP
+  ports from /etc/x6100/wfserver.ini (defaults 50001-50003), with the wfserver state;
+  again when an address or that state changes (checked every 5 s). To check on the
+  radio (STATUS item 33).
 - VOL knob as VOL / SQL / RFG (2026-11-05): VOL long cycles it, back to VOL 10 s after the
   last turn; mute on a short push (now on release), also while locked. Portrait footer
   in fixed columns: LOCK, RFG, SQL, VOL. Verified on the radio 2026-11-05; locked, the

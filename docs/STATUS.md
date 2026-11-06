@@ -1,6 +1,8 @@
 # libx6100 / x6100_trx — status
 
-Snapshot: 2026-11-05. Last tag: v0.17.8 (2026-11-05; the VOL knob as VOL / SQL / RFG (VOL
+Snapshot: 2026-11-06. Last tag: v0.17.9 (2026-11-06; the start names the IP addresses and the
+wfserver UDP ports (control, CI-V, audio, from wfserver.ini), again when an address or
+the wfserver state changes), on v0.17.8 (2026-11-05; the VOL knob as VOL / SQL / RFG (VOL
 long, back to VOL after 10 s), mute, volume and squelch free under LOCK; the portrait footer in
 fixed columns: lock, RFG, SQL, VOL; the auto lock released on the way to landscape;
 portrait, auto lock, frame rate and console help verified), on v0.17.7 (2026-11-05;
@@ -332,6 +334,9 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
 32. (done) VOL knob: VOL / SQL / RFG switching, the fall-back to VOL after 10 s, mute (also
     locked) and the portrait footer verified 2026-11-05. Locked, the knob does VOL and
     SQL (VOL long switches between them; RF gain stays locked), verified 2026-11-05.
+
+33. Network line at the start: the address matches what wfview connects to; the line
+    comes again once wfserver runs (and when WiFi comes up later).
 
 ## Next steps (suggested order)
 
