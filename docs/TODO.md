@@ -41,8 +41,8 @@ Status: 2026-11-06 (v0.17.9). Summary and next steps: `STATUS.md`.
   only after that check.
 - Network line at the start (2026-11-06): IPv4 addresses (all but lo) and the wfserver UDP
   ports from /etc/x6100/wfserver.ini (defaults 50001-50003), with the wfserver state;
-  again when an address or that state changes (checked every 5 s). To check on the
-  radio (STATUS item 33).
+  again when an address or that state changes (checked every 5 s). Address and ports
+  verified on the radio 2026-11-06.
 - VOL knob as VOL / SQL / RFG (2026-11-05): VOL long cycles it, back to VOL 10 s after the
   last turn; mute on a short push (now on release), also while locked. Portrait footer
   in fixed columns: LOCK, RFG, SQL, VOL. Verified on the radio 2026-11-05; locked, the

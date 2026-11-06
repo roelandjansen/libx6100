@@ -335,8 +335,7 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     locked) and the portrait footer verified 2026-11-05. Locked, the knob does VOL and
     SQL (VOL long switches between them; RF gain stays locked), verified 2026-11-05.
 
-33. Network line at the start: the address matches what wfview connects to; the line
-    comes again once wfserver runs (and when WiFi comes up later).
+33. (done) Network line at the start: address and ports right, verified 2026-11-06.
 
 ## Next steps (suggested order)
 
