@@ -78,8 +78,8 @@ Status: 2026-11-06 (v0.17.9). Summary and next steps: `STATUS.md`.
   connected through wfserver (UDP rate from /proc/net/snmp, wfserver running), CAT while
   CI-V frames arrive (3 s; the pty only without wfserver, which polls it with no client
   too: CAT was on with no client, 2026-11-03; blank with only wfserver verified 2026-11-04).
-  LAN on / off with wfview connecting and disconnecting: verified 2026-11-04. Still to
-  check: CAT with rigctl on the DEV port.
+  LAN on / off with wfview connecting and disconnecting: verified 2026-11-04; CAT with a
+  client on the DEV port: verified 2026-11-06.
 - AGC SLOW / FAST times and HANG (AGC long panel, rows 7-9) and LINE IN / LINE OUT
   (TX panel), as the stock UI 1.2.0 (2026-11-03): registers 28, 27 bit 12, 20 [15:0].
   AUTO follows neither MID nor FAST (2026-11-04: by mode in the baseband; the MID row,

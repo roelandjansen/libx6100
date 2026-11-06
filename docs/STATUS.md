@@ -316,8 +316,8 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
 23. (done) Battery: flow bit 4 is not a charging flag on BASE 1.1.9; CHARGING below 100 %.
 24. Birdie scan again (the old list was found with the 96 kHz scale).
 25. Hand mic keys: log the flow `hkey` while pressing F1 / F2 (stock HANDLE F1 / F2).
-26. LAN / CAT indicators: LAN with wfview over the network verified 2026-11-04; still CAT
-    with a client on the DEV port.
+26. (done) LAN / CAT indicators: LAN with wfview over the network and CAT with a client
+    on the DEV port verified 2026-11-04 / 2026-11-06.
 
 27. 4 m: the band key and the X6100.rig 4m button in wfview work (2026-11-04); still
     receive on 70.0-70.5 MHz; TX only after a spectrum
