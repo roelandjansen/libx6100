@@ -74,6 +74,12 @@ Status: 2026-11-06 (v0.17.9). Summary and next steps: `STATUS.md`.
 - Region uk (2026-11-04): r1 with 4 m; 60 m as WRC-15 for now. The UK has its own 60 m
   segments (5258.5-5406.5 kHz, several pieces): to add from the Ofcom licence terms,
   then the 60 m channel list (FST CH) for uk as well.
+- Birdie list (2026-11-06): the all-bands scan filled the 256-entry list on 6 m (from
+  52.7 MHz on and 4 m lost, unseen). Now 1024 entries; when full the weakest gives way
+  and the scan says so. Seen in that scan: combs of about 7.58 kHz spacing on 40 m and
+  20 m (7005.7, 7013.3, 7020.8, 7028.4 ... ; 14034.1, 14041.7, 14049.3 ...) and about
+  8.44 kHz on 15 m; 6 m and 10 m full of weak ones (10-13 dB). To do: scan again; a
+  higher threshold above 28 MHz if 6 m stays that crowded.
 - LAN and CAT indicators under the scope clock (2026-11-03): LAN while a wfview client is
   connected through wfserver (UDP rate from /proc/net/snmp, wfserver running), CAT while
   CI-V frames arrive (3 s; the pty only without wfserver, which polls it with no client

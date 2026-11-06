@@ -1307,7 +1307,7 @@ static x6100_mode_t tx_mode(const rx_t *rx)
 //
 
 #define BIRDIE_PATH	"/etc/x6100/birdies.conf"
-#define BIRDIE_MAX	256
+#define BIRDIE_MAX	1024	/* 2026-11-06: 256 filled up on 6 m, 6 m from 52.7 MHz and 4 m were lost */
 #define BIRDIE_NOTCH_W	40		/* notch width, Hz */
 
 typedef struct
@@ -1318,6 +1318,7 @@ typedef struct
 
 static birdie_t g_birdie[BIRDIE_MAX];
 static int g_nbirdie;
+static int g_birdie_full;		/* birdies that found the list full in this scan */
 static bool g_bmarks = true;		/* ticks on the scope */
 static bool g_bnotch;			/* automatic notch; off until checked on the radio */
 static int g_bscan_req;			/* GEN / console: 1 start a scan, -1 stop it (main loop) */
@@ -1344,7 +1345,22 @@ static void birdie_add(uint32_t hz, int snr)
 		g_birdie[g_nbirdie].hz = hz;
 		g_birdie[g_nbirdie].snr = snr;
 		g_nbirdie++;
+		return;
 	}
+
+	// Full: the weakest goes when this one is stronger, and it is said, not dropped
+	// unseen as before
+	int w = 0;
+
+	for (int i = 1; i < g_nbirdie; i++)
+		w = g_birdie[i].snr < g_birdie[w].snr ? i : w;
+
+	if (snr > g_birdie[w].snr) {
+		g_birdie[w].hz = hz;
+		g_birdie[w].snr = snr;
+	}
+
+	g_birdie_full++;
 }
 
 // Drop the birdies in low .. high (a band about to be scanned again)
@@ -4474,7 +4490,7 @@ static void spectrum_update(screen_t *scr, const x6100_flow_frame_t *f)
 //
 
 #define BS_STEP_HZ	36000
-#define BS_EDGE_BINS	200		/* usable: centre +- 200 bins, +- 37.5 kHz */
+#define BS_EDGE_BINS	200		/* usable: centre +- 200 bins, +- 39 kHz (195.3 Hz bins) */
 #define BS_DC_BINS	4		/* centre +- 4 bins left out */
 #define BS_SETTLE_MS	300
 #define BS_FRAMES	32
@@ -4549,6 +4565,7 @@ static bool bscan_start(rx_t *rx, bool all)
 		g_bs.steps += bscan_windows(b);
 	}
 
+	g_birdie_full = 0;
 	printf("\nbirdie scan: %s, antenna off or a dummy load; any key stops\n", all ? "all bands" : g_bands[g_bs.band].name);
 	bscan_tune(rx, g_bands[g_bs.band].low);
 
@@ -4572,6 +4589,10 @@ static void bscan_stop(rx_t *rx, bool done)
 	snprintf(s, sizeof(s), "%s: %u FOUND", done ? "BIRDIES" : "SCAN STOPPED", (unsigned) g_bs.found % 1000u);
 	toast(s);
 	printf("\nbirdie scan %s: %d found, %d stored in %s\n", done ? "done" : "stopped", g_bs.found, g_nbirdie, BIRDIE_PATH);
+
+	if (g_birdie_full > 0)
+		printf("birdie scan: the list (%d) was full %d times: the weakest gave way to stronger ones\n", BIRDIE_MAX,
+			g_birdie_full);
 }
 
 // One averaged window: peaks into the birdie list
