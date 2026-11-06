@@ -11,7 +11,13 @@ installed and set up (`contrib/wfserver`): it runs while x6100_trx serves the CI
 x6100_trx refuses to start while the IU1WXY or R1CBU GUI or another x6100_trx still runs.
 Right after a GUI let the baseband go it may not answer on I2C for a moment: x6100_trx tries
 the calibration read and the first register write 10 times over 5 s (console: again n/10);
-if it still fails, a reboot resets the baseband.
+if it still fails, `x6100_trx --bbreset` resets the baseband (else a power cycle).
+
+At the start the console names the CAT endpoints (CI-V on the DEV port and the pty, with
+the CI-V address) and the network: `network: wlan0 192.168.1.20; wfview (wfserver
+running): UDP 50001 control, 50002 CI-V, 50003 audio`, the ports from
+/etc/x6100/wfserver.ini. When an address changes (WiFi up later, another network) the line
+comes again.
 
 ```
 x6100_trx [--oob] [--no-limit] [--cat[=baud|pty]] [--cat-log] [--probe] [freq] [mode] [agc] [att|noatt] [pre|nopre] [vol 0-100] [layout portrait|landscape]

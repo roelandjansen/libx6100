@@ -5848,6 +5848,82 @@ static void lan_poll(uint64_t t)
 	prev = now_in;
 }
 
+//
+// What a network client needs (2026-11-06): the radio's IPv4 addresses and the wfserver
+// UDP ports (wfview: control, CI-V, audio; from wfserver.ini, the defaults 50001-50003),
+// said at the start next to the CAT lines and again when an address changes (WiFi up
+// later, another network)
+//
+
+#define WFS_INI		"/etc/x6100/wfserver.ini"
+
+static int g_wfs_port[3] = { 50001, 50002, 50003 };	/* control, CI-V, audio */
+
+static void wfs_ports_read(void)
+{
+	static const char *key[3] = { "ServerControlPort=", "ServerCivPort=", "ServerAudioPort=" };
+	FILE *fp = fopen(WFS_INI, "r");
+	char line[256];
+
+	if (fp == NULL)
+		return;
+
+	while (fgets(line, sizeof(line), fp) != NULL) {
+		for (int i = 0; i < 3; i++) {
+			size_t kl = strlen(key[i]);
+			int p;
+
+			if (strncmp(line, key[i], kl) == 0 && (p = atoi(line + kl)) > 0 && p < 65536)
+				g_wfs_port[i] = p;
+		}
+	}
+
+	fclose(fp);
+}
+
+// "wlan0 192.168.1.20, usb0 10.0.0.1" (IPv4, not loopback); empty when there is none
+static void net_addrs(char *out, size_t n)
+{
+	struct ifaddrs *ifa;
+	size_t len = 0;
+
+	out[0] = '\0';
+
+	if (getifaddrs(&ifa) != 0)
+		return;
+
+	for (struct ifaddrs *a = ifa; a != NULL; a = a->ifa_next) {
+		char ip[INET_ADDRSTRLEN];
+
+		if (a->ifa_addr == NULL || a->ifa_addr->sa_family != AF_INET || strcmp(a->ifa_name, "lo") == 0)
+			continue;
+
+		inet_ntop(AF_INET, &((struct sockaddr_in *) a->ifa_addr)->sin_addr, ip, sizeof(ip));
+		len += (size_t) snprintf(out + len, len < n ? n - len : 0, "%s%s %s", len ? ", " : "", a->ifa_name, ip);
+	}
+
+	freeifaddrs(ifa);
+}
+
+// At the start (always) and every 5 s from the main loop (only when the addresses changed)
+static void net_announce(bool always)
+{
+	static char last[256] = "-";
+	char now[256];
+
+	net_addrs(now, sizeof(now));
+
+	if (!always && strcmp(now, last) == 0)
+		return;
+
+	snprintf(last, sizeof(last), "%s", now);
+	wfs_ports_read();
+	printf("%snetwork: %s; wfview (wfserver %s): UDP %d control, %d CI-V, %d audio\n", always ? "" : "\n",
+		now[0] != '\0' ? now : "no IPv4 address yet", !wfs_installed() ? "not installed"
+		: access(WFS_OFF, F_OK) == 0 ? "off" : wfs_watching() ? "running" : "not running",
+		g_wfs_port[0], g_wfs_port[1], g_wfs_port[2]);
+}
+
 static void gen_value(int row, char *s, size_t n)
 {
 	switch (row) {
@@ -5957,8 +6033,10 @@ static void gen_hint(int row, char *s, size_t n)
 			snprintf(s, n, "%s", wfs_watching() ? "STOPPING" : "TURN: ON");
 		else if (!g_cat_pty)
 			snprintf(s, n, "NEEDS THE CI-V PTY: CATPTY OFF IN THE CONF");
+		else if (wfs_watching())
+			snprintf(s, n, "RUNNING, WFVIEW PORT %d", g_wfs_port[0]);
 		else
-			snprintf(s, n, "%s", wfs_watching() ? "RUNNING, WFVIEW PORT 50001" : "NOT RUNNING, HOLD MFK: START");
+			snprintf(s, n, "NOT RUNNING, HOLD MFK: START");
 		break;
 	case GEN_WIFI:
 		if (g_sys.ssid[0] != '\0')
@@ -11197,6 +11275,7 @@ int main(int argc, char **argv)
 #ifdef X6100_RX_ONLY
 	printf("x6100_rx (receive only): PWR or Ctrl-C to quit\n");
 #else
+	net_announce(true);	/* IP addresses, wfserver UDP ports */
 	printf("x6100_trx: PWR or Ctrl-C to quit\n");
 #endif
 	show(&rx);
@@ -11407,6 +11486,15 @@ int main(int argc, char **argv)
 		}
 
 		lan_poll(t);	/* the LAN indicator */
+
+		{
+			static uint64_t net_ms;
+
+			if (t - net_ms >= 5000) {
+				net_ms = t;
+				net_announce(false);	/* an address changed: say it again */
+			}
+		}
 
 		// A GEN setting changed: the state on disk (a kill or power loss keeps it)
 		if (g_gen_save_at != 0 && t >= g_gen_save_at) {
