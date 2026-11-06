@@ -5908,20 +5908,22 @@ static void net_addrs(char *out, size_t n)
 // At the start (always) and every 5 s from the main loop (only when the addresses changed)
 static void net_announce(bool always)
 {
-	static char last[256] = "-";
-	char now[256];
+	static char last[400] = "-";
+	char now[256], line[400];
 
 	net_addrs(now, sizeof(now));
-
-	if (!always && strcmp(now, last) == 0)
-		return;
-
-	snprintf(last, sizeof(last), "%s", now);
 	wfs_ports_read();
-	printf("%snetwork: %s; wfview (wfserver %s): UDP %d control, %d CI-V, %d audio\n", always ? "" : "\n",
+	snprintf(line, sizeof(line), "network: %s; wfview (wfserver %s): UDP %d control, %d CI-V, %d audio",
 		now[0] != '\0' ? now : "no IPv4 address yet", !wfs_installed() ? "not installed"
 		: access(WFS_OFF, F_OK) == 0 ? "off" : wfs_watching() ? "running" : "not running",
 		g_wfs_port[0], g_wfs_port[1], g_wfs_port[2]);
+
+	// Again when an address or the wfserver state changed (x6100_ui.sh starts it later)
+	if (!always && strcmp(line, last) == 0)
+		return;
+
+	snprintf(last, sizeof(last), "%s", line);
+	printf("%s%s\n", always ? "" : "\n", line);
 }
 
 static void gen_value(int row, char *s, size_t n)

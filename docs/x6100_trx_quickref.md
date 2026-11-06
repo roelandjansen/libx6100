@@ -16,7 +16,8 @@ if it still fails, `x6100_trx --bbreset` resets the baseband (else a power cycle
 At the start the console names the CAT endpoints (CI-V on the DEV port and the pty, with
 the CI-V address) and the network: `network: wlan0 192.168.1.20; wfview (wfserver
 running): UDP 50001 control, 50002 CI-V, 50003 audio`, the ports from
-/etc/x6100/wfserver.ini. When an address changes (WiFi up later, another network) the line
+/etc/x6100/wfserver.ini. When an address changes (WiFi up later, another network) or wfserver
+starts or stops, the line
 comes again.
 
 ```
