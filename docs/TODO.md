@@ -76,10 +76,17 @@ Status: 2026-11-06 (v0.17.9). Summary and next steps: `STATUS.md`.
   then the 60 m channel list (FST CH) for uk as well.
 - Birdie list (2026-11-06): the all-bands scan filled the 256-entry list on 6 m (from
   52.7 MHz on and 4 m lost, unseen). Now 1024 entries; when full the weakest gives way
-  and the scan says so. Seen in that scan: combs of about 7.58 kHz spacing on 40 m and
-  20 m (7005.7, 7013.3, 7020.8, 7028.4 ... ; 14034.1, 14041.7, 14049.3 ...) and about
-  8.44 kHz on 15 m; 6 m and 10 m full of weak ones (10-13 dB). To do: scan again; a
-  higher threshold above 28 MHz if 6 m stays that crowded.
+  and the scan says so. Second scan with that: 334 birdies, 6 m complete, 4 m in.
+  Repeatable: the HF ones within about 10 Hz of the first scan (7092.738, 14064.422).
+  160 m found none the second time (1833.0 / 1842.0 at 14 / 19 dB the first: weak).
+  A comb of about 7.58 kHz spacing on 40 m (7005.7, 7013.3, 7020.8, 7028.4, 7043.6 ...),
+  20 m (14034.1, 14041.7, 14049.3, 14056.8, 14064.4 (43 dB) ...) and 4 m (70329.7,
+  70337.3, 70344.8, 70352.4 (55 dB, the strongest of all), 70367.6, 70375.2 ...): the same
+  spacing on every band, so one source with a 7.58 kHz modulation or clock, not separate
+  oscillators. Test: the display off (PWR), another backlight level, WiFi / Bluetooth
+  off: does the comb on 14064 / 70352 kHz move or go? A question for Jin too. 6 m and
+  10 m hold many weak ones (10-13 dB): a higher threshold above 28 MHz (15 dB?) if they
+  turn out to be noise.
 - LAN and CAT indicators under the scope clock (2026-11-03): LAN while a wfview client is
   connected through wfserver (UDP rate from /proc/net/snmp, wfserver running), CAT while
   CI-V frames arrive (3 s; the pty only without wfserver, which polls it with no client
