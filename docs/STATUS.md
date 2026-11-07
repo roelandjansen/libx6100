@@ -348,10 +348,9 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
 
 34. OpenX6X00 as the base (2026-11-07): the first start (calibration, CAT, network, the
     ntp line: no S48sntp / S49ntp, x6100_trx syncs itself), the codec next to PulseAudio
-    (F3 audio scope, a voice message). Boot: verified, the GUI comes up first (S95gui) and
-    S96x6100_trx then switches to x6100_trx. To check: PWR held 4 s powers the radio off
-    without the GUI coming back (the marker /tmp/x6100_trx.poweroff), PWR 1.5-4 s (quit)
-    still brings the GUI back.
+    (F3 audio scope, a voice message). Verified: the boot (the GUI first via S95gui, then
+    S96x6100_trx switches to x6100_trx), PWR 1.5-4 s (quit) brings the GUI back, PWR held
+    4 s powers the radio off without the GUI (the marker /tmp/x6100_trx.poweroff).
 
 ## Next steps (suggested order)
 
