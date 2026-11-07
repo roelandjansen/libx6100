@@ -7758,8 +7758,14 @@ static void wf3d_draw(x6100_lcd_t *lcd, int y0, int h, int w, int cursor_x, bool
 
 	// While tuning (and TUNE_LINE_MS after): the VFO from the front to the back of the floor,
 	// in front of the ridges, as the tune line of the flat waterfall (2026-11-07)
-	if (tune && cursor_x >= 0 && cursor_x < w)
-		x6100_lcd_line(lcd, cursor_x, yfi, (int) lroundf(cx + ((float) cursor_x - cx) * sb), ybi, 2, SCR_WARN);
+	// and on, along the same direction, up to the top of the waterfall area: through the
+	// back of the floor towards the scope, as asked (2026-11-07: it stopped at the back)
+	if (tune && cursor_x >= 0 && cursor_x < w) {
+		float xb = cx + ((float) cursor_x - cx) * sb;
+		float xt = (float) cursor_x + (xb - (float) cursor_x) * (yf - (float) y0) / (yf - yb);
+
+		x6100_lcd_line(lcd, cursor_x, yfi, (int) lroundf(xt), y0, 2, SCR_WARN);
+	}
 
 	if (cursor_x >= 0 && cursor_x < w)	/* the VFO on the front line */
 		x6100_lcd_vline(lcd, cursor_x, yfi - 6, yfi, SCR_WARN);
