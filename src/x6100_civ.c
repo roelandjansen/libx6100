@@ -765,12 +765,13 @@ static size_t cmd_menu(req_t *r)
 		return out_end(r->o);
 	}
 
-	// 0118 DATA OFF MOD, 0119 DATA MOD: 00 MIC, 01 USB (MIC,USB and LAN: NG)
+	// 0118 DATA OFF MOD, 0119 DATA MOD: 00 MIC, 01 USB, 02 MIC,USB, 03 WLAN (the application
+	// decides: x6100_trx takes 02 and 03 as its LAN input); higher: NG
 	if (item == 0x0118 || item == 0x0119) {
 		int vfo = item == 0x0119;
 
 		if (r->n >= 4)
-			return reply_ok(r, r->d[3] <= 0x01 && set(r, X6100_CIV_MOD_IN, vfo, r->d[3]));
+			return reply_ok(r, r->d[3] <= 0x03 && set(r, X6100_CIV_MOD_IN, vfo, r->d[3]));
 
 		if (!get(r, X6100_CIV_MOD_IN, vfo, &v))
 			return reply_ng(r);

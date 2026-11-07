@@ -487,7 +487,9 @@ int main(void)
 		check(&civ, "1A 05 01 19", "1A 05 01 19 01");
 		check(&civ, "1A 05 01 18 01", "FB");
 		check(&civ, "1A 05 01 18", "1A 05 01 18 01");
-		check(&civ, "1A 05 01 19 03", "FA");
+		check(&civ, "1A 05 01 19 03", "FB");			/* WLAN (x6100_trx: LAN) */
+		check(&civ, "1A 05 01 19", "1A 05 01 19 03");
+		check(&civ, "1A 05 01 19 04", "FA");
 	}
 
 	// Announcements and framer

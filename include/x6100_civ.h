@@ -63,7 +63,8 @@
 //   SCOPE_CTYPE        center type 0 filter centre, 1 carrier point, 2 carrier point with
 //                      absolute frequency (27 1C)
 //   MOD_IN             TX audio input, vfo 0 = DATA OFF MOD (1A 05 0118), 1 = DATA MOD
-//                      (0119): 0 MIC, 1 USB (the codec: a Linux program such as wfserver)
+//                      (0119): 0 MIC, 1 USB (the codec: a Linux program such as wfserver),
+//                      2 MIC,USB, 3 WLAN (IC-705 values; x6100_trx: both its LAN input)
 //   VOICE_TX           28 00: 1-8 start message M1-M8 (voice TX memory T1-T8 on an Icom),
 //                      0 stop; get: the message going out, 0 none
 //   DATE, TIME         the clock in local time (UTC + UTC_OFS): DATE YYYYMMDD (1A 05 0165),
