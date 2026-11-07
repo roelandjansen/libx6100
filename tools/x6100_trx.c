@@ -5381,7 +5381,7 @@ static void vu_label(x6100_lcd_t *lcd, double f, double r, int scale, const char
 static double vu_scale_radius(vu_scale_t scale);
 
 static void draw_vu(x6100_lcd_t *lcd, double needle, double marker, vu_scale_t scale, const char *line1,
-	const char *line2)
+	const char *line2, int sql)
 {
 	static const struct { double f; const char *s; } po[] = {
 		{ 0.2, "2" }, { 0.4, "4" }, { 0.6, "6" }, { 0.8, "8" }, { 0.97, "10W" },
@@ -5479,6 +5479,27 @@ static void draw_vu(x6100_lcd_t *lcd, double needle, double marker, vu_scale_t s
 	//
 	x6100_lcd_text(lcd, VU_X + VU_W - 8 - x6100_lcd_text_width(line1, 2), VU_Y + VU_H - 38, 2, line1, white);
 	x6100_lcd_text(lcd, VU_X + VU_W - 8 - x6100_lcd_text_width(line2, 2), VU_Y + VU_H - 20, 2, line2, grey);
+
+	//
+	// Squelch marker (RX, SQL 1-100 on the S scale, as on the bar): a small triangle just
+	// outside the S arc pointing at it, a short line across the arc; amber closed, green open
+	//
+	if (scale == VU_SCALE_S && sql > 0) {
+		const uint32_t c = g_sql_open ? 0x3CC83C : 0xFFB020;
+		const double f = sql / 100.0, d = 0.014;
+		int ax, ay, bx, by;
+
+		vu_point(f, VU_R_S + 3, &ax, &ay);
+
+		for (int k = 0; k <= 8; k++) {
+			vu_point(f - d + 2.0 * d * k / 8.0, VU_R_S + 12, &bx, &by);
+			x6100_lcd_line(lcd, ax, ay, bx, by, 1, c);
+		}
+
+		vu_point(f, VU_R_S - 6, &ax, &ay);
+		vu_point(f, VU_R_S + 3, &bx, &by);
+		x6100_lcd_line(lcd, ax, ay, bx, by, 2, c);
+	}
 
 	//
 	// Needle from the bottom edge of the face, with pivot dot
@@ -7760,14 +7781,14 @@ static void draw_portrait(screen_t *scr, const rx_t *rx)
 		snprintf(l1, sizeof(l1), rx->meter == 1 ? "SWR %.1f" : "%.1fW", rx->meter == 1 ? scr->swr : scr->pwr);
 		snprintf(l2, sizeof(l2), rx->meter == 1 ? "%.1fW" : "SWR %.1f", rx->meter == 1 ? scr->pwr : scr->swr);
 		vu_update(scr, target, now_ms());
-		draw_vu(lcd, scr->needle, scr->vu_peak, scale, l1, l2);
+		draw_vu(lcd, scr->needle, scr->vu_peak, scale, l1, l2, 0);
 	} else {
 		char l1[16], l2[16];
 
 		vu_update(scr, meter_frac(scr->sig_dbm), now_ms());
 		s_reading(scr->sig_dbm, l1, sizeof(l1));
 		snprintf(l2, sizeof(l2), "%4.0fdBm", scr->sig_dbm);
-		draw_vu(lcd, scr->needle, scr->vu_peak, VU_SCALE_S, l1, l2);
+		draw_vu(lcd, scr->needle, scr->vu_peak, VU_SCALE_S, l1, l2, rx->sql);
 
 		if (now_ms() < scr->ovf_until)
 			x6100_lcd_text(lcd, VU_X + 8, VU_Y + 6, 2, "OVF", SCR_WARN);
@@ -8120,7 +8141,7 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 		marker = scr->vu_peak;
 		draw_sbar(lcd, rx->meter == 0 ? po : rx->meter == 1 ? swr_frac(scr->swr) : alc / 100.0,
 			rx->meter == 2 ? scr->vu_peak / 0.34 : scr->vu_peak, true, scr->swr, rx->meter, 0);
-		draw_vu(lcd, scr->needle, marker, scale, l1, l2);
+		draw_vu(lcd, scr->needle, marker, scale, l1, l2, 0);
 		x6100_lcd_text(lcd, VU_X + 8, VU_Y + VU_H - 20, 2, meter_names[rx->meter], SCR_ACCENT);
 	} else {
 		char l1[16], l2[16];
@@ -8129,7 +8150,7 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 		draw_sbar(lcd, meter_frac(scr->sig_dbm), scr->vu_peak, false, 1.0, 0, rx->sql);
 		s_reading(scr->sig_dbm, l1, sizeof(l1));
 		snprintf(l2, sizeof(l2), "%4.0fdBm", scr->sig_dbm);
-		draw_vu(lcd, scr->needle, scr->vu_peak, VU_SCALE_S, l1, l2);
+		draw_vu(lcd, scr->needle, scr->vu_peak, VU_SCALE_S, l1, l2, rx->sql);
 
 		// Overload (flow IQ at its ceiling), top left of the dial
 		if (now_ms() < scr->ovf_until)

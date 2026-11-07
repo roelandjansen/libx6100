@@ -591,7 +591,7 @@ nothing changes until a value is set. Ranges and register layout as in X6100Cont
 | MONI LEVEL | 0-100 (30) | 29 |
 | LINE IN | 0-36 (10, as stock) | 20 [7:0]: audio from the codec into the baseband TX (DATA MOD USB, wfserver) |
 | LINE OUT | 0-36 (10) | 20 [15:8] |
-| SQUELCH | 0-100 (0 = open): x6100_trx's own S-meter squelch in every mode, the value is the position on the S bar (40 ≈ S6, 60 = S9, 100 = S9+60); a marker on the bar, amber closed, green open; opens at once, closes after 0.3 s below (2026-11-07; the baseband's threshold in 21 [15:8] did nothing in NFM, now kept 0) | own |
+| SQUELCH | 0-100 (0 = open): x6100_trx's own S-meter squelch in every mode, the value is the position on the S bar (40 ≈ S6, 60 = S9, 100 = S9+60); a marker on the bar and on the arc meter (also in portrait), amber closed, green open; opens at once, closes after 0.3 s below (2026-11-07; the baseband's threshold in 21 [15:8] did nothing in NFM, now kept 0) | own |
 | TX TIMEOUT | OFF, 1, 3, 5 MIN (3) | none: x6100_trx |
 
 VOX does not key on BASE 1.1.9 (2026-10-30: the IU1WXY GUI writes the same register 22
