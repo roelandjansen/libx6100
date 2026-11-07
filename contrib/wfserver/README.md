@@ -50,7 +50,7 @@ build.sh <wfview source tree> [output dir]
   installs the cross g++ and host Qt tools, and unpacks the armhf Qt 5.15 / Opus /
   PortAudio / RtAudio packages into a sysroot under `wfserver-work/`.
 - Output: `wfserver-armhf/` and `wfserver-armhf.tar.gz` (about 33 MB, 68 MB unpacked).
-- The bundle contains `X6100.rig` from `contrib/wfview` next to wfview's own rig files.
+- The bundle contains `X6100.rig` from `contrib/wfview` next to wfview's own rig files. wfserver builds the CI-V it sends from that copy, so it must match the PC's: `build.sh deploy` (the libx6100 one) updates it on the radio; restart wfserver after.
 - A second run reuses the sysroot and the object files.
 
 Built and checked 2026-10-28 from wfview `v3-initial` (wfserver 2.11): the ARM binary

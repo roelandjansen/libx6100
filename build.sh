@@ -214,6 +214,13 @@ deploy() {
 	ssh -- "${G_HOST}" "chmod 755 /etc/init.d/S96x6100_trx"
 	printf '%s\n' 'deployed /etc/init.d/S96x6100_trx (boot: x6100_ui.sh boot trx|gui)'
 
+	# wfserver's own copy of the rig file: wfserver turns wfview's requests into CI-V with
+	# it, so an old copy loses what the new one adds (2026-11-07: WLAN sent as MIC)
+	if ssh -- "${G_HOST}" "test -d /opt/wfserver/share/wfview/rigs"; then
+		scp -q -- contrib/wfview/X6100.rig "${G_HOST}:/opt/wfserver/share/wfview/rigs/X6100.rig"
+		printf '%s\n' 'deployed /opt/wfserver/share/wfview/rigs/X6100.rig (wfserver reads it at its start)'
+	fi
+
 	# Built only with cmake present: copied when there
 	if [[ -f "${C_OUT}/x6100_liquid" ]]; then
 		scp -q -- "${C_OUT}/x6100_liquid" "${G_HOST}:/root/"

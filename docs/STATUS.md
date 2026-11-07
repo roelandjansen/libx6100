@@ -391,6 +391,8 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     0119: 03 = LAN (IC-705 WLAN), X6100.rig has WLAN as third input (mkrig.sh). The arc
     meter shows LAN or the mic. To check: wfview voice TX in USB with LAN (PC audio out,
     LAN on the meter), then the PTT key (mic); wfview's input menu shows WLAN and sets it.
+    2026-11-07: WLAN came out as 00 (MIC): wfserver on the radio builds the CI-V from its
+    own X6100.rig (old, no WLAN); build.sh deploy now updates that copy too.
 
 ## Next steps (suggested order)
 
