@@ -415,8 +415,9 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     colour (half transparent was too faint), the gaps show the signal. Squelch from
     wfview: the squelch muted the speaker but not wfview (the codec capture is before
     the RX volume); Mic1 capture off did not do it (wfview still open); now the digital
-    AIF1 ADC capture switch goes off while closed. wfview's SQ slider works (the marker
-    follows it).
+    AIF1 ADC capture switch goes off while closed (to check). SQL both ways verified:
+    wfview's SQ slider moves the radio's marker, the radio's SQL moves wfview's slider
+    (2026-11-07).
 
 ## Next steps (suggested order)
 
