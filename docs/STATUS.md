@@ -440,7 +440,8 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     flat waterfall (no trace left, tested on the PC). No legend chips (the scope top is
     full). No T where TX is refused (outside the allocations without oob). To check:
     each MARKERS value, A/B swap (A stays on VFO A), split. Verified 2026-11-07: no T on
-    GEN 5.450 without oob; nooob switches the band check on again at runtime.
+    GEN 5.450 without oob; nooob switches the band check on again at runtime. oob / nooob
+    now saved in the state (the conf wins, --oob over both): to check after a restart.
 
 ## Next steps (suggested order)
 

@@ -9455,13 +9455,16 @@ static bool console_token(rx_t *rx, const char *t)
 	// Safety checks off, as --oob / --no-limit (the operator's responsibility)
 	if (strcasecmp(t, "oob") == 0) {
 		g_allow_oob = true;
+		g_gen_save_at = g_conf_loading ? g_gen_save_at : now_ms() + GEN_SAVE_MS;	/* into the state soon */
 		return true;
 	}
 
-	// nooob: the band check on again without a restart (2026-11-07; the conf line oob or
-	// --oob still switch it on at the next start)
+	// nooob: the band check on again without a restart (2026-11-07). oob / nooob go into the
+	// state, so the last one holds at the next start; an oob / nooob line in the conf wins
+	// over the state, --oob on the command line over both
 	if (strcasecmp(t, "nooob") == 0) {
 		g_allow_oob = false;
+		g_gen_save_at = g_conf_loading ? g_gen_save_at : now_ms() + GEN_SAVE_MS;
 		return true;
 	}
 
@@ -10700,6 +10703,7 @@ static void state_write(const rx_t *rx)
 	fprintf(fp, "catmem %s ", g_cat_mem_rw ? "rw" : "ro");
 	fprintf(fp, "layout %s ", g_layout_portrait ? "portrait" : "landscape");
 	fprintf(fp, "vfofast %s ", g_vfo_fast ? "on" : "off");
+	fprintf(fp, "%s ", g_allow_oob ? "oob" : "nooob");	/* the band check as last set (2026-11-07); a conf line wins */
 	fprintf(fp, "cattime %s ", g_cat_time == CT_OFF ? "off" : g_cat_time == CT_ON ? "on" : "unsynced");
 	fprintf(fp, "modin %s %s ", g_modin_word[g_modin[0]], g_modin_word[g_modin[1]]);
 	fprintf(fp, "ntp %s", strcmp(g_ntp_server, "off") == 0 ? "off" : "on");
