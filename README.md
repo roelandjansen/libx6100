@@ -163,6 +163,7 @@ Not yet: GPIO (hand mic PTT is invisible to Linux), Icom LAN server, keyer.
 | `tools/x6100_iqcal.c` | RX IQ image calibration attempt (registers 48/49); parked: flow IQ too little range to measure |
 | `scripts/x6100_ui.sh` | stop/start the GUI (stock, R1CBU, IU1WXY and OpenX6X00 images); wfserver autostart; `boot trx|gui` (x6100_trx at boot) |
 | `scripts/S96x6100_trx` | init script (OpenX6X00): x6100_trx at boot when `/etc/x6100/boot.trx` exists, the GUI back when it quits; installed by `build.sh deploy` |
+| `scripts/x6100_giveaway.sh` | clean the image before the radio goes to someone else: x6100_trx state, conf, birdies (this radio's), memories, messages, voice, the wfserver login, saved WiFi networks, Bluetooth pairings, your ssh key, shell history; `-k` ssh host keys, `-l` start logs; lists first and asks (`-n` list only). Not by build.sh deploy: `scp scripts/x6100_giveaway.sh root@<radio>:/tmp/` |
 | `scripts/x6100_bt_hfp_test.sh` | test whether a Bluetooth headset mic reaches Linux (HFP, mSBC / CVSD); 2026-10-31: no |
 | `docs/x6100_control_interface.md` | protocol documentation |
 | `docs/x6100_netaudio_design.md` | network audio / wfview design (draft) |

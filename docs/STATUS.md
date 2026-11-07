@@ -361,12 +361,19 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     x10 from 12 / 25 / 45 detents per second, the thresholds right for the knob), the 3D
     waterfall works. Still to check: top for the CPU with 3D at speed FAST, 3D in
     portrait and with F3 long; a photo for the README.
-36. Panels as a radio menu (2026-11-07): in GEN, KEY, scope, TX, RIT / AGC, DSP, filter
+36. Panels as a radio menu (2026-11-07; first test: better for setting things): in GEN, KEY, scope, TX, RIT / AGC, DSP, filter
     and edge MFK turn selects the row, push switches an on / off row or starts editing
     (amber frame, MFK adjusts), push again ends it; hold default as before. To check:
     each panel, a toggle row (WATERFALL 3D, WIFI, RIT), an edit row (WF PEAK LEVEL, CAT,
     RIT offset), the filter in AM / FM (rows skipped), the edge panel, an edit left open
     when the panel closes (next time not editing).
+37. Give-away cleanup (2026-11-07): scripts/x6100_giveaway.sh (busybox sh) removes what
+    is personal or this radio's own (x6100_trx state / conf / birdies / memories /
+    messages / voice, wfserver.ini, WiFi networks, BT pairings, authorized_keys,
+    known_hosts, history; -k host keys, -l logs), lists and asks first. Tested on the
+    PC (dash and busybox sh, a WiFi file with spaces). To check on the radio: -n, then
+    a run after a backup; with -k that ssh comes back with new host keys; the
+    OpenX6X00 GUI settings (callsign) still by hand.
 
 ## Next steps (suggested order)
 
