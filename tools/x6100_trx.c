@@ -5186,6 +5186,32 @@ static void sql_update(const rx_t *rx, double dbm, bool tx)
 		g_sql_open = false;
 }
 
+//
+// The squelch for the audio to Linux too (2026-11-07): the RX audio reaches the codec on
+// Mic1 before the RX volume, so wfserver (wfview) heard the noise of a closed squelch.
+// Closed: the codec's Mic1 capture off, open: on. Set only on a change; g_sql_cap -1
+// (unknown) after anything else set the capture path, so it is set again.
+//
+
+static int g_sql_cap = -1;	/* Mic1 capture as last set: 1 on, 0 off, -1 unknown */
+
+static void sql_capture(void)
+{
+	int want = g_sql_open ? 1 : 0;
+
+	if (want == g_sql_cap)
+		return;
+
+	static bool warned;	/* said once */
+
+	if (x6100_mixer_set(X6100_PCM_CARD, "Mic1 Capture Switch", want) < 0 && !warned) {
+		fprintf(stderr, "\nsquelch: codec Mic1 capture switch not set\n");
+		warned = true;
+	}
+
+	g_sql_cap = want;
+}
+
 static void s_reading(double dbm, char *buf, size_t len)
 {
 	if (dbm <= -73.0) {
@@ -12312,6 +12338,7 @@ int main(int argc, char **argv)
 		if ((rx.ascope || rx.asplit) && !apcm_open) {
 			int boost = rx.mode == X6100_MODE_AM || rx.mode == X6100_MODE_NFM ? 0 : 1;	/* as x6100_audio */
 
+			g_sql_cap = -1;	/* rx_setup turns Mic1 capture on: the squelch sets it again */
 			int prc = x6100_mixer_rx_setup(X6100_PCM_CARD, boost) < 0 ? -EIO
 				: x6100_pcm_open(&apcm, X6100_PCM_CARD, X6100_PCM_DEVICE, true, AS_RATE, 2, 1024, 4);
 
@@ -12500,6 +12527,8 @@ int main(int argc, char **argv)
 		// capture carries the RX audio, playback goes to the modulator
 		if ((g_modin[0] || g_modin[1]) && !codec_routed) {
 			int boost = rx.mode == X6100_MODE_AM || rx.mode == X6100_MODE_NFM ? 0 : 1;	/* as x6100_audio */
+
+			g_sql_cap = -1;	/* rx_setup turns Mic1 capture on: the squelch sets it again */
 
 			if (x6100_mixer_rx_setup(X6100_PCM_CARD, boost) < 0 || x6100_mixer_tx_setup(X6100_PCM_CARD) < 0)
 				fprintf(stderr, "\nmod input USB: codec mixer setup failed\n");
@@ -12884,6 +12913,7 @@ int main(int argc, char **argv)
 			}
 
 			sql_update(&rx, scr.sig_dbm, scr.tx || rx.ptt);
+			sql_capture();	/* the audio to Linux (wfserver) as well */
 		}
 
 		if (t - last_meter >= METER_MS && level_n > 0) {
@@ -13035,6 +13065,9 @@ int main(int argc, char **argv)
 	x6100_ctl_sync(&ctl);
 
 	printf("\n");
+	if (g_sql_cap == 0)	/* a closed squelch left the capture off: on for the GUI / wfserver after us */
+		x6100_mixer_set(X6100_PCM_CARD, "Mic1 Capture Switch", 1);
+
 	x6100_flow_close(&flow);
 	x6100_i2c_close(&i2c);
 

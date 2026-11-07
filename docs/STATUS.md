@@ -413,7 +413,9 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     tune line runs across the 3D floor too, and on up to the scope (verified, then
     lengthened). Scope markers M / S / T as the IC-7851 (verified); dashed lines in solid
     colour (half transparent was too faint), the gaps show the signal. Squelch from
-    wfview (SQ slider, 14 03): no effect seen yet, being looked into.
+    wfview: the squelch muted the speaker but not wfview (the codec capture is before
+    the RX volume): now the Mic1 capture goes off while closed. wfview's SQ slider:
+    no 14 03 seen in the log yet.
 
 ## Next steps (suggested order)
 
