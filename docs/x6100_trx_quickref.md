@@ -365,6 +365,11 @@ When the ssh session closes (the WiFi gone, the laptop asleep), x6100_trx goes o
 the console (SIGHUP; 2026-11-07): RX, TX, CAT and a running scan carry on, a toast says
 CONSOLE GONE. Before, it was killed and saved nothing.
 
+Without a console (started at boot, or the ssh session gone) the same lines go into the
+command pipe (2026-11-07): `printf '%s\n' 'bbreset' > /tmp/x6100_trx.cmd` over ssh, any console
+line the same way; the replies go to /tmp/x6100_trx.log. While locked only layout, help
+and bbreset are taken, as on the console.
+
 Type a line + Enter while running; tokens can be combined (`14074000 usb`). `help` or `?`
 lists the commands in short, grouped (also while locked, as `layout`).
 
@@ -424,7 +429,7 @@ The status line starts with the VFO in use (A / B); with split, RIT or XIT it ad
 | `ifshift 10000` | IF shift, -40000 to 40000 Hz (0 = off): the LO that far below the receive frequency, the DC spike out of the passband |
 | `ifshift_tx 1` | keep the IF shift while transmitting (verified); 0: off in TX and in CW |
 | `hold on`, `hold off` | scope HOLD (as CI-V 27 17 from wfview): scope and waterfall frozen, the S-meter goes on; label HOLD; not kept |
-| `bbreset` | reset the baseband (its GPIO reset line, 100 ms) and send it everything again; the calibration is read again (kept when that fails). For a hung baseband: no flow for 5 s shows BASEBAND NOT RESPONDING in red on the screen (redrawn every second), and the console says so once (2026-11-05) |
+| `bbreset` | reset the baseband (its GPIO reset line, 100 ms) and send it everything again; the calibration is read again (kept when that fails). For a hung baseband: no flow for 5 s shows BASEBAND NOT RESPONDING in red on the screen (redrawn every second), and the console says so once (2026-11-05). Also without a console (started at boot): MFK push while that shows, or `printf 'bbreset\n' > /tmp/x6100_trx.cmd` over ssh; allowed while locked (2026-11-07) |
 | `step ch` | 60 m channel steps |
 | `memr` | list the used memory channels |
 | `memr 5`, `memw 5`, `memc 5` | recall / write the VFO into / clear memory channel 5 |

@@ -420,6 +420,12 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     AIF1 ADC capture switch goes off while closed: wfview silent, verified. SQL both ways verified:
     wfview's SQ slider moves the radio's marker, the radio's SQL moves wfview's slider
     (2026-11-07).
+42. bbreset without a console (2026-11-07; started at boot there is no console): MFK push
+    while BASEBAND NOT RESPONDING shows does the bbreset (the box says so), and the
+    command pipe /tmp/x6100_trx.cmd takes console lines over ssh (`printf 'bbreset\n' >
+    /tmp/x6100_trx.cmd`), replies in /tmp/x6100_trx.log; bbreset also while locked. The
+    waterfall is cleared when the baseband answers again. To check: the pipe with e.g.
+    `vol 30`, bbreset by pipe (no hang needed), the MFK push at the next hang.
 
 ## Next steps (suggested order)
 

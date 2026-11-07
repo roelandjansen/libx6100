@@ -166,6 +166,7 @@ static uint64_t g_sql_below;	/* below the threshold since (ms), 0 = not below */
 
 static int g_bb_reset_fd = -1;		/* line handle, held once requested */
 static bool g_bb_reset_req;		/* console bbreset: done in the main loop */
+#define CMD_FIFO	"/tmp/x6100_trx.cmd"	/* command pipe: console lines without a console */
 static bool g_bb_dead;			/* no flow frames for BB_DEAD_MS: shown on screen */
 
 #define BB_DEAD_MS	5000		/* flow frames come every 35 ms */
@@ -3514,6 +3515,13 @@ static void row_mark(x6100_lcd_t *lcd, int x, int y, int w, int h)
 
 static bool on_key(rx_t *rx, int key)
 {
+	// Baseband not responding: MFK push resets it (2026-11-07; started at boot there is
+	// no console for bbreset), locked or not
+	if (g_bb_dead && key == X6100_KEY_MFK_PUSH) {
+		g_bb_reset_req = true;
+		return true;
+	}
+
 	if (bscan_running()) {
 		g_bscan_req = -1;	/* any key stops a birdie scan, and does nothing else */
 		return true;
@@ -8855,7 +8863,7 @@ overlays:
 	bb_was_dead = g_bb_dead;
 
 	if (g_bb_dead) {
-		static const char *l1 = "BASEBAND NOT RESPONDING", *l2 = "CONSOLE: BBRESET, ELSE A POWER CYCLE";
+		static const char *l1 = "BASEBAND NOT RESPONDING", *l2 = "MFK PUSH: BBRESET, ELSE A POWER CYCLE";
 		int w1 = x6100_lcd_text_width(l1, 3), w2 = x6100_lcd_text_width(l2, 2);
 		int bw = (w1 > w2 ? w1 : w2) + 28, y = WF_Y + 20;
 
@@ -10479,11 +10487,11 @@ static void state_save(const rx_t *rx)
 	state_write(&t);
 }
 
-static bool console_read(rx_t *rx, char *buf, size_t size, size_t *len)
+static bool console_read(rx_t *rx, int fd, char *buf, size_t size, size_t *len)
 {
 	bool changed = false;
 	char in[64];
-	ssize_t n = read(STDIN_FILENO, in, sizeof(in));
+	ssize_t n = read(fd, in, sizeof(in));	/* stdin or the command pipe (CMD_FIFO) */
 
 	if (n <= 0)
 		return false;
@@ -10501,7 +10509,8 @@ static bool console_read(rx_t *rx, char *buf, size_t size, size_t *len)
 			printf("\r> %s\033[K\n", buf);	/* the typed line stays visible above the output */
 
 			// Locked: the console waits too, except for layout (portrait locks itself) and help
-			if (rx->lock && strncasecmp(buf, "layout ", 7) != 0 && strcasecmp(buf, "help") != 0 && strcmp(buf, "?") != 0)
+			if (rx->lock && strncasecmp(buf, "layout ", 7) != 0 && strcasecmp(buf, "help") != 0 && strcmp(buf, "?") != 0
+				&& strcasecmp(buf, "bbreset") != 0)	/* a hung baseband is reset locked too */
 				fprintf(stderr, "locked\n");
 			else if (*len > 0)
 				changed |= console_line(rx, buf);
@@ -11957,11 +11966,14 @@ int main(int argc, char **argv)
 	x6100_flow_t flow;
 	x6100_flow_frame_t frame;
 	int fds[IN_COUNT];
-	struct pollfd pfd[IN_COUNT + 4];
+	struct pollfd pfd[IN_COUNT + 5];	/* inputs, stdin, the command pipe, audio scope, 2 CAT */
 	int npfd = 0;
-	input_t pmap[IN_COUNT + 4];
+	input_t pmap[IN_COUNT + 5];
 	char cmd[128];
 	size_t cmd_len = 0;
+	char fcmd[128];		/* a line from the command pipe (CMD_FIFO) */
+	size_t fcmd_len = 0;
+	int fifo_slot = -1;
 	int stdin_slot = -1;
 	int cat_slot[CAT_N] = { -1, -1 };
 	int apcm_slot = -1;	/* audio scope capture, fd -1 while closed */
@@ -12131,6 +12143,24 @@ int main(int argc, char **argv)
 	stdin_slot = npfd;
 	npfd++;
 
+	// The command pipe: console lines for an x6100_trx without a console (started at boot,
+	// stdin /dev/null): printf 'bbreset\n' > /tmp/x6100_trx.cmd. Owner only; opened read /
+	// write so it never reports end of file when a writer closes; replies in the log
+	pfd[npfd].fd = -1;
+
+	struct stat fst;
+
+	if ((mkfifo(CMD_FIFO, 0600) == 0 || errno == EEXIST) && stat(CMD_FIFO, &fst) == 0 && S_ISFIFO(fst.st_mode))
+		pfd[npfd].fd = open(CMD_FIFO, O_RDWR | O_NONBLOCK | O_CLOEXEC);
+
+	if (pfd[npfd].fd < 0)
+		fprintf(stderr, "warning: no command pipe %s\n", CMD_FIFO);
+
+	pfd[npfd].events = POLLIN;
+	pmap[npfd] = IN_COUNT;
+	fifo_slot = npfd;
+	npfd++;
+
 	// Audio scope capture slot, unused (fd -1) until F3 opens it
 	pfd[npfd].fd = -1;
 	pfd[npfd].events = POLLIN;
@@ -12296,8 +12326,14 @@ int main(int argc, char **argv)
 			if (!(pfd[p].revents & POLLIN))
 				continue;
 
+			if (p == fifo_slot) {
+				changed |= console_read(&rx, pfd[p].fd, fcmd, sizeof(fcmd), &fcmd_len);
+				g_cmd_view = cmd;	/* the status line keeps what is typed on the console */
+				continue;
+			}
+
 			if (p == stdin_slot) {
-				changed |= console_read(&rx, cmd, sizeof(cmd), &cmd_len);
+				changed |= console_read(&rx, STDIN_FILENO, cmd, sizeof(cmd), &cmd_len);
 				continue;
 			}
 
@@ -13081,6 +13117,11 @@ int main(int argc, char **argv)
 	printf("\n");
 	if (g_sql_cap == 0)	/* a closed squelch left the capture off: on for the GUI / wfserver after us */
 		x6100_mixer_set(X6100_PCM_CARD, "AIF1 Data Digital ADC Capture Switch", 1);
+
+	if (fifo_slot >= 0 && pfd[fifo_slot].fd >= 0) {	/* the command pipe goes with us */
+		close(pfd[fifo_slot].fd);
+		unlink(CMD_FIFO);
+	}
 
 	x6100_flow_close(&flow);
 	x6100_i2c_close(&i2c);
