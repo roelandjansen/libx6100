@@ -246,6 +246,16 @@ meant to be:
 OpenX6X00 is open (LGPL-2.1, the image GPLv3): ssh is there, the init scripts can be read,
 and x6100_trx starts at boot with a script of its own next to the image's.
 
+### How the work is done
+
+The documentation and the tracking of the work are done by Claude (Anthropic's AI
+assistant, used through Claude Code): this README, the quick reference and the other
+documents in `docs/`, the status and the open items (`docs/STATUS.md`, `docs/TODO.md`),
+the analysis of problems found on the radio, and much of the code, written to the
+maintainer's direction. Claude is not a contributor in the git history: the
+maintainer decides what is built, tests every change on the radio, and is the author of
+every commit and tag.
+
 ## References
 
 Projects whose published work libx6100 was checked against. libx6100 contains no code

@@ -1,6 +1,11 @@
 # libx6100 / x6100_trx — status
 
-Snapshot: 2026-11-07. Last tag: v0.17.12 (2026-11-07; faster VFO tuning when the knob
+Snapshot: 2026-11-07. Last tag: v0.17.13 (2026-11-07; panels as a radio menu (MFK turn
+selects, push switches or edits); scripts/x6100_giveaway.sh; own S-meter squelch with a
+marker on the bar and the arc (verified in NFM); the TX audio source and OOB on the arc
+meter in TX; LAN as TX audio input: wfview keys the network audio, the PTT key and the
+hand mic the mic (verified, with X6100.rig LAN on PC and wfserver)), on v0.17.12
+(2026-11-07; faster VFO tuning when the knob
 turns fast (x2 / x5 / x10 on steps up to 1 kHz, GEN row VFO SPEED, verified); the
 gimmick: a 3D waterfall, scope panel WATERFALL 3D (works)), on v0.17.11 (2026-11-07;
 OpenX6X00 (ON6URE) as the base
