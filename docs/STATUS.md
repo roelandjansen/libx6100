@@ -376,11 +376,10 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     OpenX6X00 GUI settings (callsign) still by hand.
 38. Squelch (2026-11-07): the baseband's threshold (21 [15:8]) did nothing in NFM; now
     x6100_trx's own S-meter squelch in every mode: SQL = the position on the S bar (40
-    about S6, 60 S9), muted below it (opens at once, closes after 0.3 s), a marker on the arc meter too (portrait) and on
-    the bar (amber closed, green open), CI-V 15 01 reports it. To check: NFM on a
-    10 m / 6 m FM repeater with SQL at S3-S6, that it closes on noise and
-    opens on a carrier; SSB too; the marker where the bar opens; CPU with display off
-    is unchanged (the level is computed anyway).
+    about S6, 60 S9), muted below it (opens at once, closes after 0.3 s), a marker on
+    the bar and the arc meter (amber closed, green open), CI-V 15 01 reports it.
+    Verified 2026-11-07: NFM squelch and the markers. Still to check: SSB, wfview's
+    squelch status.
 
 ## Next steps (suggested order)
 
