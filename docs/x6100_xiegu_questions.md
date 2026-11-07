@@ -15,9 +15,10 @@ at least 16 dB over the noise) over all bands, done four times on 2026-11-06 / 0
 | 3 | off | battery | none | on | off |
 | 4 | off | battery | none | off | off |
 
-All birdies from 16 dB came back in every scan, at the same frequency (within about
-10 Hz) and the same strength (within 2 dB). Display, external supply, USB, WiFi and
-Bluetooth make no difference: the sources are inside the radio.
+Almost all birdies from 16 dB came back in every scan, at the same frequency (within
+about 10 Hz) and nearly the same strength (most within 2 dB; a few near 16 dB came and
+went). Display, external supply, USB, WiFi and Bluetooth make no difference: the sources
+are inside the radio.
 
 On several bands they form a comb of the same spacing, about **7.58 kHz**:
 
