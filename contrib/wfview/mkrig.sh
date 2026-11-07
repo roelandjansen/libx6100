@@ -82,6 +82,7 @@ BEGIN {
 	set["Bands", "Gen", "End"] = "75000000"	# x6100_trx freqmax default
 	set["Modes", "AM", "Max"] = "6000"
 	set["Preamps", "1", "Name"] = "PREAMP"
+	set["Inputs", "WLAN", "Name"] = "LAN"	# wfview's inputLAN (4); the X6100 GEN rows say LAN
 	# Header
 	hdr["Model"] = "X6100"
 	hdr["CIVAddress"] = CIV
