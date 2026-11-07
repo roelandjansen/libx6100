@@ -441,7 +441,8 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     full). No T where TX is refused (outside the allocations without oob). To check:
     each MARKERS value, A/B swap (A stays on VFO A), split. Verified 2026-11-07: no T on
     GEN 5.450 without oob; nooob switches the band check on again at runtime. oob / nooob
-    now saved in the state (the conf wins, --oob over both): to check after a restart.
+    now saved in the state (the conf wins, --oob over both): both survive a restart
+    (verified 2026-11-07).
 
 ## Next steps (suggested order)
 
