@@ -7803,6 +7803,88 @@ static void vline_blend(x6100_lcd_t *lcd, int x, int y0, int y1, uint32_t rgb)
 	}
 }
 
+//
+// Scope markers as on the IC-7851 (2026-11-07): M (red) the VFO in use (RIT included), S
+// (green) the other VFO, T (yellow) the TX frequency. Each a half-transparent line with a
+// lettered tag under the frequency labels; lines on the same column dashed in their
+// colours (M and T together: red / yellow, the usual case). A marker outside the view: an
+// arrow at that edge in its colour (the IC-7851's << for the sub VFO). Columns 0 .. sw - 1.
+//
+
+#define MARK_M		0xE03030
+#define MARK_S		0x3CC83C
+#define MARK_T		0xF0D020
+
+static void draw_markers(x6100_lcd_t *lcd, const rx_t *rx, const view_t *v, int sw)
+{
+	const uint32_t col[3] = { MARK_M, MARK_S, MARK_T };
+	const char *const name[3] = { "M", "S", "T" };
+	const int64_t hz[3] = { (int64_t) rx->freq + (rx->rit ? rx->rit_hz : 0), rx->b_freq, tx_hz(rx) };
+	const int tag_w = 16, tag_h = 17, row_y = SPEC_Y + 20;
+	int x[3], row[3];
+
+	for (int i = 0; i < 3; i++)
+		x[i] = f_to_x(v, hz[i]);
+
+	//
+	// Lines: the markers on one column (within a pixel) share it, dashed 6 px a colour
+	//
+	for (int i = 0; i < 3; i++) {
+		uint32_t on[3];
+		int n = 0;
+		bool first = true;
+
+		if (x[i] < LBL_W || x[i] >= sw)
+			continue;
+
+		for (int k = 0; k < 3; k++) {
+			if (abs(x[k] - x[i]) <= 1) {
+				first = first && k >= i;	/* drawn once, by the first of the group */
+				on[n++] = col[k];
+			}
+		}
+
+		if (!first)
+			continue;
+
+		for (int y = SPEC_Y; y < SPEC_Y + SPEC_H; y += 6) {
+			int y1 = y + 5 < SPEC_Y + SPEC_H - 1 ? y + 5 : SPEC_Y + SPEC_H - 1;
+
+			vline_blend(lcd, x[i], y, y1, on[(y - SPEC_Y) / 6 % n]);
+		}
+	}
+
+	//
+	// Tags: M and S on the first row, T on the second; one that would cover another
+	// drops a row. Out of view: the arrow at the edge, one slot down per marker
+	//
+	for (int i = 0; i < 3; i++) {
+		row[i] = i == 2 ? 1 : 0;
+
+		for (int k = 0; k < i; k++)
+			if (row[k] == row[i] && abs(x[k] - x[i]) < tag_w + 2 && x[k] >= LBL_W && x[k] < sw)
+				row[i]++;
+	}
+
+	for (int i = 0; i < 3; i++) {
+		int y = row_y + row[i] * (tag_h + 2);
+
+		if (x[i] >= LBL_W && x[i] < sw) {
+			int tx = x[i] - tag_w / 2;
+
+			tx = tx < LBL_W ? LBL_W : tx + tag_w > sw ? sw - tag_w : tx;
+			x6100_lcd_fill(lcd, tx, y, tag_w, tag_h, col[i]);
+			x6100_lcd_text(lcd, tx + (tag_w - x6100_lcd_text_width(name[i], 2)) / 2, y + 2, 2, name[i], 0x000000);
+		} else {
+			const char *a = x[i] < LBL_W ? "<<" : ">>";
+			int ay = SPEC_Y + SPEC_H / 2 - 16 + i * 16, ax = x[i] < LBL_W ? LBL_W + 2 : sw - 4 - x6100_lcd_text_width(a, 2);
+
+			x6100_lcd_fill(lcd, ax - 1, ay - 1, x6100_lcd_text_width(a, 2) + 2, 16, 0x000000);
+			x6100_lcd_text(lcd, ax, ay, 2, a, col[i]);
+		}
+	}
+}
+
 // A panel or page open: they are drawn for landscape, so portrait turns back meanwhile
 static bool panel_open(const rx_t *rx)
 {
@@ -8517,32 +8599,10 @@ scope:
 	}
 
 	//
-	// VFO cursor; in a fixed window an arrow at the edge when the VFO is outside it
+	// M (the VFO in use), S (the other VFO) and T (TX) markers, as the IC-7851; out of
+	// view an arrow at the edge
 	//
-	// With split / RIT / XIT: green line at the RX frequency, red at TX (when in view)
-	if (tx_apart(rx)) {
-		int rxx = f_to_x(&v, rx_hz(rx)), txx = f_to_x(&v, tx_hz(rx));
-
-		if (rxx >= 0 && rxx < SW)
-			for (int k = 0; k < 2; k++)
-				vline_blend(lcd, rxx + k, SPEC_Y, SPEC_Y + SPEC_H - 1, 0x3CC83C);
-
-		if (txx >= 0 && txx < SW) {
-			for (int k = 0; k < 2; k++)
-				vline_blend(lcd, txx + k, SPEC_Y, SPEC_Y + SPEC_H - 1, SCR_WARN);
-			x6100_lcd_fill(lcd, txx + 3, SPEC_Y + 44, x6100_lcd_text_width("TX", 2) + 4, 17, 0x000000);
-			x6100_lcd_text(lcd, txx + 5, SPEC_Y + 46, 2, "TX", SCR_WARN);
-		}
-	} else {
-		int cx = f_to_x(&v, rx->freq);
-
-		if (cx >= 0 && cx < SW)
-			vline_blend(lcd, cx, SPEC_Y, SPEC_Y + SPEC_H - 1, SCR_WARN);	/* the spectrum shows through */
-		else if (cx < 0)
-			x6100_lcd_text(lcd, LBL_W + 2, SPEC_Y + SPEC_H / 2 - 7, 2, "<", SCR_WARN);
-		else
-			x6100_lcd_text(lcd, SW - 14, SPEC_Y + SPEC_H / 2 - 7, 2, ">", SCR_WARN);
-	}
+	draw_markers(lcd, rx, &v, SW);
 
 	//
 	// Birdies in view (BIRDIE MARKS): a short yellow tick at the top of the RF scope
