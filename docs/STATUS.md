@@ -388,13 +388,13 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
 40. LAN as TX audio input (2026-11-07): GEN DATA OFF MOD / DATA MOD MIC / USB / LAN;
     LAN: CAT PTT (wfview over wfserver) sends the codec (network audio), the PTT key and
     the hand mic the mic, so local and remote work without switching. CI-V 1A 05 0118 /
-    0119: 03 = LAN (IC-705 WLAN), X6100.rig has WLAN as third input (mkrig.sh). The arc
+    0119: 03 = LAN (IC-705 WLAN), X6100.rig has LAN as third input (mkrig.sh). The arc
     meter shows LAN or the mic. To check: wfview voice TX in USB with LAN (PC audio out,
-    LAN on the meter), then the PTT key (mic); wfview's input menu shows WLAN and sets it.
+    LAN on the meter), then the PTT key (mic); wfview's input menu shows LAN and sets it (Data Off, not Data 1).
     2026-11-07: WLAN came out as 00 (MIC): wfserver on the radio builds the CI-V from its
     own X6100.rig (old, no WLAN); build.sh deploy now updates that copy too. The input
     is now named LAN in X6100.rig. Verified 2026-11-07: wfview Data Off = LAN, voice TX
-    from wfview works. Still to check: the PTT key on LAN (mic), and whether a wfview
+    from wfview works, LAN on the meter. Still to check: the PTT key on LAN (mic), whether a wfview
     reconnect sends 18 00 again (seen at connect before).
 
 ## Next steps (suggested order)

@@ -138,6 +138,20 @@ background.
 In wfview on the PC: Settings, Radio access: LAN; the radio's IP address, control port
 50001, the user and password from the wizard.
 
+### TX audio from wfview (2026-11-07, verified)
+
+Voice TX from wfview needs the radio's TX audio input on LAN (or USB):
+
+1. The same `X6100.rig` (with the LAN input) on the PC and on the radio: wfserver builds
+   the CI-V it sends from its own copy (`/opt/wfserver/share/wfview/rigs`), so an old
+   copy sends LAN as MIC. `build.sh deploy` (repository root) updates it; then
+   `x6100_ui.sh wfserver off` and `on` (wfserver reads rig files only at its start).
+2. wfview, Settings, Radio, Modulation input: **Data Off** to LAN (SSB, AM, FM). **Data 1**
+   is for the data modes (USB-D, LSB-D); USB or LAN there.
+3. On the radio GEN row DATA OFF MOD then shows LAN. LAN sends the network audio when
+   wfview (CAT) keys and the mic when the PTT key or the hand mic keys: local and remote
+   work without switching. While transmitting the arc meter shows LAN or the mic.
+
 ## Notes
 
 - The codec is one device. While wfserver has it open, the x6100_trx audio scope (F3)
