@@ -439,7 +439,8 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     VFO B (the IC-7851 M / S; before: the VFO in use and the other), T = TX; B and T dashed through the
     flat waterfall (no trace left, tested on the PC). No legend chips (the scope top is
     full). No T where TX is refused (outside the allocations without oob). To check:
-    each MARKERS value, A/B swap (A stays on VFO A), split, GEN without oob (no T).
+    each MARKERS value, A/B swap (A stays on VFO A), split. Verified 2026-11-07: no T on
+    GEN 5.450 without oob; nooob switches the band check on again at runtime.
 
 ## Next steps (suggested order)
 
