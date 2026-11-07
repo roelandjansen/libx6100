@@ -414,8 +414,9 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     lengthened). Scope markers M / S / T as the IC-7851 (verified); dashed lines in solid
     colour (half transparent was too faint), the gaps show the signal. Squelch from
     wfview: the squelch muted the speaker but not wfview (the codec capture is before
-    the RX volume): now the Mic1 capture goes off while closed. wfview's SQ slider:
-    no 14 03 seen in the log yet.
+    the RX volume); Mic1 capture off did not do it (wfview still open); now the digital
+    AIF1 ADC capture switch goes off while closed. wfview's SQ slider works (the marker
+    follows it).
 
 ## Next steps (suggested order)
 
