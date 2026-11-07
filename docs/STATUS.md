@@ -361,6 +361,12 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     x10 from 12 / 25 / 45 detents per second, the thresholds right for the knob), the 3D
     waterfall works. Still to check: top for the CPU with 3D at speed FAST, 3D in
     portrait and with F3 long; a photo for the README.
+36. Panels as a radio menu (2026-11-07): in GEN, KEY, scope, TX, RIT / AGC, DSP, filter
+    and edge MFK turn selects the row, push switches an on / off row or starts editing
+    (amber frame, MFK adjusts), push again ends it; hold default as before. To check:
+    each panel, a toggle row (WATERFALL 3D, WIFI, RIT), an edit row (WF PEAK LEVEL, CAT,
+    RIT offset), the filter in AM / FM (rows skipped), the edge panel, an edit left open
+    when the panel closes (next time not editing).
 
 ## Next steps (suggested order)
 

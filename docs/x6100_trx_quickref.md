@@ -72,10 +72,25 @@ Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
 | ATU | tuner in / out; on shows the tuner memory it uses, nearest the TX frequency within 0.5 % (`ATU 14074 L 23 C 112 S 1`), or `ATU ON: NO MEMORY` (straight through until a tune) | tune (keys TX at tune power); the result becomes a tuner memory |
 | LOCK | lock knobs and keys (PTT, volume, mute and squelch (VOL long: SQL) still work; since 2026-11-05) | |
 | PWR | display on / off | release after 1.5-4 s: quit; hold 4 s: power off (as the stock UI). TX is dropped and filters saved first |
-| GEN | settings panel: brightness, CAT, wfserver, NTP (MFK turn = change, push = next row, long = default; GEN, other key or 10 s idle closes) | status page: IP, uptime, battery, CAT, NTP result, build (any key or 30 s closes) |
+| GEN | settings panel: brightness, CAT, wfserver, NTP (MFK turn = row, push = switch or edit, long = default: see Panels; GEN, other key or 10 s idle closes) | status page: IP, uptime, battery, CAT, NTP result, build (any key or 30 s closes) |
 | KEY | key type: straight / paddle / paddle reversed | keyer panel |
 | MSG | message panel: M1-M8, MFK push sends (see Messages) | send the selected message again every `msgrepeat` s |
 | APP | app panel: SWR SCAN, MFK push starts | SWR scan of the band segment the VFO is in |
+
+## Panels and the MFK knob
+
+All panels with rows (GEN settings, KEY, scope F1, TX F4, RIT / AGC, DSP, filter F5,
+edge F2) work as a radio menu (2026-11-07; before, MFK push went to the next row):
+
+| MFK | Action |
+|---|---|
+| turn | select the row (round; the filter panel skips SFT in AM, all but BW in FM) |
+| push on an on / off row | switch it at once (e.g. WATERFALL 3D, WIFI, RIT) |
+| push on any other row | edit it: an amber frame, the hint says MFK: ADJUST; turn changes the value, push again ends the edit |
+| hold | the selected row back to its default (GEN: also start / connect, as the hint says) |
+
+The edit ends too when the panel closes. MSG, APP and the memory panel keep their own
+use: MFK turn selects, push sends / starts / clears.
 
 ## Scope modes
 
@@ -96,8 +111,8 @@ Four edges per range, the IC-705 ranges (MHz): 01 below 1.6, 02 1.6-2, 03 2-6, 0
 - F2 in FIX / SCROLL-F: next edge (1 -> 2 -> 3 -> 4 -> 1); the scope label shows
   `FIX E2 14075-14150`. The edge number holds for every range.
 - F2 long in FIX / SCROLL-F: the edge panel (as an Icom's fixed edge menu): LOWER and
-  UPPER of the edge in use. MFK turn: 1 kHz steps (the window shows the edge while you
-  set it); MFK push: lower <-> upper; MFK long: this edge back to its default; F2: the
+  UPPER of the edge in use. MFK turn: lower or upper; push: edit it, then MFK turn moves it in 1 kHz steps (the window shows the edge while you
+  set it), push again: done; MFK long: this edge back to its default; F2: the
   next edge, the panel stays; F2 long, another key or 10 s idle closes. The other end
   follows when the width would pass the maximum; the edge stays inside its range.
 - An edge is at most 75 kHz wide with the IF shift (96 kHz with `ifshift 0`; the IQ is 100 kHz wide):
@@ -112,7 +127,7 @@ Four edges per range, the IC-705 ranges (MHz): 01 below 1.6, 02 1.6-2, 03 2-6, 0
 
 ![scope panel](images/x6100_trx_scope_panel.png)
 
-MFK turn: adjust; MFK push: next row; MFK hold: default; F1 long, another key or 10 s
+MFK turn: row; push: switch (on / off rows) or edit; hold: default (see Panels); F1 long, another key or 10 s
 idle closes. Kept in the state file (five lines: RF trace, RF colours, waterfall and TX, AF
 trace, AF colours).
 
@@ -146,8 +161,8 @@ are copied from the RF rows. The waterfall rows apply to both scopes.
 
 | Control | Action |
 |---|---|
-| MFK turn | adjust BW or SFT; on PBT: shift inner and outer together by 50 Hz |
-| MFK push | select BW -> SFT -> PBT (AM: BW <-> PBT; FM: BW only) |
+| MFK turn | select BW, SFT, PBT (AM: BW, PBT; FM: BW only); editing: adjust BW or SFT, on PBT shift inner and outer together by 50 Hz |
+| MFK push | edit the selected box (amber frame); push again: done |
 | MFK long | DEF (default for this FIL); on PBT: PBT CLR (inner and outer to centre) |
 | F5 | next FIL |
 | F5 long, other key, 10 s idle | close and save |
@@ -172,8 +187,8 @@ The baseband's noise reduction, noise blanker and manual notch on one sheet.
 
 | Control | Action |
 |---|---|
-| MFK turn | adjust the selected value |
-| MFK push | next value: NR level, NB level, NB width, notch, notch width |
+| MFK turn | select: NR level, NB level, NB width, notch, notch width; editing: adjust it |
+| MFK push | edit the selected value (amber frame); push again: done |
 | MFK long | selected value back to its default |
 | DFN short / long | NR / NB on, off (panel stays open) |
 | DFL short | notch on, off (panel stays open) |
@@ -270,6 +285,10 @@ out in portrait: TUNE shows in the red line. Command line or console: `layout po
 
 ## Settings panel (GEN)
 
+MFK as in every panel (see Panels): turn selects the row, push switches a row of two
+values (LAYOUT, VFO SPEED, WIFI, BLUETOOTH, ...) or starts editing one with more
+(BRIGHTNESS, CAT, CAT CLOCK, WIFI NETWORK, BT DEVICE), hold: default or the action.
+
 Changed rows go into the state file 2 s after the last change (not only at exit), so a
 kill or a power loss keeps them; a row set in `x6100_trx.conf` cannot be changed here.
 
@@ -289,11 +308,11 @@ kill or a power loss keeps them; a row set in `x6100_trx.conf` cannot be changed
 | WFSERVER | ON / OFF (ON), N/A when not installed: runs `x6100_ui.sh wfserver on\|off` (autostart while x6100_trx serves the CI-V pty, which is always on); MFK hold starts it (also when x6100_trx was not started by `x6100_ui.sh stop`); the second column shows RUNNING, NOT RUNNING, STOPPING or NEEDS THE CI-V PTY (catpty off) | at once (off: up to 10 s) |
 | NTP SYNC | AT START / OFF | next start |
 | WIFI | ON / OFF (NetworkManager); shows network, IP and signal | at once |
-| WIFI NETWORK | turn: choose a saved network, hold MFK: connect. New networks: `nmtui` over ssh | at once |
+| WIFI NETWORK | edit (push), turn: choose a saved network, hold MFK: connect. New networks: `nmtui` over ssh | at once |
 | BLUETOOTH | ON / OFF; kept (state `bt`) and applied at the next start: the image switches it on at every boot. Off when not used: on the shared WiFi / Bluetooth chip it costs WiFi airtime (wfview audio dropouts over WiFi) | at once |
 | BT PAIRING | turn right: visible as X6100 for 120 s, for a phone that pairs from its side; left: hidden. A headset never searches: pair it from the radio with `bluetoothctl` (scan on, scan off, pair, trust, connect in one session), WiFi briefly off for the scan: with WiFi on the scan finds nothing | at once |
-| BT DEVICE | turn: choose a paired device, hold MFK: connect / disconnect. A headset connected here (or seen connected) is connected again by itself every 20 s while it is not: after Bluetooth off / on, the headset off / on, at start (`btauto`, state); disconnecting it here stops that | at once |
-| BIRDIE SCAN | turn: THIS BAND / ALL BANDS, hold MFK: start (antenna off); any key stops | at once |
+| BT DEVICE | edit (push), turn: choose a paired device, hold MFK: connect / disconnect. A headset connected here (or seen connected) is connected again by itself every 20 s while it is not: after Bluetooth off / on, the headset off / on, at start (`btauto`, state); disconnecting it here stops that | at once |
+| BIRDIE SCAN | push: THIS BAND / ALL BANDS, hold MFK: start (antenna off); any key stops | at once |
 | BIRDIE MARKS | ON / OFF (ON): yellow ticks on the scope | at once |
 | BIRDIE NOTCH | ON / OFF (OFF): automatic notch on a birdie in USB / LSB / AM | at once |
 
@@ -530,7 +549,7 @@ Kept in `x6100_trx.state` as `atumem <Hz> <L> <C> <S>`, written right after each
 ![keyer](images/x6100_trx_keyer.png)
 
 KEY short cycles the key type (note on the scope); KEY long opens the keyer panel
-(orange): MFK turn = adjust, push = next value, long = default; KEY long, another key
+(orange): MFK turn = row, push = switch or edit, long = default (see Panels); KEY long, another key
 or 10 s idle closes. The baseband keys and times the CW itself (registers 33 / 34).
 
 | Value | Range (default) |
@@ -550,7 +569,7 @@ Kept in the state file. Console: `keytype straight|paddle|rev`, `wpm 22`, `iambi
 
 ## TX panel (F4 long)
 
-F4 long opens the TX panel (red): MFK turn = adjust, push = next value, long = default;
+F4 long opens the TX panel (red): MFK turn = row, push = switch or edit, long = default (see Panels);
 F4 long, another key or 10 s idle closes. On / off rows show green when on. The
 defaults are the values x6100_trx wrote at start before (from the R1CBU GUI; VOX gain
 and delay are new, VOX stays off), so
@@ -629,8 +648,8 @@ there is no local backup.
 - V/M long: split. RX on the VFO in use (+ RIT), TX on the other VFO with its mode and
   filter (+ XIT). The TX check and the OOB marker use the TX frequency.
 - AGC long: RIT / XIT / DUP panel (green). One offset for both, as on Icom radios: MFK
-  turn = offset in 10 Hz steps (±9990), on the RIT / XIT rows on (right) / off (left);
-  MFK push = next row; MFK long = offset 0 (CLEAR); AGC long, other key or 10 s closes.
+  turn = row; push on RIT, XIT, AGC HANG switches them, on the other rows edits (offset in 10 Hz steps, ±9990);
+  MFK long = offset 0 (CLEAR); AGC long, other key or 10 s closes.
 - Repeater duplex, rows DUPLEX and SHIFT of the same panel: TX = RX - / + the shift,
   without split.
 

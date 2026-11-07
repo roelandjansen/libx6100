@@ -3301,6 +3301,156 @@ static int *dsp_value(rx_t *rx, int i)
 #define REF_MAX_DB	30		/* scope reference level range, +- dB (F2 long + MFK) */
 #define RIT_MAX_HZ	9990		/* RIT / XIT offset range, +- Hz (Icom: 9.99 kHz) */
 
+//
+// Panels with rows (GEN, KEY, scope, TX, RIT / AGC, DSP, filter, edge; 2026-11-07, as a
+// radio menu): turning MFK selects the row; push switches an on / off row at once, on
+// any other row it starts editing (an amber frame: MFK changes the value) and the next
+// push ends that. HOLD sets the default as before. g_row_edit points at the edited
+// panel's row index; the edit ends when that panel closes or another one opens.
+//
+
+static int *g_row_edit;
+static bool gen_toggle(int row);
+
+// The open panel with rows: its row index, the number of rows, its idle timer; NULL none
+static int *row_sel(rx_t *rx, int *n, uint64_t **since)
+{
+	uint64_t *dummy;
+	uint64_t **s = since != NULL ? since : &dummy;
+
+#define ROW_PANEL(open, par, tm, rows) \
+	if (rx->open) { \
+		*n = (rows); \
+		*s = &rx->tm; \
+		return &rx->par; \
+	}
+
+	ROW_PANEL(gedit, gedit_par, gedit_since, GEN_ROWS)
+	ROW_PANEL(kedit, kedit_par, kedit_since, KPARS)
+	ROW_PANEL(sedit, sedit_par, sedit_since, SPARS)
+	ROW_PANEL(xedit, xedit_par, xedit_since, XPARS)
+	ROW_PANEL(tedit, tedit_par, tedit_since, TPARS)
+	ROW_PANEL(eedit, eedit_par, eedit_since, 2)
+	ROW_PANEL(fedit, fedit_par, fedit_since, 3)
+	ROW_PANEL(dedit, dedit_par, dedit_since, DSP_PARS)
+#undef ROW_PANEL
+
+	return NULL;
+}
+
+// Is the selected row being edited? Forgets an edit whose panel has closed.
+static bool row_editing(const rx_t *rx)
+{
+	int n;
+	int *sel = row_sel((rx_t *) rx, &n, NULL);
+
+	if (g_row_edit != NULL && g_row_edit != sel)
+		g_row_edit = NULL;
+
+	return g_row_edit != NULL;
+}
+
+// Can row i of the open panel be selected (the filter panel: AM has no SFT, FM BW only)
+static bool row_valid(const rx_t *rx, int i)
+{
+	if (!rx->fedit || rx->gedit || rx->kedit || rx->sedit || rx->xedit || rx->tedit || rx->eedit)
+		return true;
+
+	fgroup_t g = mode_group(rx->mode);
+
+	return g == FG_FM ? i == 0 : g == FG_AM ? i != 1 : true;
+}
+
+// MFK turn while not editing: the next / previous row (round)
+static void row_move(rx_t *rx, int *sel, int n, int dir)
+{
+	for (int k = 0; k < n; k++) {
+		*sel = (*sel + dir + n) % n;
+
+		if (row_valid(rx, *sel))
+			break;
+	}
+}
+
+// A row of two values (min, max one step apart): the other one
+static bool kpar_flip(const kpar_t *k, int *p)
+{
+	if (k->max - k->min != k->step)
+		return false;
+
+	*p = *p == k->max ? k->min : k->max;
+	return true;
+}
+
+// MFK push on an on / off row: switch it; false when the row has more values
+static bool row_toggle(rx_t *rx)
+{
+	if (rx->gedit)
+		return gen_toggle(rx->gedit_par);
+
+	if (rx->kedit)
+		return kpar_flip(&g_kpar[rx->kedit_par], kpar_value(rx, rx->kedit_par));
+
+	if (rx->xedit)
+		return kpar_flip(&g_xpar[rx->xedit_par], xpar_value(rx, rx->xedit_par));
+
+	if (rx->sedit) {
+		const kpar_t *k = &g_spar[rx->sedit_par];
+		int v = spar_get(rx, rx->sedit_par);
+
+		if (!kpar_flip(k, &v))
+			return false;
+
+		spar_set(rx, rx->sedit_par, v);
+		return true;
+	}
+
+	if (rx->tedit) {
+		if (rx->tedit_par == 1)
+			rx->rit = !rx->rit;
+		else if (rx->tedit_par == 2)
+			rx->xit = !rx->xit;
+		else if (rx->tedit_par == 8)
+			g_agc_hang = !g_agc_hang;
+		else
+			return false;
+
+		return true;
+	}
+
+	return false;
+}
+
+// MFK push in a panel with rows: end the edit, switch an on / off row, or start editing
+static bool row_push(rx_t *rx)
+{
+	int n;
+	int *sel = row_sel(rx, &n, NULL);
+
+	if (sel == NULL)
+		return false;
+
+	if (row_editing(rx))
+		g_row_edit = NULL;
+	else if (!row_toggle(rx))
+		g_row_edit = sel;
+
+	return true;
+}
+
+// The edit frame around a selected row being edited
+static void row_mark(x6100_lcd_t *lcd, int x, int y, int w, int h)
+{
+	const uint32_t amber = 0xFFB020;
+
+	x6100_lcd_hline(lcd, x, x + w - 1, y, amber);
+	x6100_lcd_hline(lcd, x, x + w - 1, y + h - 1, amber);
+	x6100_lcd_vline(lcd, x, y, y + h - 1, amber);
+	x6100_lcd_vline(lcd, x + w - 1, y, y + h - 1, amber);
+	x6100_lcd_hline(lcd, x + 1, x + w - 2, y + 1, amber);
+	x6100_lcd_hline(lcd, x + 1, x + w - 2, y + h - 2, amber);
+}
+
 static bool on_key(rx_t *rx, int key)
 {
 	if (bscan_running()) {
@@ -3353,15 +3503,14 @@ static bool on_key(rx_t *rx, int key)
 	}
 
 	//
-	// GEN settings panel open: MFK push selects the next row; GEN closes it (below),
+	// GEN settings panel open: MFK push switches or edits the row (row_push); GEN closes it,
 	// any other key closes it and does its normal job. The status page closes on any key.
 	//
 	if (rx->gedit) {
 		rx->gedit_since = now_ms();
 
 		if (key == X6100_KEY_MFK_PUSH) {
-			rx->gedit_par = (rx->gedit_par + 1) % GEN_ROWS;
-			return true;
+			return row_push(rx);
 		}
 
 		if (key != X6100_KEY_GEN)
@@ -3369,15 +3518,14 @@ static bool on_key(rx_t *rx, int key)
 	}
 
 	//
-	// Keyer panel open: MFK push selects the next value; any other key closes it
+	// Keyer panel open: MFK push switches or edits the row (row_push); any other key closes it
 	// and does its normal job (KEY long closes it too)
 	//
 	if (rx->kedit) {
 		rx->kedit_since = now_ms();
 
 		if (key == X6100_KEY_MFK_PUSH) {
-			rx->kedit_par = (rx->kedit_par + 1) % KPARS;
-			return true;
+			return row_push(rx);
 		}
 
 		rx->kedit = false;
@@ -3416,30 +3564,28 @@ static bool on_key(rx_t *rx, int key)
 	}
 
 	//
-	// Scope panel open: MFK push selects the next value; any other key closes it and
+	// Scope panel open: MFK push switches or edits the row (row_push); any other key closes it and
 	// does its normal job (F1 long closes it too)
 	//
 	if (rx->sedit) {
 		rx->sedit_since = now_ms();
 
 		if (key == X6100_KEY_MFK_PUSH) {
-			rx->sedit_par = (rx->sedit_par + 1) % SPARS;
-			return true;
+			return row_push(rx);
 		}
 
 		rx->sedit = false;
 	}
 
 	//
-	// TX panel open: MFK push selects the next value; any other key closes it and
+	// TX panel open: MFK push switches or edits the row (row_push); any other key closes it and
 	// does its normal job (F4 long closes it too)
 	//
 	if (rx->xedit) {
 		rx->xedit_since = now_ms();
 
 		if (key == X6100_KEY_MFK_PUSH) {
-			rx->xedit_par = (rx->xedit_par + 1) % XPARS;
-			return true;
+			return row_push(rx);
 		}
 
 		rx->xedit = false;
@@ -3472,32 +3618,28 @@ static bool on_key(rx_t *rx, int key)
 	}
 
 	//
-	// Edge panel open: MFK push lower <-> upper, F2 the next edge (the panel stays);
-	// any other key closes it and does its normal job
+	// Edge panel open: MFK push edits the lower or upper edge (row_push), F2 the next
+	// edge (the panel stays); any other key closes it and does its normal job
 	//
 	if (rx->eedit) {
 		rx->eedit_since = now_ms();
 
-		if (key == X6100_KEY_MFK_PUSH) {
-			rx->eedit_par ^= 1;
-			return true;
-		}
+		if (key == X6100_KEY_MFK_PUSH)
+			return row_push(rx);
 
 		if (key != X6100_KEY_F2)
 			rx->eedit = false;
 	}
 
 	//
-	// RIT / XIT panel open: MFK push selects the next row; any other key
+	// RIT / XIT panel open: MFK push switches or edits the row (row_push); any other key
 	// closes it and does its normal job (AGC long closes it too)
 	//
 	if (rx->tedit) {
 		rx->tedit_since = now_ms();
 
-		if (key == X6100_KEY_MFK_PUSH) {
-			rx->tedit_par = (rx->tedit_par + 1) % TPARS;
-			return true;
-		}
+		if (key == X6100_KEY_MFK_PUSH)
+			return row_push(rx);
 
 		rx->tedit = false;
 	}
@@ -3510,12 +3652,11 @@ static bool on_key(rx_t *rx, int key)
 	}
 
 	//
-	// Filter panel open: F5 cycles FIL1-3, MFK push switches BW / SFT; any other key
-	// closes the panel (edits are kept) and then does its normal job
+	// Filter panel open: F5 cycles FIL1-3, MFK turn picks BW / SFT / PBT (AM no SFT, FM
+	// BW only: row_valid), push edits it (row_push); any other key closes the panel
+	// (edits are kept) and then does its normal job
 	//
 	if (rx->fedit) {
-		fgroup_t g = mode_group(rx->mode);
-
 		rx->fedit_since = now_ms();
 
 		if (key == X6100_KEY_F5) {
@@ -3523,32 +3664,22 @@ static bool on_key(rx_t *rx, int key)
 			return true;
 		}
 
-		// BW -> SFT -> PBT; AM has no SFT (BW <-> PBT), FM neither (BW only)
-		if (key == X6100_KEY_MFK_PUSH) {
-			if (g == FG_FM)
-				rx->fedit_par = 0;
-			else if (g == FG_AM)
-				rx->fedit_par = rx->fedit_par == 0 ? 2 : 0;
-			else
-				rx->fedit_par = (rx->fedit_par + 1) % 3;
-
-			return true;
-		}
+		if (key == X6100_KEY_MFK_PUSH)
+			return row_push(rx);
 
 		rx->fedit = false;
 		fil_save();
 	}
 
 	//
-	// DSP panel open: MFK push selects the next value; DFN / DFL keep switching
+	// DSP panel open: MFK push switches or edits the row (row_push); DFN / DFL keep switching
 	// NR, NB and notch; any other key closes the panel and does its normal job
 	//
 	if (rx->dedit) {
 		rx->dedit_since = now_ms();
 
 		if (key == X6100_KEY_MFK_PUSH) {
-			rx->dedit_par = (rx->dedit_par + 1) % DSP_PARS;
-			return true;
+			return row_push(rx);
 		}
 
 		if (key != X6100_KEY_DFN && key != X6100_KEY_DFL)
@@ -4076,6 +4207,19 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 		g_vol_fn_ms = now_ms();
 		return true;
 	case IN_MFK:
+		// A panel with rows, not editing: MFK selects the row (row_push starts the edit)
+		{
+			int n;
+			uint64_t *since;
+			int *sel = row_sel(rx, &n, &since);
+
+			if (sel != NULL && !row_editing(rx)) {
+				row_move(rx, sel, n, value * X6100_DIR_MFK > 0 ? 1 : -1);
+				*since = now_ms();
+				return true;
+			}
+		}
+
 		if (rx->kedit) {
 			const kpar_t *k = &g_kpar[rx->kedit_par];
 			int *p = kpar_value(rx, rx->kedit_par);
@@ -5431,6 +5575,14 @@ static void draw_filter_panel(x6100_lcd_t *lcd, const rx_t *rx)
 	x6100_lcd_fill(lcd, px + 350, py + 32, 190, 22, rx->fedit_par == 2 ? act : bg);
 	x6100_lcd_text(lcd, px + 356, py + 36, 2, s, rx->fedit_par == 2 ? white : pbt_active(rx) ? SCR_WARN : dim);
 
+	// The box being edited: the amber frame (MFK push: row_push)
+	if (row_editing(rx)) {
+		static const int bx[3] = { 10, 180, 350 }, bw[3] = { 160, 160, 190 };
+		int b = rx->fedit_par < 0 || rx->fedit_par > 2 ? 0 : rx->fedit_par;
+
+		row_mark(lcd, px + bx[b], py + 32, bw[b], 22);
+	}
+
 	//
 	// Passband (after PBT) on a 0 .. max axis with a trapezoid, edges and centre labelled
 	//
@@ -5465,9 +5617,9 @@ static void draw_filter_panel(x6100_lcd_t *lcd, const rx_t *rx)
 	//
 	snprintf(s, sizeof(s), "%u - %u Hz", elo, ehi);
 	x6100_lcd_text(lcd, px + 16, py + 66, 2, s, pbt_active(rx) ? SCR_WARN : white);
-	x6100_lcd_text(lcd, px + 16, py + 90, 1, g == FG_FM ? "MFK: BW"
-		: g == FG_AM ? "MFK: ADJUST    PUSH MFK: BW/PBT"
-		: "MFK: ADJUST    PUSH MFK: BW/SFT/PBT", dim);
+	x6100_lcd_text(lcd, px + 16, py + 90, 1, g == FG_FM ? (row_editing(rx) ? "MFK: BW    PUSH MFK: DONE" : "PUSH MFK: EDIT BW")
+		: g == FG_AM ? (row_editing(rx) ? "MFK: ADJUST    PUSH MFK: DONE" : "MFK: BW/PBT    PUSH MFK: EDIT")
+		: row_editing(rx) ? "MFK: ADJUST    PUSH MFK: DONE" : "MFK: BW/SFT/PBT    PUSH MFK: EDIT", dim);
 	x6100_lcd_text(lcd, px + 16, py + 102, 1, g == FG_FM ? "HOLD MFK: DEF" : "HOLD MFK: DEF / PBT CLR", dim);
 	x6100_lcd_text(lcd, px + 16, py + 114, 1, "F5: FIL1-3    HOLD F5: CLOSE", dim);
 }
@@ -6354,6 +6506,51 @@ static void gen_adjust(int row, int dir, bool def)
 	}
 }
 
+// MFK push on a GEN row of two values: the other one (row_toggle); false for a row with
+// more values (brightness, CAT speed, CAT clock, WiFi network, BT device): those edit
+static bool gen_toggle(int row)
+{
+	bool on;
+
+	switch (row) {
+	case GEN_LAYOUT:
+	case GEN_VFOFAST:
+	case GEN_CIVADDR:
+	case GEN_CATMEM:
+	case GEN_MODOFF:
+	case GEN_MODDATA:
+	case GEN_NTP:
+		gen_adjust(row, 1, false);	/* these flip whatever the direction */
+		return true;
+	case GEN_WFS:
+		on = wfs_installed() && access(WFS_OFF, F_OK) != 0;
+		break;
+	case GEN_WIFI:
+		on = g_sys.wifi_on;
+		break;
+	case GEN_BT:
+		on = g_sys.bt_on;
+		break;
+	case GEN_BTPAIR:
+		on = g_sys.bt_visible && now_ms() < g_sys.bt_visible_until;
+		break;
+	case GEN_BSCAN:
+		on = g_bscan_all;
+		break;
+	case GEN_BMARK:
+		on = g_bmarks;
+		break;
+	case GEN_BNOTCH:
+		on = g_bnotch;
+		break;
+	default:
+		return false;
+	}
+
+	gen_adjust(row, on ? -1 : 1, false);
+	return true;
+}
+
 static void gen_frame(x6100_lcd_t *lcd, int px, int py, int pw, int ph, const char *title, const char *hint)
 {
 	const uint32_t bg = 0x140F1E, violet = 0xB080FF, edge = 0x3A2C55, dim = 0x8A82A0;
@@ -6384,15 +6581,20 @@ static void draw_gen_panel(x6100_lcd_t *lcd, const rx_t *rx)
 	if (now_ms() - g_sys.at >= SYS_POLL_MS)
 		sys_refresh();
 
-	gen_frame(lcd, px, py, pw, ph, "SETTINGS", "MFK: ADJUST  PUSH: NEXT  HOLD: DEFAULT / CONNECT  GEN: CLOSE");
+	gen_frame(lcd, px, py, pw, ph, "SETTINGS", row_editing(rx)
+		? "MFK: ADJUST  PUSH: DONE  HOLD: DEFAULT / CONNECT  GEN: CLOSE" : "MFK: SELECT  PUSH: ON-OFF / EDIT  HOLD: DEFAULT / CONNECT");
 
 	for (int i = top; i < top + vis; i++) {
 		int y = py + 30 + (i - top) * 21;
 		bool locked = g_conf_set & (1u << i);
 		char v[40], h[64];
 
-		if (i == rx->gedit_par)
+		if (i == rx->gedit_par) {
 			x6100_lcd_fill(lcd, px + 6, y - 3, pw - 12, 19, sel);
+
+			if (row_editing(rx))
+				row_mark(lcd, px + 6, y - 3, pw - 12, 19);
+		}
 
 		x6100_lcd_text(lcd, px + 14, y, 2, g_gen_name[i], i == rx->gedit_par ? white : dim);
 
@@ -6500,7 +6702,8 @@ static void draw_key_panel(x6100_lcd_t *lcd, const rx_t *rx)
 	x6100_lcd_hline(lcd, px, px + pw - 1, py + ph - 1, 0x4A3220);
 	x6100_lcd_vline(lcd, px + pw - 1, py, py + ph - 1, 0x4A3220);
 	x6100_lcd_text(lcd, px + 14, py + 7, 2, "KEYER", orange);
-	x6100_lcd_text(lcd, px + 110, py + 11, 1, "MFK: ADJUST  PUSH: NEXT  HOLD: DEFAULT", dim);
+	x6100_lcd_text(lcd, px + 110, py + 11, 1, row_editing(rx) ? "MFK: ADJUST  PUSH: DONE  HOLD: DEFAULT"
+		: "MFK: SELECT  PUSH: ON-OFF / EDIT  HOLD: DEFAULT", dim);
 	snprintf(pos, sizeof(pos), "%d/%d", rx->kedit_par + 1, KPARS);
 	x6100_lcd_text(lcd, px + pw - 12 - x6100_lcd_text_width(pos, 1), py + 11, 1, pos, orange);
 
@@ -6508,8 +6711,12 @@ static void draw_key_panel(x6100_lcd_t *lcd, const rx_t *rx)
 		int y = py + 30 + (i - top) * 21;
 		char v[24];
 
-		if (i == rx->kedit_par)
+		if (i == rx->kedit_par) {
 			x6100_lcd_fill(lcd, px + 6, y - 3, pw - 12, 19, sel);
+
+			if (row_editing(rx))
+				row_mark(lcd, px + 6, y - 3, pw - 12, 19);
+		}
 
 		x6100_lcd_text(lcd, px + 14, y, 2, g_kpar[i].name, i == rx->kedit_par ? white : dim);
 		kpar_text(rx, i, v, sizeof(v));
@@ -6537,7 +6744,8 @@ static void draw_tx_panel(x6100_lcd_t *lcd, const rx_t *rx)
 	x6100_lcd_hline(lcd, px, px + pw - 1, py + ph - 1, 0x4A2020);
 	x6100_lcd_vline(lcd, px + pw - 1, py, py + ph - 1, 0x4A2020);
 	x6100_lcd_text(lcd, px + 14, py + 7, 2, "TX", red);
-	x6100_lcd_text(lcd, px + 110, py + 11, 1, "MFK: ADJUST  PUSH: NEXT  HOLD: DEFAULT", dim);
+	x6100_lcd_text(lcd, px + 110, py + 11, 1, row_editing(rx) ? "MFK: ADJUST  PUSH: DONE  HOLD: DEFAULT"
+		: "MFK: SELECT  PUSH: ON-OFF / EDIT  HOLD: DEFAULT", dim);
 	snprintf(pos, sizeof(pos), "%d/%d", rx->xedit_par + 1, XPARS);
 	x6100_lcd_text(lcd, px + pw - 12 - x6100_lcd_text_width(pos, 1), py + 11, 1, pos, red);
 
@@ -6546,8 +6754,12 @@ static void draw_tx_panel(x6100_lcd_t *lcd, const rx_t *rx)
 		uint32_t c = !xpar_onoff(i) ? white : *xpar_value((rx_t *) rx, i) ? on : off;
 		char v[24];
 
-		if (i == rx->xedit_par)
+		if (i == rx->xedit_par) {
 			x6100_lcd_fill(lcd, px + 6, y - 3, pw - 12, 19, sel);
+
+			if (row_editing(rx))
+				row_mark(lcd, px + 6, y - 3, pw - 12, 19);
+		}
 
 		x6100_lcd_text(lcd, px + 14, y, 2, g_xpar[i].name, i == rx->xedit_par ? white : dim);
 		xpar_text(rx, i, v, sizeof(v));
@@ -6575,7 +6787,8 @@ static void draw_scope_panel(x6100_lcd_t *lcd, const rx_t *rx)
 	x6100_lcd_hline(lcd, px, px + pw - 1, py + ph - 1, 0x203A5A);
 	x6100_lcd_vline(lcd, px + pw - 1, py, py + ph - 1, 0x203A5A);
 	x6100_lcd_text(lcd, px + 14, py + 7, 2, "SCOPE", blue);
-	x6100_lcd_text(lcd, px + 110, py + 11, 1, "MFK: ADJUST  PUSH: NEXT  HOLD: DEFAULT", dim);
+	x6100_lcd_text(lcd, px + 110, py + 11, 1, row_editing(rx) ? "MFK: ADJUST  PUSH: DONE  HOLD: DEFAULT"
+		: "MFK: SELECT  PUSH: ON-OFF / EDIT  HOLD: DEFAULT", dim);
 	snprintf(pos, sizeof(pos), "%d/%d", rx->sedit_par + 1, SPARS);
 	x6100_lcd_text(lcd, px + pw - 12 - x6100_lcd_text_width(pos, 1), py + 11, 1, pos, blue);
 
@@ -6585,8 +6798,12 @@ static void draw_scope_panel(x6100_lcd_t *lcd, const rx_t *rx)
 		char v[24];
 		int vw;
 
-		if (i == rx->sedit_par)
+		if (i == rx->sedit_par) {
 			x6100_lcd_fill(lcd, px + 6, y - 3, pw - 12, 19, sel);
+
+			if (row_editing(rx))
+				row_mark(lcd, px + 6, y - 3, pw - 12, 19);
+		}
 
 		x6100_lcd_text(lcd, px + 14, y, 2, g_spar[i].name, i == rx->sedit_par ? white : dim);
 		spar_token(rx, i, v, sizeof(v));
@@ -6735,7 +6952,7 @@ static void draw_mem_panel(x6100_lcd_t *lcd, const rx_t *rx)
 
 static void draw_rit_panel(x6100_lcd_t *lcd, const rx_t *rx)
 {
-	static const char *hint = "MFK: ADJUST  PUSH: NEXT  HOLD: CLEAR";
+	const char *hint = row_editing(rx) ? "MFK: ADJUST  PUSH: DONE  HOLD: CLEAR" : "MFK: SELECT  PUSH: ON-OFF / EDIT  HOLD: CLEAR";
 	static const char *dups[DUP_COUNT] = { "AUTO", "OFF", "DUP-", "DUP+" };
 	static const char *names[TPARS] = { "OFFSET", "RIT  RX", "XIT  TX", "DUPLEX", "SHIFT", "AM OFFSET", "AGC SLOW",
 		"AGC FAST", "AGC HANG" };
@@ -6783,8 +7000,12 @@ static void draw_rit_panel(x6100_lcd_t *lcd, const rx_t *rx)
 		int y = py + 30 + (i - top) * 21;
 		uint32_t c = i == 0 ? white : lit[i] ? on : off;
 
-		if (i == rx->tedit_par)
+		if (i == rx->tedit_par) {
 			x6100_lcd_fill(lcd, px + 6, y - 3, pw - 12, 19, sel);
+
+			if (row_editing(rx))
+				row_mark(lcd, px + 6, y - 3, pw - 12, 19);
+		}
 
 		x6100_lcd_text(lcd, px + 14, y, 2, names[i], i == rx->tedit_par ? white : dim);
 		x6100_lcd_text(lcd, px + pw - 12 - x6100_lcd_text_width(v[i], 2), y, 2, v[i], c);
@@ -6798,7 +7019,8 @@ static void draw_rit_panel(x6100_lcd_t *lcd, const rx_t *rx)
 
 static void draw_edge_panel(x6100_lcd_t *lcd, const rx_t *rx)
 {
-	static const char *hint = "MFK: 1 KHZ  PUSH: LOWER / UPPER  HOLD: DEFAULT  F2: NEXT EDGE";
+	const char *hint = row_editing(rx) ? "MFK: 1 KHZ  PUSH: DONE  HOLD: DEFAULT  F2: NEXT EDGE"
+		: "MFK: LOWER / UPPER  PUSH: EDIT  HOLD: DEFAULT  F2: NEXT EDGE";
 	const int px = LBL_W + 8, py = SPEC_Y + 16, pw = 560, ph = 96;
 	const uint32_t bg = 0x0C1622, blue = 0x40C0FF, sel = 0x1E4A7A, dim = 0x7A8494, white = 0xF0F0F0;
 	int r = edge_range(rx->freq), e = clampi(rx->edge, 1, 4) - 1;
@@ -6826,8 +7048,12 @@ static void draw_edge_panel(x6100_lcd_t *lcd, const rx_t *rx)
 	for (int i = 0; i < 2; i++) {
 		int y = py + 30 + i * 21;
 
-		if (i == rx->eedit_par)
+		if (i == rx->eedit_par) {
 			x6100_lcd_fill(lcd, px + 6, y - 3, pw - 12, 19, sel);
+
+			if (row_editing(rx))
+				row_mark(lcd, px + 6, y - 3, pw - 12, 19);
+		}
 
 		x6100_lcd_text(lcd, px + 14, y, 2, i == 0 ? "LOWER" : "UPPER", i == rx->eedit_par ? white : dim);
 		x6100_lcd_text(lcd, px + pw - 12 - x6100_lcd_text_width(v[i], 2), y, 2, v[i], white);
@@ -6852,7 +7078,8 @@ static void draw_dsp_panel(x6100_lcd_t *lcd, const rx_t *rx)
 	x6100_lcd_vline(lcd, px + pw - 1, py, py + ph - 1, 0x1E4A44);
 
 	x6100_lcd_text(lcd, px + 14, py + 7, 2, "DSP", teal);
-	x6100_lcd_text(lcd, px + 70, py + 11, 1, "MFK: ADJUST   PUSH: NEXT   HOLD: DEFAULT   DFN: NR / NB   DFL: NOTCH", dim);
+	x6100_lcd_text(lcd, px + 70, py + 11, 1, row_editing(rx) ? "MFK: ADJUST   PUSH: DONE   HOLD: DEFAULT   DFN: NR / NB   DFL: NOTCH"
+		: "MFK: SELECT   PUSH: EDIT   HOLD: DEFAULT   DFN: NR / NB   DFL: NOTCH", dim);
 
 	for (int i = 0; i < DSP_PARS; i++) {
 		const dsp_par_t *d = &g_dsp[i];
@@ -6860,8 +7087,12 @@ static void draw_dsp_panel(x6100_lcd_t *lcd, const rx_t *rx)
 		int y = py + 28 + i * 20;
 		int fill = (v - d->min) * sw / (d->max - d->min);
 
-		if (i == rx->dedit_par)
+		if (i == rx->dedit_par) {
 			x6100_lcd_fill(lcd, px + 6, y - 2, pw - 12, 19, sel);
+
+			if (row_editing(rx))
+				row_mark(lcd, px + 6, y - 2, pw - 12, 19);
+		}
 
 		// ON / OFF once per function (NR row, first NB row, first notch row)
 		if (i == 0 || i == 1 || i == 3)
