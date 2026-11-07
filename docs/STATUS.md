@@ -380,6 +380,10 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     the bar and the arc meter (amber closed, green open), CI-V 15 01 reports it.
     Verified 2026-11-07: NFM squelch and the markers. Still to check: SSB, wfview's
     squelch status.
+39. TX audio source on the arc meter (2026-11-07; the internal mic was silent: TX panel
+    MIC on HAND): while transmitting, top left of the dial MIC INT / AUTO / HAND (red),
+    USB, CW, MSG, TUNE, landscape and portrait. To check: PTT key with MIC AUTO and
+    HAND, a DATA mode with USB, CW, a message.
 
 ## Next steps (suggested order)
 

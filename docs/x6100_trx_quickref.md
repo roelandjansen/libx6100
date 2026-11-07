@@ -576,6 +576,11 @@ and delay are new, VOX stays off), so
 nothing changes until a value is set. Ranges and register layout as in X6100Control
 / OpenX6X00 (the R1CBU line).
 
+While transmitting, the top left of the arc meter shows where the TX audio comes from
+(2026-11-07): MIC INT, MIC AUTO, MIC HAND (red: the internal mic is not used then), USB
+(GEN DATA OFF MOD / DATA MOD on USB with the PTT key or CAT), CW, MSG (a message being
+sent), TUNE. The hand mic's own PTT always takes the mic row's choice.
+
 | Value | Range (default) | Register |
 |---|---|---|
 | MIC | INT, HAND, AUTO (AUTO) | 21 [1:0] |

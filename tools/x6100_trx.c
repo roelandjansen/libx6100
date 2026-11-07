@@ -1624,18 +1624,55 @@ static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 }
 
 //
-// Register 12 from the TX state: PTT, tuner enable, tune
+// PTT (key, CAT) with the mod input on USB: the codec playback is the TX audio. Codec TX
+// keys by itself (as for voice messages), so the PTT bit stays off then
 //
 
-static void apply_flags(x6100_ctl_t *ctl, const rx_t *rx)
+static bool tx_usb_in(const rx_t *rx)
 {
 	x6100_mode_t mode = tx_mode(rx);
 	bool data = mode == X6100_MODE_LSB_DIG || mode == X6100_MODE_USB_DIG;
 	bool cw = mode == X6100_MODE_CW || mode == X6100_MODE_CWR;
 
-	// PTT (key, CAT) with the mod input on USB: the codec playback is the TX audio. Codec TX
-	// keys by itself (as for voice messages), so the PTT bit stays off then
-	bool usb_in = rx->ptt && !rx->tuning && rx->send == SEND_NONE && !cw && g_modin[data];
+	return rx->ptt && !rx->tuning && rx->send == SEND_NONE && !cw && g_modin[data];
+}
+
+//
+// Where the TX audio comes from, shown on the arc meter while transmitting (2026-11-07):
+// MIC INT / HAND / AUTO (TX panel MIC), USB (DATA (OFF) MOD on USB), CW, MSG, TUNE. warn:
+// the hand mic is selected, so the internal mic is not used
+//
+
+static const char *tx_source(const rx_t *rx, bool *warn)
+{
+	static const char *mic[3] = { "MIC INT", "MIC HAND", "MIC AUTO" };
+	x6100_mode_t mode = tx_mode(rx);
+
+	*warn = false;
+
+	if (rx->tuning)
+		return "TUNE";
+
+	if (rx->send != SEND_NONE)
+		return rx->send == SEND_SCAN ? "TUNE" : "MSG";
+
+	if (mode == X6100_MODE_CW || mode == X6100_MODE_CWR)
+		return "CW";
+
+	if (tx_usb_in(rx))
+		return "USB";
+
+	*warn = rx->micsel == 1;
+	return mic[rx->micsel < 0 || rx->micsel > 2 ? 2 : rx->micsel];
+}
+
+//
+// Register 12 from the TX state: PTT, tuner enable, tune
+//
+
+static void apply_flags(x6100_ctl_t *ctl, const rx_t *rx)
+{
+	bool usb_in = tx_usb_in(rx);	/* the codec is the TX audio: no PTT bit */
 
 	x6100_ctl_set(ctl, X6100_REG_FLAGS, 0);
 	x6100_set_ptt(ctl, rx->ptt && !usb_in);
@@ -7782,6 +7819,11 @@ static void draw_portrait(screen_t *scr, const rx_t *rx)
 		snprintf(l2, sizeof(l2), rx->meter == 1 ? "%.1fW" : "SWR %.1f", rx->meter == 1 ? scr->pwr : scr->swr);
 		vu_update(scr, target, now_ms());
 		draw_vu(lcd, scr->needle, scr->vu_peak, scale, l1, l2, 0);
+
+		bool src_warn;	/* the TX audio source, as in landscape */
+		const char *src = tx_source(rx, &src_warn);
+
+		x6100_lcd_text(lcd, VU_X + 8, VU_Y + 6, 2, src, src_warn ? SCR_WARN : SCR_ACCENT);
 	} else {
 		char l1[16], l2[16];
 
@@ -8143,6 +8185,12 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 			rx->meter == 2 ? scr->vu_peak / 0.34 : scr->vu_peak, true, scr->swr, rx->meter, 0);
 		draw_vu(lcd, scr->needle, marker, scale, l1, l2, 0);
 		x6100_lcd_text(lcd, VU_X + 8, VU_Y + VU_H - 20, 2, meter_names[rx->meter], SCR_ACCENT);
+
+		// Where the TX audio comes from, top left of the dial (MIC HAND in red)
+		bool src_warn;
+		const char *src = tx_source(rx, &src_warn);
+
+		x6100_lcd_text(lcd, VU_X + 8, VU_Y + 6, 2, src, src_warn ? SCR_WARN : SCR_ACCENT);
 	} else {
 		char l1[16], l2[16];
 
