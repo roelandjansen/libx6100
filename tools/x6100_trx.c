@@ -5880,6 +5880,78 @@ static void lan_poll(uint64_t t)
 }
 
 //
+// WiFi indicator (2026-11-07): three arcs, filled by the signal of wlan0. Read every 5 s
+// from the kernel, no program started: /proc/net/wireless (the level in dBm) and
+// /sys/class/net/wlan0/operstate. g_wifi_bars: -1 not connected (no symbol), 0-3 arcs
+// lit (-80 / -70 / -60 dBm), 4 connected with the level unknown (all arcs, dim)
+//
+
+static int g_wifi_bars = -1;
+
+static void wifi_poll(uint64_t t)
+{
+	static uint64_t last;
+	char line[256], state[16] = "";
+	FILE *fp;
+	int dbm = 0;
+
+	if (last != 0 && t - last < 5000)
+		return;
+
+	last = t;
+
+	if ((fp = fopen("/sys/class/net/wlan0/operstate", "r")) != NULL) {
+		if (fgets(state, sizeof(state), fp) == NULL)
+			state[0] = '\0';
+
+		fclose(fp);
+	}
+
+	if (strncmp(state, "up", 2) != 0) {
+		g_wifi_bars = -1;
+		return;
+	}
+
+	if ((fp = fopen("/proc/net/wireless", "r")) != NULL) {
+		while (fgets(line, sizeof(line), fp) != NULL) {
+			char *p = strstr(line, "wlan0:");
+			float link, level;
+
+			if (p != NULL && sscanf(p + 6, "%*x %f %f", &link, &level) == 2)
+				dbm = (int) level;
+		}
+
+		fclose(fp);
+	}
+
+	g_wifi_bars = dbm >= 0 ? 4 : dbm >= -60 ? 3 : dbm >= -70 ? 2 : dbm >= -80 ? 1 : 0;
+}
+
+// The symbol, its dot at (x, y): three arcs above it, 9, 15 and 21 px
+static void draw_wifi(x6100_lcd_t *lcd, int x, int y, int bars)
+{
+	if (bars < 0)
+		return;
+
+	x6100_lcd_fill(lcd, x - 1, y - 2, 3, 3, bars == 0 ? SCR_WARN : 0x3CC83C);
+
+	for (int r = 0; r < 3; r++) {
+		int rad = 7 + r * 6;
+		uint32_t c = bars == 4 ? SCR_DIM : r < bars ? 0x3CC83C : 0x303840;
+		int px = x - (int) lround(rad * 0.7071), py = y - (int) lround(rad * 0.7071);
+
+		for (int a = -36; a <= 45; a += 9) {	/* -45 .. +45 degrees from straight up */
+			double ra = a * M_PI / 180.0;
+			int qx = x + (int) lround(rad * sin(ra)), qy = y - (int) lround(rad * cos(ra));
+
+			x6100_lcd_line(lcd, px, py, qx, qy, 2, c);
+			px = qx;
+			py = qy;
+		}
+	}
+}
+
+//
 // What a network client needs (2026-11-06): the radio's IPv4 addresses and the wfserver
 // UDP ports (wfview: control, CI-V, audio; from wfserver.ini, the defaults 50001-50003),
 // said at the start next to the CAT lines and again when an address changes (WiFi up
@@ -7170,6 +7242,16 @@ static void draw_portrait(screen_t *scr, const rx_t *rx)
 
 		snprintf(s, sizeof(s), "%.1fV %d%%", scr->vbat, scr->batcap);
 		x6100_lcd_text(lcd, W - 12 - x6100_lcd_text_width(s, 2), 10, 2, s, c);
+
+		// WiFi left of the battery, BT left of that while Bluetooth is on (2026-11-07)
+		{
+			int wx = W - 12 - x6100_lcd_text_width(s, 2) - 22;
+
+			draw_wifi(lcd, wx, 25, g_wifi_bars);
+
+			if (g_bt_power == 1)
+				x6100_lcd_text(lcd, wx - 22 - x6100_lcd_text_width("BT", 2), 10, 2, "BT", on ? 0xFFFFFF : SCR_ACCENT);
+		}
 	}
 
 	//
@@ -7458,6 +7540,7 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 
 		snprintf(s, sizeof(s), "%4.1fV", scr->vbat);
 		x6100_lcd_text(lcd, INFO_COL_VBAT, INFO_Y, 2, s, c);
+		draw_wifi(lcd, INFO_COL_VBAT + 74, INFO_Y + 13, g_wifi_bars);	/* WiFi right of the battery */
 	}
 	snprintf(s, sizeof(s), "FIL%d", rx->fil + 1);
 	x6100_lcd_text(lcd, INFO_COL_FIL, INFO_Y, 2, s, SCR_DIM);
@@ -11538,6 +11621,7 @@ int main(int argc, char **argv)
 		}
 
 		lan_poll(t);	/* the LAN indicator */
+		wifi_poll(t);	/* the WiFi symbol */
 
 		{
 			static uint64_t net_ms;

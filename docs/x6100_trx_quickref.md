@@ -223,6 +223,7 @@ Values are kept in the last state (see Settings); defaults NR 20, NB 10 / 10, no
 - Tune panel (ATU long press / CAT): amber TUNING with live PO and SWR bars (SWR green / yellow / red), then green TUNED for 4 s with the time taken and the network (L, C, S in decimal, relay bits and hex)
 - Clock under the filter label: system time, UTC, ISO 8601 (`2026-10-24T10:08:27Z`); hidden behind the filter panel while that is open. At start x6100_trx runs one NTP sync with the image's busybox `ntpd -q` (server: `ntp` in the conf, else /etc/ntp.conf, else pool.ntp.org) and reports the result on the console (a failure as a warning); skipped when the image syncs itself (init.d S48sntp / S49ntp, as on IU1WXY), when a time daemon runs, or with `ntp off`. The clock is grey once the time is known (NTP synced, synced by the OS, or set by hand) and amber while not (NTP failed, off or still running, or a time before 2026: a clock never set, e.g. no network in the field). Set it by hand on the console: `time 2026-10-31T10:15:00Z` (UTC; the Z may be left out) or `time 10:15[:00]` for today; not from the settings or state file. From CAT (wfview Set Clock or "set radio time on connect": 1A 05 0170 UTC offset, 0166 time, 0165 date): only while NTP does not keep the clock (`cattime`, GEN row CAT CLOCK); the status page then says "set by CAT"
 - Under the clock, right aligned (2026-11-03): **LAN** (green) while a wfview client is connected through wfserver, as the LAN icon on an Icom (wfserver pings each client every 100 ms: some 30 UDP datagrams a second while one is there; off 3 s after it goes), and **CAT** while CI-V frames come in (the last 3 s) on the DEV port, or on the pty while wfserver is not running: wfserver polls the radio over the pty with no client too (2026-11-03), so a client through it shows as LAN instead
+- WiFi symbol right of the battery (portrait: left of it; 2026-11-07): three arcs lit by the signal of wlan0 (3 from -60 dBm, 2 from -70, 1 from -80, none: the dot amber), all dim when connected with the level unknown, no symbol when not connected (WiFi off). Read every 5 s from the kernel (`/proc/net/wireless`, `/sys/class/net/wlan0/operstate`), no program started
 
 
 ## Portrait (handheld)
@@ -236,7 +237,8 @@ verified). Top to bottom (on the radio, MW AM, locked; and the mock-up in RX and
 
 ![portrait mock-up](images/x6100_trx_portrait_mock.png)
 
-- status line: RX (green), band, VFO, battery V and %; the whole line red with TX (or
+- status line: RX (green), band, VFO, BT (while Bluetooth is on), the WiFi symbol, battery
+  V and %; the whole line red with TX (or
   TUNE) while transmitting
 - the arc meter: S in RX, the F4 meter (PO / SWR / ALC) in TX
 - the frequency, MHz.kHz.10 Hz, large (to the Hz with the 1 Hz step, FST long)
