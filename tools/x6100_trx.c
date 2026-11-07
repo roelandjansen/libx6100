@@ -2485,7 +2485,7 @@ static void edge_adjust(rx_t *rx, int steps)
 
 enum { SP_MODE, SP_CTYPE, SP_REF, SP_VBW, SP_AVG, SP_WAVE, SP_HOLD, SP_FILL_R, SP_FILL_G, SP_FILL_B,
 	SP_LINE_R, SP_LINE_G, SP_LINE_B, SP_HOLD_R, SP_HOLD_G, SP_HOLD_B, SP_WF, SP_WF_SPEED, SP_WF_SIZE,
-	SP_WF_LEVEL, SP_WF_3D, SP_TXSCOPE, SP_AF_REF, SP_AF_WAVE, SP_AF_AVG, SP_AF_HOLD, SP_AF_FILL_R, SP_AF_FILL_G,
+	SP_WF_LEVEL, SP_WF_3D, SP_MARKERS, SP_TXSCOPE, SP_AF_REF, SP_AF_WAVE, SP_AF_AVG, SP_AF_HOLD, SP_AF_FILL_R, SP_AF_FILL_G,
 	SP_AF_FILL_B, SP_AF_LINE_R, SP_AF_LINE_G, SP_AF_LINE_B, SP_AF_HOLD_R, SP_AF_HOLD_G, SP_AF_HOLD_B, SPARS };
 
 enum { WAVE_FILL, WAVE_LINE, WAVE_FILL_LINE };
@@ -2513,6 +2513,7 @@ static const kpar_t g_spar[SPARS] = {
 	[SP_WF_SIZE] = { "WATERFALL SIZE", "wfsize", 0, 2, 1, 1 },
 	[SP_WF_LEVEL] = { "WF PEAK LEVEL", "wflevel", 30, 80, 10, 50 },
 	[SP_WF_3D] = { "WATERFALL 3D", "wf3d", 0, 1, 1, 0 },
+	[SP_MARKERS] = { "MARKERS", "markers", 0, 3, 1, 3 },	/* M, M S, M T, M S T (IC-7851 MARKER) */
 	[SP_TXSCOPE] = { "SCOPE DURING TX", "txscope", 0, 1, 1, 1 },
 	[SP_AF_REF] = { "AF REF LEVEL", "", -30, 30, 1, 0 },	/* rx->aref: aref on the scope line */
 	[SP_AF_WAVE] = { "AF WAVEFORM TYPE", "afwave", 0, 2, 1, WAVE_FILL_LINE },
@@ -2551,6 +2552,7 @@ static const char *const g_sp_words[SPARS][4] = {
 	[SP_WF_SPEED] = { "slow", "mid", "fast" },
 	[SP_WF_SIZE] = { "small", "mid", "large" },
 	[SP_WF_3D] = { "off", "on" },
+	[SP_MARKERS] = { "m", "ms", "mt", "mst" },
 	[SP_TXSCOPE] = { "off", "on" },
 	[SP_AF_WAVE] = { "fill", "line", "fill+line" },
 	[SP_AF_HOLD] = { "off", "decay", "10s", "on" },
@@ -7872,27 +7874,49 @@ static void draw_oob(x6100_lcd_t *lcd, const rx_t *rx)
 }
 
 //
-// Scope markers as on the IC-7851 (2026-11-07): M (red) the VFO in use (RIT included), S
-// (green) the other VFO, T (yellow) the TX frequency. Each a dashed line (solid colour;
-// half-transparent was too faint on the radio) with a
-// lettered tag under the frequency labels; lines on the same column dashed in their
-// colours (M and T together: red / yellow, the usual case; the tag then T only, as the
-// IC-7851), a single line dashed with gaps. A marker outside the view: an
-// arrow at that edge in its colour (the IC-7851's << for the sub VFO). Columns 0 .. sw - 1.
+// Scope markers as on the IC-7851 (2026-11-07): M (red) VFO A, S (green) VFO B (RIT on the
+// one in use), T (yellow) the TX frequency (with split on the other VFO); which show:
+// scope panel MARKERS (M, M S, M T, M S T, as the IC-7851 MARKER key). Each a dashed line
+// in solid colour (half-transparent was too faint on the radio) with a lettered tag under
+// the frequency labels; lines on one column alternate their colours (M and T together:
+// red / yellow, the tag then T only, as the IC-7851), a single line has gaps. A marker
+// outside the view: an arrow at that edge in its colour (the IC-7851's << for the sub
+// VFO). S and T also go through the flat waterfall (draw_screen). Columns 0 .. sw - 1.
 //
 
 #define MARK_M		0xE03030
 #define MARK_S		0x3CC83C
 #define MARK_T		0xF0D020
 
+// The marker frequencies: M = VFO A, S = VFO B, whichever is in use (RIT on the one in
+// use), T = the TX frequency (with split on the other VFO)
+static void marker_hz(const rx_t *rx, int64_t hz[3])
+{
+	int64_t use = (int64_t) rx->freq + (rx->rit ? rx->rit_hz : 0);
+
+	hz[0] = rx->on_b ? (int64_t) rx->b_freq : use;
+	hz[1] = rx->on_b ? use : (int64_t) rx->b_freq;
+	hz[2] = tx_hz(rx);
+}
+
+// Shown (scope panel MARKERS: M, M S, M T, M S T): M always
+static bool marker_shown(int i)
+{
+	int m = g_sp[SP_MARKERS];
+
+	return i == 0 || (i == 1 && (m == 1 || m == 3)) || (i == 2 && (m == 2 || m == 3));
+}
+
 static void draw_markers(x6100_lcd_t *lcd, const rx_t *rx, const view_t *v, int sw)
 {
 	const uint32_t col[3] = { MARK_M, MARK_S, MARK_T };
 	const char *const name[3] = { "M", "S", "T" };
 	static const int prio[3] = { 2, 0, 1 };	/* the tag a shared column shows: T, then M, then S */
-	const int64_t hz[3] = { (int64_t) rx->freq + (rx->rit ? rx->rit_hz : 0), rx->b_freq, tx_hz(rx) };
+	int64_t hz[3];
 	const int tag_w = 16, tag_h = 17, row_y = SPEC_Y + 20;
 	int x[3], tag_x[3], ntag = 0;
+
+	marker_hz(rx, hz);
 
 	for (int i = 0; i < 3; i++)
 		x[i] = f_to_x(v, hz[i]);
@@ -7907,13 +7931,13 @@ static void draw_markers(x6100_lcd_t *lcd, const rx_t *rx, const view_t *v, int 
 		uint32_t on[3];
 		bool lead = true;
 
-		if (x[i] < LBL_W || x[i] >= sw)
+		if (!marker_shown(i) || x[i] < LBL_W || x[i] >= sw)
 			continue;
 
 		for (int q = 0; q < 3; q++) {
 			int k = prio[q];
 
-			if (abs(x[k] - x[i]) > 1)
+			if (!marker_shown(k) || abs(x[k] - x[i]) > 1)
 				continue;
 
 			lead = lead && q >= p;	/* the group is drawn by its first in tag order */
@@ -7946,7 +7970,7 @@ static void draw_markers(x6100_lcd_t *lcd, const rx_t *rx, const view_t *v, int 
 	// Out of view: an arrow at that edge in the marker's colour, one slot down per marker
 	//
 	for (int i = 0; i < 3; i++) {
-		if (x[i] >= LBL_W && x[i] < sw)
+		if (!marker_shown(i) || (x[i] >= LBL_W && x[i] < sw))
 			continue;
 
 		const char *a = x[i] < LBL_W ? "<<" : ">>";
@@ -8281,43 +8305,52 @@ static void draw_portrait(screen_t *scr, const rx_t *rx)
 // flat waterfall, as the cursor on the scope; gone TUNE_LINE_MS after the last change of
 // the frequency. The waterfall lives in the frame buffer and scrolls in place, so the
 // line is drawn last and the pixels under it are put back first thing in the next frame.
+// The same for the S and T lines through the waterfall (as the IC-7851): up to WF_LINES.
 //
 
 #define TUNE_LINE_MS	10000
+#define WF_LINES	4
 
 static struct
 {
-	int x, y0, h, w;	/* where it was drawn (x -1: not drawn), the canvas width then */
+	int x, y0, h, w;	/* where it was drawn, the canvas width then */
 	uint32_t px[800];	/* the waterfall pixels under it */
-} g_tl = { .x = -1 };
+} g_wfl[WF_LINES];
 
-static uint64_t g_tl_until;	/* shown until (ms) */
+static int g_nwfl;		/* lines drawn last frame */
+static uint64_t g_tl_until;	/* tune line shown until (ms) */
 static uint32_t g_tl_freq;	/* frequency seen last; 0 at start: the first is not a tune */
 
-static void tune_line_restore(x6100_lcd_t *lcd)
+// Put back what the lines covered, the last drawn first (one column may hold two)
+static void wf_lines_restore(x6100_lcd_t *lcd)
 {
-	if (g_tl.x >= 0 && lcd->w == g_tl.w)
-		for (int y = 0; y < g_tl.h; y++)
-			lcd->pix[(size_t) (g_tl.y0 + y) * (size_t) lcd->w + (size_t) g_tl.x] = g_tl.px[y];
+	for (int i = g_nwfl - 1; i >= 0; i--)
+		if (lcd->w == g_wfl[i].w)
+			for (int y = 0; y < g_wfl[i].h; y++)
+				lcd->pix[(size_t) (g_wfl[i].y0 + y) * (size_t) lcd->w + (size_t) g_wfl[i].x] = g_wfl[i].px[y];
 
-	g_tl.x = -1;
+	g_nwfl = 0;
 }
 
-static void tune_line_draw(x6100_lcd_t *lcd, int x, int y0, int h)
+// A line at column x over rows y0 .. y0 + h - 1; dash: 6 px on, 3 off (S, T), else solid
+static void wf_line_draw(x6100_lcd_t *lcd, int x, int y0, int h, uint32_t rgb, bool dash)
 {
 	h = h > 800 ? 800 : h;
 
-	if (x < 0 || x >= lcd->w || h <= 0)
+	if (x < 0 || x >= lcd->w || h <= 0 || g_nwfl >= WF_LINES)
 		return;
 
 	for (int y = 0; y < h; y++)
-		g_tl.px[y] = lcd->pix[(size_t) (y0 + y) * (size_t) lcd->w + (size_t) x];
+		g_wfl[g_nwfl].px[y] = lcd->pix[(size_t) (y0 + y) * (size_t) lcd->w + (size_t) x];
 
-	g_tl.x = x;
-	g_tl.y0 = y0;
-	g_tl.h = h;
-	g_tl.w = lcd->w;
-	x6100_lcd_vline(lcd, x, y0, y0 + h - 1, SCR_WARN);
+	g_wfl[g_nwfl].x = x;
+	g_wfl[g_nwfl].y0 = y0;
+	g_wfl[g_nwfl].h = h;
+	g_wfl[g_nwfl].w = lcd->w;
+	g_nwfl++;
+
+	for (int y = y0; y < y0 + h; y += dash ? 9 : h)
+		x6100_lcd_vline(lcd, x, y, dash ? (y + 5 < y0 + h ? y + 5 : y0 + h - 1) : y0 + h - 1, rgb);
 }
 
 static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
@@ -8327,7 +8360,7 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 	char s[64];
 	const bool portrait = lcd->h > lcd->w;
 
-	tune_line_restore(lcd);	/* the waterfall under last frame's tune line, before anything moves it */
+	wf_lines_restore(lcd);	/* the waterfall under last frame's lines, before anything moves it */
 
 	// A changed frequency shows the tune line for TUNE_LINE_MS (flat and 3D waterfall)
 	if (rx->freq != g_tl_freq) {
@@ -9209,12 +9242,28 @@ overlays:
 			draw_audio_wf_line(scr, rx, SW, W - SW);
 	}
 
-	// Tune line in the flat waterfall, not under a panel (3D: drawn by wf3d_draw)
-	if (view != 1 && g_sp[SP_WF] && !wf3d && !panel_open(rx) && now_ms() < g_tl_until) {
-		int cx = f_to_x(&v, tx_apart(rx) ? rx_hz(rx) : rx->freq);
+	// Lines through the flat waterfall, not under a panel (3D: the floor cursor and its
+	// tune line): the tune line while tuning, S and T dashed in their colours when the
+	// markers show them (the IC-7851 draws S and T through its waterfall, not M)
+	if (view != 1 && g_sp[SP_WF] && !wf3d && !panel_open(rx)) {
+		static const uint32_t col[3] = { MARK_M, MARK_S, MARK_T };
+		int64_t hz[3];
 
-		if (cx >= 0 && cx < SW)
-			tune_line_draw(lcd, cx, WF_Y, WF_H(lcd));
+		if (now_ms() < g_tl_until) {
+			int cx = f_to_x(&v, tx_apart(rx) ? rx_hz(rx) : rx->freq);
+
+			if (cx >= 0 && cx < SW)
+				wf_line_draw(lcd, cx, WF_Y, WF_H(lcd), SCR_WARN, false);
+		}
+
+		marker_hz(rx, hz);
+
+		for (int i = 1; i < 3; i++) {
+			int mx = f_to_x(&v, hz[i]);
+
+			if (marker_shown(i) && mx >= LBL_W && mx < SW)
+				wf_line_draw(lcd, mx, WF_Y, WF_H(lcd), col[i], true);
+		}
 	}
 }
 

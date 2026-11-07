@@ -434,6 +434,11 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     as seen as a PNG to /tmp/x6100_shot_<UTC>.png (uncompressed, no zlib; tested on the
     PC: identical to the canvas, landscape and portrait). LOCK short now acts on release.
     To check: LOCK long, locked and not; shot by pipe; the PNG on the PC; LOCK still locks.
+45. Markers as the IC-7851 MARKER key (2026-11-07, from photos of it): scope panel row
+    MARKERS M / M S / M T / M S T (default M S T), `markers m|ms|mt|mst`; M = VFO A, S =
+    VFO B (before: the VFO in use and the other), T = TX; S and T run dashed through the
+    flat waterfall (no trace left, tested on the PC). No legend chips (the scope top is
+    full). To check: each MARKERS value, A/B swap (M stays on A), split.
 
 ## Next steps (suggested order)
 
