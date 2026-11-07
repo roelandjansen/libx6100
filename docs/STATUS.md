@@ -1,6 +1,9 @@
 # libx6100 / x6100_trx — status
 
-Snapshot: 2026-11-07. Last tag: v0.17.10 (2026-11-07; x6100_trx goes on when the ssh
+Snapshot: 2026-11-07. Last tag: v0.17.11 (2026-11-07; OpenX6X00 (ON6URE) as the base
+image instead of IU1WXY (README: why); x6100_trx at boot via S96x6100_trx and
+`x6100_ui.sh boot trx|gui`, quit brings the GUI back, power off does not), on v0.17.10
+(2026-11-07; x6100_trx goes on when the ssh
 session closes (SIGHUP); the birdie list 1024 entries (256 filled up on 6 m), the scan
 threshold 16 dB, `birdiescan [all] [quiet]` (WiFi and Bluetooth off meanwhile); the WiFi
 symbol (verified); the birdie comb of 7.58 kHz shown to be the radio's own (display,
