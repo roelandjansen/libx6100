@@ -50,7 +50,7 @@ Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
 
 | Control | Short | Long |
 |---|---|---|
-| VFO knob | tune; past the top of the tuning range (`freqmax`) it goes round to `freqmin`, and the other way | |
+| VFO knob | tune; turned fast, steps up to 1 kHz grow x2, x5, x10 by the dial speed, back to the set step as it slows or turns back (GEN row VFO SPEED, `vfofast on\|off`); past the top of the tuning range (`freqmax`) it goes round to `freqmin`, and the other way | |
 | FST | step 10 / 100 / 1000 / 5000 Hz / 10 kHz / 100 kHz; on LW / MW (any mode): 100 / 1k / 5k / 9k / 10k (channel raster) / 100k; 60 m: 10 / 100 / 1k / 5k / CH / 10k / 100k (MFK picks the 60 m channel, the VFO knob fine-tunes in 100 Hz) | 1 Hz step on / off |
 | VOL knob | volume (VOL long: squelch or RF gain, see right); push = mute (also while locked) | VOL / SQL / RFG for the knob, as printed on the radio; back to VOL 10 s after the last turn; locked: VOL / SQL only; the VOL column (portrait: the footer) shows which, in accent |
 | MFK knob | RF gain or TX power | |
@@ -132,6 +132,7 @@ trace, AF colours).
 | WATERFALL SPEED | SLOW, MID, FAST (FAST): a line every 4th / 2nd / frame | `wfspeed slow\|mid\|fast` |
 | WATERFALL SIZE | SMALL, MID, LARGE (MID): the scope above takes or gives the rows | `wfsize small\|mid\|large` |
 | WF PEAK LEVEL | 30-80 dB in steps of 10 (50): the range from the noise to the top colour | `wflevel 50` |
+| WATERFALL 3D | OFF, ON (OFF): the last 32 waterfall lines as spectra in perspective, the newest in front, the VFO a red tick on the front edge; the waterfall speed sets how fast they move back (as the 3D view in the OpenX6X00 GUI) | `wf3d on\|off` |
 | SCOPE DURING TX | ON, OFF (ON): off keeps the last RX picture while transmitting | `txscope on\|off`; CI-V 27 1B |
 | AF REF LEVEL | -30 to +30 dB (0): the audio scope reference level | `aref` |
 | AF WAVEFORM TYPE, AF AVERAGING, AF MAX HOLD | as the RF rows, for the audio scope (F3) | `afwave`, `afavg`, `afhold` |
@@ -278,6 +279,7 @@ kill or a power loss keeps them; a row set in `x6100_trx.conf` cannot be changed
 |---|---|---|
 | BRIGHTNESS | 5-100 % in steps of 5 (default 100) | at once |
 | LAYOUT | LANDSCAPE (default) / PORTRAIT: the radio upright, its left side up, as a handheld (see Portrait); `layout` in the conf fixes it | when the panel closes |
+| VFO SPEED | ON (default) / OFF: turned fast, the VFO knob multiplies steps up to 1 kHz by 2, 5 or 10 (from 12, 25, 45 detents per second); `vfofast` in the conf fixes it | at once |
 | CAT (CI-V) | the DEV port: OFF, 4800, 9600, 19200 (default 19200: the most it carries). The pty /tmp/x6100-civ (wfserver, rigctld, socat) is served at the same time, at any speed (`catpty off` in the conf turns it off); each has its own scope and transceive settings | next start |
 | CI-V ADDRESS | IC-705 A4 (default) / X6100 61 (wfview with `contrib/wfview/X6100.rig`); `civaddr` in the conf fixes it | at once |
 | CAT MEMORIES | READ ONLY (default) / READ / WRITE: may a CAT client (wfview, rigctl) write and clear memory channels (09, 0B, 1A 00 with content)? Read only: those answer NG, reading and using channels (08, 0A, 1A 00) still works; `catmem` in the conf fixes it | at once |
@@ -385,6 +387,7 @@ The status line starts with the VFO in use (A / B); with split, RIT or XIT it ad
 | `civaddr a4`, `civaddr 61` | CI-V address: a4 IC-705 (default), 61 X6100 with `contrib/wfview/X6100.rig`; also the GEN row CI-V ADDRESS (state); in the settings file it fixes that row |
 | `catmem ro`, `catmem rw` | CAT and memory channels: ro (default) lets clients read and use them only, write / clear (09, 0B, 1A 00 with content) answer NG; rw as an Icom; also the GEN row CAT MEMORIES (state); in the settings file it fixes that row |
 | `cattime off`, `cattime unsynced`, `cattime on` | CAT and the clock (1A 05 0165 / 0166 / 0170): unsynced (default) only while NTP does not keep it, off never, on always; also the GEN row CAT CLOCK (state); in the settings file it fixes that row |
+| `vfofast on`, `vfofast off` | faster tuning when the VFO knob turns fast (default on): steps up to 1 kHz x2, x5, x10 by the dial speed; also the GEN row VFO SPEED (state); in the settings file it fixes that row |
 | `modin mic usb` | TX audio input DATA OFF MOD, DATA MOD: mic or usb (the codec, a Linux program such as wfserver); also the GEN rows (state); in the settings file it fixes them |
 | `ntp <server>`, `ntp on`, `ntp off` | NTP sync at start (settings file) |
 | `bt on`, `bt off` | Bluetooth as last set on the GEN row BLUETOOTH, applied at start (state; without it the image's choice stays) |

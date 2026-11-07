@@ -122,6 +122,20 @@ static int g_autolock_s = 20;	/* conf autolock <s>, 0 off: portrait only, the VF
 static uint64_t g_last_turn_ms;	/* last knob turn or key: the auto lock counts from it */
 static bool g_lock_auto;		/* the lock in force is the auto lock: released when leaving portrait */
 
+// Faster tuning when the VFO knob turns fast (2026-11-07; as Icom's auto tuning step):
+// the dial speed (detents within the last 250 ms) picks a multiplier of the step for
+// steps up to 1 kHz. A pause or a turn back starts at x1 again. GEN row VFO SPEED,
+// conf / console / state vfofast off|on (default on)
+static bool g_vfo_fast = true;
+static uint64_t g_vfo_t[64];	/* times of the last VFO detents (ring), for the dial speed */
+static unsigned g_vfo_n;	/* detents put in the ring */
+static int g_vfo_dir;		/* direction of the last VFO detent */
+#define VFO_FAST_WIN_MS	250	/* the speed: detents within this window */
+#define VFO_FAST_X2	12	/* detents per second for x2, x5, x10 */
+#define VFO_FAST_X5	25
+#define VFO_FAST_X10	45
+#define VFO_FAST_STEP	1000	/* larger steps are never multiplied */
+
 // VOL knob function (VOL long, as the VOL / SQL / RFG print on the radio): 0 volume,
 // 1 squelch, 2 RF gain; back to the volume VOL_FN_MS after the last turn (2026-11-05)
 #define VOL_FN_MS	10000
@@ -720,7 +734,7 @@ static bool cat_time_set(bool date, int32_t v)
 	return true;
 }
 
-enum { GEN_BRIGHT, GEN_LAYOUT, GEN_CAT, GEN_CIVADDR, GEN_CATMEM, GEN_CATTIME, GEN_MODOFF, GEN_MODDATA, GEN_WFS, GEN_NTP, GEN_WIFI, GEN_WNET, GEN_BT, GEN_BTPAIR,
+enum { GEN_BRIGHT, GEN_LAYOUT, GEN_VFOFAST, GEN_CAT, GEN_CIVADDR, GEN_CATMEM, GEN_CATTIME, GEN_MODOFF, GEN_MODDATA, GEN_WFS, GEN_NTP, GEN_WIFI, GEN_WNET, GEN_BT, GEN_BTPAIR,
 	GEN_BTDEV, GEN_BSCAN, GEN_BMARK, GEN_BNOTCH, GEN_ROWS };	/* GEN rows */
 
 static void gen_adjust(int row, int dir, bool def);
@@ -2413,7 +2427,7 @@ static void edge_adjust(rx_t *rx, int steps)
 
 enum { SP_MODE, SP_CTYPE, SP_REF, SP_VBW, SP_AVG, SP_WAVE, SP_HOLD, SP_FILL_R, SP_FILL_G, SP_FILL_B,
 	SP_LINE_R, SP_LINE_G, SP_LINE_B, SP_HOLD_R, SP_HOLD_G, SP_HOLD_B, SP_WF, SP_WF_SPEED, SP_WF_SIZE,
-	SP_WF_LEVEL, SP_TXSCOPE, SP_AF_REF, SP_AF_WAVE, SP_AF_AVG, SP_AF_HOLD, SP_AF_FILL_R, SP_AF_FILL_G,
+	SP_WF_LEVEL, SP_WF_3D, SP_TXSCOPE, SP_AF_REF, SP_AF_WAVE, SP_AF_AVG, SP_AF_HOLD, SP_AF_FILL_R, SP_AF_FILL_G,
 	SP_AF_FILL_B, SP_AF_LINE_R, SP_AF_LINE_G, SP_AF_LINE_B, SP_AF_HOLD_R, SP_AF_HOLD_G, SP_AF_HOLD_B, SPARS };
 
 enum { WAVE_FILL, WAVE_LINE, WAVE_FILL_LINE };
@@ -2440,6 +2454,7 @@ static const kpar_t g_spar[SPARS] = {
 	[SP_WF_SPEED] = { "WATERFALL SPEED", "wfspeed", 0, 2, 1, 2 },
 	[SP_WF_SIZE] = { "WATERFALL SIZE", "wfsize", 0, 2, 1, 1 },
 	[SP_WF_LEVEL] = { "WF PEAK LEVEL", "wflevel", 30, 80, 10, 50 },
+	[SP_WF_3D] = { "WATERFALL 3D", "wf3d", 0, 1, 1, 0 },
 	[SP_TXSCOPE] = { "SCOPE DURING TX", "txscope", 0, 1, 1, 1 },
 	[SP_AF_REF] = { "AF REF LEVEL", "", -30, 30, 1, 0 },	/* rx->aref: aref on the scope line */
 	[SP_AF_WAVE] = { "AF WAVEFORM TYPE", "afwave", 0, 2, 1, WAVE_FILL_LINE },
@@ -2477,6 +2492,7 @@ static const char *const g_sp_words[SPARS][4] = {
 	[SP_WF] = { "off", "on" },
 	[SP_WF_SPEED] = { "slow", "mid", "fast" },
 	[SP_WF_SIZE] = { "small", "mid", "large" },
+	[SP_WF_3D] = { "off", "on" },
 	[SP_TXSCOPE] = { "off", "on" },
 	[SP_AF_WAVE] = { "fill", "line", "fill+line" },
 	[SP_AF_HOLD] = { "off", "decay", "10s", "on" },
@@ -2484,7 +2500,7 @@ static const char *const g_sp_words[SPARS][4] = {
 
 static bool spar_onoff(int i)
 {
-	return i == SP_WF || i == SP_TXSCOPE;
+	return i == SP_WF || i == SP_WF_3D || i == SP_TXSCOPE;
 }
 
 static bool spar_colour(int i)
@@ -3990,6 +4006,35 @@ static bool on_keypad(rx_t *rx, hold_t *hold, int key, int value)
 	return false;
 }
 
+//
+// The step multiplier for a VFO turn of value detents: 1, or 2, 5, 10 by the dial speed
+// (detents within the last VFO_FAST_WIN_MS, this one included). A turn back clears it.
+//
+
+static int vfo_mult(int value, uint32_t step)
+{
+	uint64_t t = now_ms();
+	int dir = value > 0 ? 1 : -1, n = value > 0 ? value : -value, in = 0, rate;
+
+	if (dir != g_vfo_dir)
+		g_vfo_n = 0;
+
+	g_vfo_dir = dir;
+
+	for (int i = 0; i < n && i < 64; i++)
+		g_vfo_t[g_vfo_n++ % 64] = t;
+
+	for (unsigned i = 0; i < g_vfo_n && i < 64; i++)
+		in += t - g_vfo_t[(g_vfo_n - 1 - i) % 64] < VFO_FAST_WIN_MS ? 1 : 0;
+
+	rate = in * 1000 / VFO_FAST_WIN_MS;
+
+	if (!g_vfo_fast || step > VFO_FAST_STEP)
+		return 1;
+
+	return rate >= VFO_FAST_X10 ? 10 : rate >= VFO_FAST_X5 ? 5 : rate >= VFO_FAST_X2 ? 2 : 1;
+}
+
 static bool on_knob(rx_t *rx, input_t in, int value)
 {
 	// The lock holds the VFO and MFK; the volume always works (2026-11-05, for the
@@ -4005,8 +4050,9 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 
 	switch (in) {
 	case IN_VFO: {
+		int mult = vfo_mult(value, rx->step == STEP_CH ? STEP_CH : (uint32_t) rx->step);	/* faster when turned fast */
 		int64_t f = rx->step == STEP_CH ? (int64_t) rx->freq - rx->freq % 100 + (int64_t) value * X6100_DIR_VFO * 100
-			: (int64_t) rx->freq - rx->freq % (uint32_t) rx->step + (int64_t) value * X6100_DIR_VFO * rx->step;
+			: (int64_t) rx->freq - rx->freq % (uint32_t) rx->step + (int64_t) value * mult * X6100_DIR_VFO * rx->step;
 
 		// Past an end of the tuning range the dial goes round to the other end (2026-11-05;
 		// it stopped there). Only from the end itself: a turn that overshoots lands on it
@@ -5442,7 +5488,7 @@ static void draw_filter_panel(x6100_lcd_t *lcd, const rx_t *rx)
 //
 
 static const char *g_gen_name[GEN_ROWS] = {
-	"BRIGHTNESS", "LAYOUT", "CAT CI-V", "CI-V ADDRESS", "CAT MEMORIES", "CAT CLOCK", "DATA OFF MOD", "DATA MOD",
+	"BRIGHTNESS", "LAYOUT", "VFO SPEED", "CAT CI-V", "CI-V ADDRESS", "CAT MEMORIES", "CAT CLOCK", "DATA OFF MOD", "DATA MOD",
 	"WFSERVER", "NTP SYNC", "WIFI", "WIFI NETWORK", "BLUETOOTH", "BT PAIRING", "BT DEVICE", "BIRDIE SCAN",
 	"BIRDIE MARKS", "BIRDIE NOTCH",
 };
@@ -6041,6 +6087,9 @@ static void gen_value(int row, char *s, size_t n)
 	case GEN_LAYOUT:
 		snprintf(s, n, "%s", g_layout_portrait ? "PORTRAIT" : "LANDSCAPE");
 		break;
+	case GEN_VFOFAST:
+		snprintf(s, n, "%s", g_vfo_fast ? "ON" : "OFF");
+		break;
 	case GEN_CAT:
 		if (g_cat_baud > 0)
 			snprintf(s, n, "%d", g_cat_baud);
@@ -6110,6 +6159,9 @@ static void gen_hint(int row, char *s, size_t n)
 			snprintf(s, n, "PORTRAIT: LEFT SIDE UP, AUTO LOCK %d S", g_autolock_s);
 		else
 			snprintf(s, n, "PORTRAIT: LEFT SIDE UP, NO AUTO LOCK");
+		break;
+	case GEN_VFOFAST:
+		snprintf(s, n, "TURNED FAST: STEP X2 X5 X10 (UP TO 1 KHZ)");
 		break;
 	case GEN_CAT:
 		snprintf(s, n, "DEV PORT, NEXT START; PTY %s", g_cat_pty ? "ALWAYS ON" : "OFF");
@@ -6192,6 +6244,9 @@ static void gen_adjust(int row, int dir, bool def)
 		break;
 	case GEN_LAYOUT:	/* landscape <-> portrait; default landscape; shown once the panel closes */
 		g_layout_portrait = def ? false : !g_layout_portrait;
+		break;
+	case GEN_VFOFAST:	/* on <-> off; default on */
+		g_vfo_fast = def ? true : !g_vfo_fast;
 		break;
 	case GEN_CAT: {
 		int i = 0;
@@ -7202,6 +7257,162 @@ static void wf_shift(x6100_lcd_t *lcd, int y0, int h, int dx, int w)
 	}
 }
 
+// Scroll columns x0 .. x0 + w - 1 of rows y0 .. y0 + h - 1 down by one row (the audio
+// waterfall next to the 3D one, which is not scrolled)
+static void wf_scroll_cols(x6100_lcd_t *lcd, int y0, int h, int x0, int w)
+{
+	for (int y = y0 + h - 1; y > y0; y--)
+		memcpy(lcd->pix + (size_t) y * (size_t) lcd->w + (size_t) x0,
+			lcd->pix + (size_t) (y - 1) * (size_t) lcd->w + (size_t) x0, (size_t) w * sizeof(uint32_t));
+}
+
+//
+// 3D waterfall (scope panel WATERFALL 3D, wf3d on|off; 2026-11-07, after the one in the
+// OpenX6X00 GUI): the last WF3D_N waterfall lines as spectra in perspective, the newest
+// in front, older ones further back, narrower and dimmer. Kept per screen column, as
+// the flat waterfall is: cleared and shifted at the same moments, so it stays aligned.
+// 255 = no data in that column.
+//
+
+#define WF3D_N		32
+#define WF3D_W		800
+static uint8_t g_wf3d[WF3D_N][WF3D_W];
+static int g_wf3d_head;		/* row of the newest line */
+static int g_wf3d_n;		/* lines held */
+static bool g_wf3d_dirty = true;	/* cleared or shifted: draw it again */
+
+static void wf3d_clear(void)
+{
+	g_wf3d_n = 0;
+	g_wf3d_dirty = true;
+}
+
+static void wf3d_shift(int dx, int w)
+{
+	w = w > WF3D_W ? WF3D_W : w;
+	g_wf3d_dirty = true;
+
+	for (int k = 0; k < WF3D_N; k++) {
+		uint8_t *row = g_wf3d[k];
+
+		if (dx >= w || dx <= -w)
+			memset(row, 255, (size_t) w);
+		else if (dx > 0) {
+			memmove(row + dx, row, (size_t) (w - dx));
+			memset(row, 255, (size_t) dx);
+		} else if (dx < 0) {
+			memmove(row, row - dx, (size_t) (w + dx));
+			memset(row + w + dx, 255, (size_t) -dx);
+		}
+	}
+}
+
+// A new line: the level t (0-1, as the waterfall colour) per column, < 0 no data
+static void wf3d_push(const float *t, int w)
+{
+	w = w > WF3D_W ? WF3D_W : w;
+	g_wf3d_head = (g_wf3d_head + 1) % WF3D_N;
+	g_wf3d_n = g_wf3d_n < WF3D_N ? g_wf3d_n + 1 : WF3D_N;
+
+	for (int x = 0; x < w; x++)
+		g_wf3d[g_wf3d_head][x] = t[x] < 0.0f ? 255 : (uint8_t) lroundf((t[x] > 1.0f ? 1.0f : t[x]) * 254.0f);
+}
+
+// Colour c at brightness f (0-1)
+static uint32_t rgb_dim(uint32_t c, float f)
+{
+	return (uint32_t) ((float) (c >> 16) * f) << 16 | (uint32_t) ((float) (c >> 8 & 0xFF) * f) << 8
+		| (uint32_t) ((float) (c & 0xFF) * f);
+}
+
+//
+// Draw it in columns 0 .. w - 1 of the waterfall area (y0, h); cursor_x: the VFO column
+// on the front line (outside 0 .. w - 1: none)
+//
+
+static void wf3d_draw(x6100_lcd_t *lcd, int y0, int h, int w, int cursor_x)
+{
+	const float zstep = 0.022f, sb = 1.0f / (1.0f + zstep * (WF3D_N - 1));	/* the back line's scale */
+	const float yf = (float) (y0 + h - 3), yb = (float) y0 + (float) h * 0.22f;	/* front, back baselines */
+	const float yh = (yb - yf * sb) / (1.0f - sb);	/* horizon: where the baselines meet */
+	const float amp = (float) h * 0.5f, cx = (float) w / 2.0f;
+	const uint32_t grid = 0x1A2430;
+
+	w = w > WF3D_W ? WF3D_W : w;
+	x6100_lcd_fill(lcd, 0, y0, w, h, 0x000000);
+
+	//
+	// The floor: front and back edge, the sides and three lines going back
+	//
+	int bl = (int) lroundf(cx - cx * sb), br = (int) lroundf(cx + cx * sb), ybi = (int) lroundf(yb), yfi = (int) lroundf(yf);
+
+	x6100_lcd_hline(lcd, 0, w - 1, yfi, grid);
+	x6100_lcd_hline(lcd, bl, br, ybi, grid);
+
+	for (int i = 0; i <= 4; i++) {
+		float xf = (float) (w - 1) * (float) i / 4.0f;
+
+		x6100_lcd_line(lcd, (int) xf, yfi, (int) lroundf(cx + (xf - cx) * sb), ybi, 1, grid);
+	}
+
+	if (cursor_x >= 0 && cursor_x < w)
+		x6100_lcd_line(lcd, cursor_x, yfi, (int) lroundf(cx + ((float) cursor_x - cx) * sb), ybi, 1, 0x602020);
+
+	//
+	// The lines, back to front, each a ridge that hides what lies behind it: per screen
+	// column the highest point of the line, black below it down to its baseline, the
+	// ridge in the waterfall colour (dimmer further back), joined to the next column
+	//
+	static int ytop[WF3D_W];
+	static float tcol[WF3D_W];
+
+	for (int k = g_wf3d_n - 1; k >= 0; k--) {
+		const uint8_t *row = g_wf3d[(g_wf3d_head - k + WF3D_N) % WF3D_N];
+		float s = 1.0f / (1.0f + zstep * (float) k);
+		float base = yh + (yf - yh) * s;
+		float fade = 1.0f - 0.65f * (float) k / (float) (WF3D_N - 1);
+		int bi = (int) lroundf(base), prev = -1;
+
+		for (int x = 0; x < w; x++)
+			ytop[x] = -1;
+
+		for (int x = 0; x < w; x++) {
+			if (row[x] == 255)
+				continue;
+
+			float t = (float) row[x] / 254.0f;
+			int xs = (int) lroundf(cx + ((float) x - cx) * s);
+			int top = (int) lroundf(base - t * amp * s);
+
+			top = top < y0 ? y0 : top;
+
+			if (xs >= 0 && xs < w && (ytop[xs] < 0 || top < ytop[xs])) {
+				ytop[xs] = top;
+				tcol[xs] = t;
+			}
+		}
+
+		for (int x = 0; x < w; x++) {
+			if (ytop[x] < 0) {
+				prev = -1;
+				continue;
+			}
+
+			int a = prev < 0 ? ytop[x] : prev < ytop[x] ? prev : ytop[x];
+			int b = prev < 0 ? ytop[x] : prev > ytop[x] ? prev : ytop[x];
+
+			if (ytop[x] < bi)
+				x6100_lcd_vline(lcd, x, ytop[x] + 1, bi, 0x000000);
+
+			x6100_lcd_vline(lcd, x, a, b, rgb_dim(wf_colour(tcol[x]), fade));
+			prev = ytop[x];
+		}
+	}
+
+	if (cursor_x >= 0 && cursor_x < w)	/* the VFO on the front line */
+		x6100_lcd_vline(lcd, cursor_x, yfi - 6, yfi, SCR_WARN);
+}
+
 // A panel or page open: they are drawn for landscape, so portrait turns back meanwhile
 static bool panel_open(const rx_t *rx)
 {
@@ -7405,6 +7616,16 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 
 	wf_shown = g_sp[SP_WF] != 0;
 
+	// 3D on or off: a fresh waterfall area either way
+	static bool wf3d_was;
+	const bool wf3d = g_sp[SP_WF] && g_sp[SP_WF_3D];
+
+	if (wf3d != wf3d_was) {
+		x6100_lcd_fill(lcd, 0, WF_Y, W, WF_H(lcd), 0x000000);
+		wf3d_clear();
+		wf3d_was = wf3d;
+	}
+
 	// Waterfall size: the scope above gives or takes the rows (small waterfall = tall scope)
 	static const int spec_h[3] = { 190, 150, 110 };
 	int want_h = portrait ? P_SPEC_H : spec_h[g_sp[SP_WF_SIZE]];	/* portrait: a small scope */
@@ -7413,6 +7634,7 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 		g_spec_h = want_h;
 		x6100_lcd_fill(lcd, 0, SPEC_Y, W, lcd->h - TAG_H - SPEC_Y, 0x000000);
 		scr->wf_scope = (scope_mode_t) -1;	/* waterfall re-aligns */
+		wf3d_clear();
 	}
 
 	if (portrait) {
@@ -7673,6 +7895,7 @@ scope:
 		x6100_lcd_fill(lcd, 0, WF_Y, W, WF_H(lcd), 0x000000);
 		scr->wf_view = view;
 		scr->wf_scope = (scope_mode_t) -1;	/* RF part re-aligns too */
+		wf3d_clear();
 	}
 
 	if (view == 1) {
@@ -7702,6 +7925,7 @@ scope:
 		|| (rx->scope == SCOPE_FIX && (double) v.lo != scr->wf_ref)) {	/* FIX: another edge */
 		x6100_lcd_fill(lcd, 0, WF_Y, SW, WF_H(lcd), 0x000000);
 		scr->wf_scope = rx->scope;
+		wf3d_clear();
 		scr->wf_span = scope_width(rx);
 		scr->wf_ref = (double) v.lo;
 	} else if (rx->scope == SCOPE_CENTER_S || rx->scope == SCOPE_FIX_S) {
@@ -7709,6 +7933,7 @@ scope:
 
 		if (dx != 0) {
 			wf_shift(lcd, WF_Y, WF_H(lcd), dx, SW);
+			wf3d_shift(dx, SW);
 			scr->wf_ref -= (double) dx * v.span / SW;
 		}
 	} else {
@@ -7873,6 +8098,35 @@ scope:
 			if (bx > LBL_W && bx < SW - 1)
 				x6100_lcd_fill(lcd, bx, SPEC_Y, 2, 10, 0xE0E040);
 		}
+	}
+
+	//
+	// 3D waterfall: a new line into the history, then all of it in perspective; drawn
+	// before the panels, which may lie over the waterfall area. Only redrawn for a new
+	// line, a shift or clear, a moved VFO cursor, a panel opened or closed (it costs CPU)
+	//
+	static int wf3d_cx = -1;
+	static bool wf3d_panel;
+	const int cur_x = f_to_x(&v, rx->freq);
+	const bool pnl = panel_open(rx);
+
+	if (wf3d && (new_line || g_wf3d_dirty || cur_x != wf3d_cx || pnl != wf3d_panel)) {
+		g_wf3d_dirty = false;
+		wf3d_cx = cur_x;
+		wf3d_panel = pnl;
+
+		if (new_line) {
+			float t[WF3D_W];
+			int n = SW > WF3D_W ? WF3D_W : SW;
+
+			for (int x = 0; x < n; x++)
+				t[x] = spec_index(&v, x) < 0 ? -1.0f
+					: (spec_at(scr, &v, x) - (scr->floor_db - WF_BELOW_DB)) / WF_RANGE_DB;
+
+			wf3d_push(t, n);
+		}
+
+		wf3d_draw(lcd, WF_Y, WF_H(lcd), SW, cur_x);
 	}
 
 	//
@@ -8187,16 +8441,21 @@ overlays:
 	}
 
 	//
-	// Waterfall, newest line on top; no data outside the IQ span stays black
+	// Waterfall, newest line on top; no data outside the IQ span stays black. In 3D the
+	// RF part is drawn above (every frame); only the audio part of F3 long scrolls here.
 	//
 	if (new_line && view != 1) {
-		x6100_lcd_scroll_down(lcd, WF_Y, WF_H(lcd));
+		if (!wf3d) {
+			x6100_lcd_scroll_down(lcd, WF_Y, WF_H(lcd));
 
-		for (int x = 0; x < SW; x++) {
-			uint32_t c = spec_index(&v, x) < 0 ? 0x000000
-				: wf_colour((spec_at(scr, &v, x) - (scr->floor_db - WF_BELOW_DB)) / WF_RANGE_DB);
+			for (int x = 0; x < SW; x++) {
+				uint32_t c = spec_index(&v, x) < 0 ? 0x000000
+					: wf_colour((spec_at(scr, &v, x) - (scr->floor_db - WF_BELOW_DB)) / WF_RANGE_DB);
 
-			x6100_lcd_fill(lcd, x, WF_Y, 1, 1, c);
+				x6100_lcd_fill(lcd, x, WF_Y, 1, 1, c);
+			}
+		} else if (view == 2) {
+			wf_scroll_cols(lcd, WF_Y, WF_H(lcd), SW, W - SW);
 		}
 
 		if (view == 2)
@@ -8260,7 +8519,7 @@ static void help_console(void)
 		"            modin mic|usb mic|usb\n"
 		"  system    layout portrait|landscape   portraitrot 0|180   autolock <s>   bright 5-100\n"
 		"            region r1|r2|r3|nl|uk   freqmin freqmax <Hz>   time <UTC>   ntp on|off|<server>\n"
-		"            bt on|off   btauto <MAC>|off   bbreset   oob   nolimit\n"
+		"            vfofast on|off   bt on|off   btauto <MAC>|off   bbreset   oob   nolimit\n"
 		"  help, ?   this list (all of it: docs/x6100_trx_quickref.md)\n");
 }
 
@@ -8674,6 +8933,23 @@ static bool console_line(rx_t *rx, char *line)
 			changed = true;
 			continue;
 		}
+
+		// vfofast on | off: faster tuning when the VFO knob turns fast (GEN row VFO SPEED;
+		// the conf fixes it)
+		if (strcasecmp(t, "vfofast") == 0) {
+			const char *v = strtok(NULL, " \t\r\n");
+
+			if (v != NULL && (strcasecmp(v, "on") == 0 || strcasecmp(v, "off") == 0)) {
+				g_vfo_fast = strcasecmp(v, "on") == 0;
+				g_conf_set |= g_conf_reading ? 1u << GEN_VFOFAST : 0;	/* the conf fixes the GEN row */
+			} else {
+				fprintf(stderr, "\nvfofast on|off\n");
+			}
+
+			changed = true;
+			continue;
+		}
+
 		// freqmin / freqmax <Hz>: the tuning range, within 5 kHz - 75 MHz while the limits
 		// the baseband takes are found out; default 148.5 kHz - 75 MHz (conf, console, state)
 		if (strcasecmp(t, "freqmin") == 0 || strcasecmp(t, "freqmax") == 0) {
@@ -9594,6 +9870,7 @@ static void state_write(const rx_t *rx)
 	fprintf(fp, "civaddr %02x ", g_civ_addr);
 	fprintf(fp, "catmem %s ", g_cat_mem_rw ? "rw" : "ro");
 	fprintf(fp, "layout %s ", g_layout_portrait ? "portrait" : "landscape");
+	fprintf(fp, "vfofast %s ", g_vfo_fast ? "on" : "off");
 	fprintf(fp, "cattime %s ", g_cat_time == CT_OFF ? "off" : g_cat_time == CT_ON ? "on" : "unsynced");
 	fprintf(fp, "modin %s %s ", g_modin[0] ? "usb" : "mic", g_modin[1] ? "usb" : "mic");
 	fprintf(fp, "ntp %s", strcmp(g_ntp_server, "off") == 0 ? "off" : "on");

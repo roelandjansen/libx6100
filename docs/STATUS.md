@@ -354,6 +354,11 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     (F3 audio scope, a voice message). Verified: the boot (the GUI first via S95gui, then
     S96x6100_trx switches to x6100_trx), PWR 1.5-4 s (quit) brings the GUI back, PWR held
     4 s powers the radio off without the GUI (the marker /tmp/x6100_trx.poweroff).
+35. Faster VFO tuning and the 3D waterfall (2026-11-07): turn the VFO knob slowly (the
+    set step), then fast (1 kHz step: 2, 5, 10 kHz per detent), turn back (x1 at once);
+    are 12 / 25 / 45 detents per second right for the knob? GEN row VFO SPEED off: fixed
+    step. Scope panel WATERFALL 3D on: the look (landscape, portrait, F3 long), top for
+    the CPU at speed FAST, a panel over it, tuning in a scrolling mode.
 
 ## Next steps (suggested order)
 
