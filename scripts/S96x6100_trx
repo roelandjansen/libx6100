@@ -5,8 +5,10 @@
 # Only when /etc/x6100/boot.trx exists (x6100_ui.sh boot trx; x6100_ui.sh boot gui
 # removes it): runs after S95gui, stops the GUI loop with x6100_ui.sh stop (which also
 # starts the wfserver watcher), then x6100_trx detached, its output in /tmp/x6100_trx.log.
-# When x6100_trx ends (PWR, quit) the GUI comes back (x6100_ui.sh start), so the radio is
-# never left with a dark screen. No file of the image is changed: this script is ours.
+# When x6100_trx quits (PWR 1.5-4 s, quit) the GUI comes back (x6100_ui.sh start), so
+# the radio is never left with a dark screen. Not on power off (PWR held 4 s: x6100_trx
+# leaves /tmp/x6100_trx.poweroff) nor after stop (also run at shutdown). No file of the
+# image is changed: this script is ours.
 #
 # What it decides goes into OpenX6X00's start trace (/mnt/app_logs/start_trace.txt) and
 # into /tmp/x6100_trx.log, so a boot that brings the GUI shows why.
@@ -20,6 +22,7 @@ readonly C_TRX="/root/x6100_trx"
 readonly C_LOG="/tmp/x6100_trx.log"
 readonly C_PID="/var/run/x6100_trx_boot.pid"
 readonly C_TRACE="/usr/sbin/x6100-starttrace"
+readonly C_DOWN="/tmp/x6100_trx.poweroff"	# there: x6100_trx ended for power off or stop, no GUI
 
 #
 # Say what is done: the start trace (when there), the log, the console
@@ -49,22 +52,24 @@ boot_start() {
 		return 0
 	fi
 
+	rm -f "${C_DOWN}"
 	boot_say "stopping the GUI, starting ${C_TRX}"
 	"${C_UI}" stop >> "${C_LOG}" 2>&1 || true
 
-	# A detached shell runs x6100_trx and brings the GUI back when it ends
-	setsid sh -c "\"${C_TRX}\" >> \"${C_LOG}\" 2>&1 < /dev/null; \"${C_UI}\" start > /dev/null 2>&1" \
+	# A detached shell runs x6100_trx and brings the GUI back when it quits (not on power off)
+	setsid sh -c "\"${C_TRX}\" >> \"${C_LOG}\" 2>&1 < /dev/null; [ -e \"${C_DOWN}\" ] || \"${C_UI}\" start > /dev/null 2>&1" \
 		< /dev/null > /dev/null 2>&1 &
 	printf '%s\n' "$!" > "${C_PID}"
 	boot_say "started"
 }
 
 #
-# Stop x6100_trx (it saves its state on SIGTERM); the GUI comes back
+# Stop x6100_trx (it saves its state on SIGTERM); also run at shutdown, so no GUI after it
 #
 
 boot_stop() {
 	if pidof x6100_trx > /dev/null 2>&1; then
+		: > "${C_DOWN}"
 		boot_say "stopping x6100_trx"
 		killall x6100_trx 2> /dev/null || true
 	fi

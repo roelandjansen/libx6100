@@ -12246,6 +12246,11 @@ int main(int argc, char **argv)
 	// saved and TX dropped above). The kernel's poweroff switches the PMIC off.
 	//
 	if (g_poweroff) {
+		FILE *mk = fopen("/tmp/x6100_trx.poweroff", "w");	/* the boot wrapper: no GUI */
+
+		if (mk != NULL)
+			fclose(mk);
+
 		printf("powering off\n");
 		sync();
 		execlp("poweroff", "poweroff", (char *) NULL);
