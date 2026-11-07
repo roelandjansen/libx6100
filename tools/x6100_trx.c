@@ -142,6 +142,15 @@ static int g_vfo_dir;		/* direction of the last VFO detent */
 static int g_vol_fn;
 static uint64_t g_vol_fn_ms;
 
+// Squelch (2026-11-07): x6100_trx's own, on the S-meter bar's scale, in every mode (as an
+// Icom S-meter squelch). SQL 1-100 is the position on the bar (40 about S6, 60 S9, 100
+// S9+60); the audio is muted while the passband level stays below it. Opens at once,
+// closes after SQL_HANG_MS below, so speech is not chopped. The baseband's own threshold
+// (register 21 [15:8]) did nothing in NFM and is kept at 0. A marker on the bar shows it.
+#define SQL_HANG_MS	300
+static bool g_sql_open = true;	/* the squelch lets the audio through */
+static uint64_t g_sql_below;	/* below the threshold since (ms), 0 = not below */
+
 //
 // Baseband reset line (2026-11-05): GPIO 204 on gpiochip1, high = the STM32 in reset, as
 // X6100Control (LGPL-2.1, X6100_PIN_BB_RESET; its firmware update pulses it). Only that
@@ -1585,7 +1594,7 @@ static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 	// TX audio: line in / out levels and mic gains, mic select and squelch (charger,
 	// speaker and aux IQ bits of register 21 kept), VOX, compressor, monitor
 	x6100_ctl_set(ctl, X6100_REG_AUDIO_GAIN, X6100_R20(rx->line_in, rx->line_out, rx->imicg, rx->hmicg));
-	x6100_ctl_update(ctl, X6100_REG_MIC_PTT_SQL, 0x0000FF03u, X6100_R21(rx->micsel, 0, 0, 0, 0, rx->sql));
+	x6100_ctl_update(ctl, X6100_REG_MIC_PTT_SQL, 0x0000FF03u, X6100_R21(rx->micsel, 0, 0, 0, 0, 0));	/* squelch: our own (g_sql_open) */
 	x6100_ctl_set(ctl, X6100_REG_VOX, X6100_R22(rx->voxg, rx->voxag, rx->voxdly, rx->vox));
 	x6100_ctl_set(ctl, X6100_REG_CMP, X6100_R25(rx->cmp_lvl, rx->cmp));
 	x6100_ctl_set(ctl, X6100_REG_MONILEVEL, rx->moni ? (uint32_t) rx->moni_lvl : 0);
@@ -1595,7 +1604,7 @@ static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 	x6100_ctl_set(ctl, X6100_REG_AGC_TC, X6100_R28(g_agc_slow, AGC_MID, g_agc_fast));
 
 	x6100_set_filter(ctl, mode, low, high);
-	x6100_ctl_set(ctl, X6100_REG_RXVOL, rx->mute ? 0 : (uint32_t) rx->vol);
+	x6100_ctl_set(ctl, X6100_REG_RXVOL, rx->mute || !g_sql_open ? 0 : (uint32_t) rx->vol);	/* squelch closed: muted */
 	x6100_ctl_update(ctl, X6100_REG_RFG_TXPWR_FFTDEC, 0xFF, (uint32_t) rx->rfg);
 	x6100_set_txpwr(ctl, rx->tot_cut ? 0.0f : (rx->tx_pwr_ovr >= 0 ? rx->tx_pwr_ovr : rx->txpwr) / 10.0f);	/* TOT cut, scan power */
 	x6100_cal_apply(ctl, cal, x6100_band_index(hz));
@@ -5105,6 +5114,25 @@ static double meter_frac(double dbm)
 	return 0.6 + (over > 60.0 ? 60.0 : over) / 60.0 * 0.4;
 }
 
+//
+// Squelch: open or closed for the passband level dbm (see g_sql_open); always open with
+// SQL 0 and while transmitting
+//
+
+static void sql_update(const rx_t *rx, double dbm, bool tx)
+{
+	if (rx->sql <= 0 || tx || meter_frac(dbm) >= rx->sql / 100.0 - 1e-9) {	/* S6 on SQL 40: open */
+		g_sql_open = true;
+		g_sql_below = 0;
+		return;
+	}
+
+	if (g_sql_below == 0)
+		g_sql_below = now_ms();
+	else if (now_ms() - g_sql_below >= SQL_HANG_MS)
+		g_sql_open = false;
+}
+
 static void s_reading(double dbm, char *buf, size_t len)
 {
 	if (dbm <= -73.0) {
@@ -5149,10 +5177,12 @@ static double swr_frac(double swr)
 //
 // Bar meter under the frequency: S scale in RX; in TX the meter chosen with F4
 // (Po, SWR or ALC) on the upper scale; SWR scale below,
-// with an SWR bar in TX. frac and peak are 0..1 of the bar width.
+// with an SWR bar in TX. frac and peak are 0..1 of the bar width. sql (RX, 1-100): the
+// squelch marker, a small triangle over the scale and a line through the bar at the same
+// fraction; amber while closed, green while open.
 //
 
-static void draw_sbar(x6100_lcd_t *lcd, double frac, double peak, bool tx, double swr, int meter)
+static void draw_sbar(x6100_lcd_t *lcd, double frac, double peak, bool tx, double swr, int meter, int sql)
 {
 	static const struct { double frac; const char *lbl; } s_marks[] = {
 		{ 1.0 / 9 * 0.6, "1" }, { 3.0 / 9 * 0.6, "3" }, { 5.0 / 9 * 0.6, "5" },
@@ -5260,6 +5290,19 @@ static void draw_sbar(x6100_lcd_t *lcd, double frac, double peak, bool tx, doubl
 	x6100_lcd_fill(lcd, x0, SBAR_BAR_Y, fill, SBAR_BAR_H, white);
 	x6100_lcd_fill(lcd, pk - 1, SBAR_BAR_Y - 1, 3, SBAR_BAR_H + 2, 0x58B8F0);
 	x6100_lcd_vline(lcd, x0, SBAR_SCALE_Y - 8, SBAR_SWR_Y + 3, white);
+
+	//
+	// Squelch marker: where the squelch opens (SQL = the position on the bar)
+	//
+	if (!tx && sql > 0) {
+		const uint32_t c = g_sql_open ? 0x3CC83C : 0xFFB020;
+		int x = x0 + (int) (sql / 100.0 * SBAR_W);
+
+		for (int r = 0; r < 6; r++)	/* pointing down onto the scale line */
+			x6100_lcd_hline(lcd, x - 5 + r, x + 5 - r, SBAR_SCALE_Y - 7 + r, c);
+
+		x6100_lcd_vline(lcd, x, SBAR_BAR_Y - 1, SBAR_BAR_Y + SBAR_BAR_H, c);
+	}
 
 	//
 	// SWR scale below: white to 3, double line above; in TX a bar on the scale
@@ -8076,14 +8119,14 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 		vu_update(scr, target, now_ms());
 		marker = scr->vu_peak;
 		draw_sbar(lcd, rx->meter == 0 ? po : rx->meter == 1 ? swr_frac(scr->swr) : alc / 100.0,
-			rx->meter == 2 ? scr->vu_peak / 0.34 : scr->vu_peak, true, scr->swr, rx->meter);
+			rx->meter == 2 ? scr->vu_peak / 0.34 : scr->vu_peak, true, scr->swr, rx->meter, 0);
 		draw_vu(lcd, scr->needle, marker, scale, l1, l2);
 		x6100_lcd_text(lcd, VU_X + 8, VU_Y + VU_H - 20, 2, meter_names[rx->meter], SCR_ACCENT);
 	} else {
 		char l1[16], l2[16];
 
 		vu_update(scr, meter_frac(scr->sig_dbm), now_ms());
-		draw_sbar(lcd, meter_frac(scr->sig_dbm), scr->vu_peak, false, 1.0, 0);
+		draw_sbar(lcd, meter_frac(scr->sig_dbm), scr->vu_peak, false, 1.0, 0, rx->sql);
 		s_reading(scr->sig_dbm, l1, sizeof(l1));
 		snprintf(l2, sizeof(l2), "%4.0fdBm", scr->sig_dbm);
 		draw_vu(lcd, scr->needle, scr->vu_peak, VU_SCALE_S, l1, l2);
@@ -10441,7 +10484,7 @@ static bool cat_get(void *ctx, x6100_civ_item_t item, int vfo, int32_t *v)
 		*v = now_ms() < scr->ovf_until;
 		return true;
 	case X6100_CIV_SQL_OPEN:
-		*v = 1;		/* no squelch */
+		*v = g_sql_open;	/* x6100_trx's own squelch */
 		return true;
 	case X6100_CIV_TX:
 		*v = scr->tx || rx->ptt;
@@ -12582,14 +12625,17 @@ int main(int argc, char **argv)
 			level += iq_level_db(&frame);
 			level_n++;
 
-			// SCOPE DURING TX off: the scope and the waterfall keep the last RX picture
-			if (scr.on && (g_sp[SP_TXSCOPE] || !scr.tx)) {
+			// SCOPE DURING TX off: the scope and the waterfall keep the last RX picture.
+			// Without a display only for the squelch (it needs the passband level)
+			if ((scr.on || rx.sql > 0) && (g_sp[SP_TXSCOPE] || !scr.tx)) {
 				g_iq_hz = iq_hz(&rx);	/* max hold starts again when the IQ centre moves */
 				g_dc_hide = lo_shift(&rx) != 0 && g_keyed_hz == 0;	/* TX: the carrier is there */
 				spectrum_update(&scr, &frame);
 				scr.sig_dbm = passband_dbm(&scr, &rx);
 				new_frame = true;	/* meters redrawn every frame, also on HOLD */
 			}
+
+			sql_update(&rx, scr.sig_dbm, scr.tx || rx.ptt);
 		}
 
 		if (t - last_meter >= METER_MS && level_n > 0) {

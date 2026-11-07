@@ -58,7 +58,7 @@ whole file (`x6100_control_idle()`); read-modify-write on bitfields uses the sha
 | 15  | rfg_txpwr                             | [7:0] RF gain 0–100; [15:8] TX power ×10 W (0–100) |
 | 17  | atu_network                           | ATU network: [7:0] L, [15:8] C, [16] S; with ATUE (reg 12) set the relays switch at once on a write, in RX too (relay clicks, 2026-10-25) |
 | 20  | ling_loutg_imicg_hmicg                | [7:0] line-in; [15:8] line-out; [23:16] int. mic; [31:24] hand mic |
-| 21  | micsel_pttmode_chge_spmode_auxiqgen_sqlthr | [1:0] mic sel (0 int, 1 hand, 2 auto); [4] charger en; [5] speaker/phone; [15:8] squelch 0–100; PTT mode / aux IQ gen bits unmapped |
+| 21  | micsel_pttmode_chge_spmode_auxiqgen_sqlthr | [1:0] mic sel (0 int, 1 hand, 2 auto); [4] charger en; [5] speaker/phone; [15:8] squelch 0–100 (x6100_trx 2026-11-07: no effect seen in NFM, kept 0, squelch done in x6100_trx); PTT mode / aux IQ gen bits unmapped |
 | 22  | voxg_voxag_voxdly_voxe                | [6:0] gain; [14:8] anti-gain; [29:16] delay ms; [30] enable (X6100Control v0.16.1) |
 | 23  | nrthr_nbw_nbthr_nre_nbe               | [7:0] NR level; [15:8] NB width; [23:16] NB level; [24] NR en; [25] NB en |
 | 24  | dnfcnt_dnfwidth_dnfe                  | [11:0] notch centre Hz; [23:12] width Hz; [24] enable |
