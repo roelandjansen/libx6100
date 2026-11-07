@@ -2513,7 +2513,7 @@ static const kpar_t g_spar[SPARS] = {
 	[SP_WF_SIZE] = { "WATERFALL SIZE", "wfsize", 0, 2, 1, 1 },
 	[SP_WF_LEVEL] = { "WF PEAK LEVEL", "wflevel", 30, 80, 10, 50 },
 	[SP_WF_3D] = { "WATERFALL 3D", "wf3d", 0, 1, 1, 0 },
-	[SP_MARKERS] = { "MARKERS", "markers", 0, 3, 1, 3 },	/* M, M S, M T, M S T (IC-7851 MARKER) */
+	[SP_MARKERS] = { "MARKERS", "markers", 0, 3, 1, 3 },	/* A, A B, A T, A B T (the IC-7851 MARKER: M, M S, M T, M S T) */
 	[SP_TXSCOPE] = { "SCOPE DURING TX", "txscope", 0, 1, 1, 1 },
 	[SP_AF_REF] = { "AF REF LEVEL", "", -30, 30, 1, 0 },	/* rx->aref: aref on the scope line */
 	[SP_AF_WAVE] = { "AF WAVEFORM TYPE", "afwave", 0, 2, 1, WAVE_FILL_LINE },
@@ -2552,7 +2552,7 @@ static const char *const g_sp_words[SPARS][4] = {
 	[SP_WF_SPEED] = { "slow", "mid", "fast" },
 	[SP_WF_SIZE] = { "small", "mid", "large" },
 	[SP_WF_3D] = { "off", "on" },
-	[SP_MARKERS] = { "m", "ms", "mt", "mst" },
+	[SP_MARKERS] = { "a", "ab", "at", "abt" },
 	[SP_TXSCOPE] = { "off", "on" },
 	[SP_AF_WAVE] = { "fill", "line", "fill+line" },
 	[SP_AF_HOLD] = { "off", "decay", "10s", "on" },
@@ -7874,7 +7874,8 @@ static void draw_oob(x6100_lcd_t *lcd, const rx_t *rx)
 }
 
 //
-// Scope markers as on the IC-7851 (2026-11-07): M (red) VFO A, S (green) VFO B (RIT on the
+// Scope markers as on the IC-7851 (2026-11-07), tagged A, B, T (the IC-7851: M, S, T;
+// 2026-11-07: A and B read better here): A (red) VFO A, B (green) VFO B (RIT on the
 // one in use), T (yellow) the TX frequency (with split on the other VFO); which show:
 // scope panel MARKERS (M, M S, M T, M S T, as the IC-7851 MARKER key). Each a dashed line
 // in solid colour (half-transparent was too faint on the radio) with a lettered tag under
@@ -7910,7 +7911,7 @@ static bool marker_shown(int i)
 static void draw_markers(x6100_lcd_t *lcd, const rx_t *rx, const view_t *v, int sw)
 {
 	const uint32_t col[3] = { MARK_M, MARK_S, MARK_T };
-	const char *const name[3] = { "M", "S", "T" };
+	const char *const name[3] = { "A", "B", "T" };	/* VFO A, VFO B, TX (the IC-7851: M, S, T) */
 	static const int prio[3] = { 2, 0, 1 };	/* the tag a shared column shows: T, then M, then S */
 	int64_t hz[3];
 	const int tag_w = 16, tag_h = 17, row_y = SPEC_Y + 20;
