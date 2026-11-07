@@ -371,8 +371,8 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     is personal or this radio's own (x6100_trx state / conf / birdies / memories /
     messages / voice, wfserver.ini, WiFi networks, BT pairings, authorized_keys,
     known_hosts, history; -k host keys, -l logs), lists and asks first. Tested on the
-    PC (dash and busybox sh, a WiFi file with spaces). To check on the radio: -n, then
-    a run after a backup; with -k that ssh comes back with new host keys; the
+    PC (dash and busybox sh, a WiFi file with spaces). -n on the radio: ok (2026-11-07). To check: a run
+    after a backup; with -k that ssh comes back with new host keys; the
     OpenX6X00 GUI settings (callsign) still by hand.
 
 ## Next steps (suggested order)
