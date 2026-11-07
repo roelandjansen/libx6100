@@ -1,6 +1,11 @@
 # libx6100 / x6100_trx — status
 
-Snapshot: 2026-11-07. Last tag: v0.17.13 (2026-11-07; panels as a radio menu (MFK turn
+Snapshot: 2026-11-07. Last tag: v0.17.14 (2026-11-07; scope markers A / B / T as the
+IC-7851 (MARKERS choice, B and T through the waterfall, no T where TX is refused); the
+tune line in the waterfall and in 3D; the squelch mutes wfview too, SQL push; bbreset
+without a console (MFK push, the command pipe /tmp/x6100_trx.cmd); screenshots (shot,
+LOCK long); oob / nooob saved in the state; UK 60 m segments; the portrait frequency at
+a fixed width), on v0.17.13 (2026-11-07; panels as a radio menu (MFK turn
 selects, push switches or edits); scripts/x6100_giveaway.sh; own S-meter squelch with a
 marker on the bar and the arc (verified in NFM); the TX audio source and OOB on the arc
 meter in TX; LAN as TX audio input: wfview keys the network audio, the PTT key and the
