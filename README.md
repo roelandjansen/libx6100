@@ -4,8 +4,9 @@ Open-source C control library for the Xiegu X6100 baseband (STM32), used from th
 Allwinner R16 running Linux. Written from scratch from the stock Xiegu
 APP 1.2.0 / BASE 1.1.9 interface; contains no R1CBU, Aether or Xiegu code.
 
-Goal: replace the R1CBU control layer and the patched baseband dependency with an
-independent, documented library, as the base for a new front end.
+Goal: an independent, documented library that works with the stock Xiegu baseband
+firmware (BASE 1.1.9, unpatched), in place of the R1CBU control layer and its
+patched baseband, as the base for a new front end.
 
 ![x6100_trx on the radio](docs/images/x6100_trx_photo.jpg)
 
