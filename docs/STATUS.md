@@ -50,8 +50,11 @@ Open work in detail: `TODO.md`. Use: `x6100_trx_quickref.md`. CAT: `x6100_civ.md
 
 ## Where we are
 
-Radio: X6100 on the IU1WXY OS / GUI image, stock baseband BASE 1.1.9.
-`x6100_ui.sh stop` stops the IU1WXY GUI; `x6100_trx` then owns the baseband.
+Radio: X6100 on the OpenX6X00 image (since 2026-11-07; before: the IU1WXY image), stock
+baseband BASE 1.1.9. Why the IU1WXY image was left: README, "Why the IU1WXY image was
+left" (0.2 has no ssh; the image refuses to start once a file is changed; it is closed).
+`x6100_ui.sh stop` stops the GUI (x6100_gui in the x6100_daemon loop); `x6100_trx` then
+owns the baseband. `x6100_ui.sh boot trx` starts x6100_trx at boot (S96x6100_trx).
 
 Verified on the radio:
 
@@ -343,6 +346,11 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
 
 33. (done) Network line at the start: address and ports right, verified 2026-11-06.
 
+34. OpenX6X00 as the base (2026-11-07): the first start (calibration, CAT, network, the
+    ntp line: no S48sntp / S49ntp, x6100_trx syncs itself), the codec next to PulseAudio
+    (F3 audio scope, a voice message), `x6100_ui.sh boot trx` and a reboot: x6100_trx comes
+    up, and quitting it brings the GUI back.
+
 ## Next steps (suggested order)
 
 1. Radio checks above; the 2026-10-27 evening checklist (scope panel, fixed edges, wfview
@@ -368,7 +376,7 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
    the PC (wfserver + FreeDV) is the way.
 4. Measurements: S-meter calibration, codec level against ALC.
 5. CTCSS for the repeaters (see TODO: no tone encoder known, mic bypasses Linux).
-6. Later: own buildroot, self-contained (now the IU1WXY image is the base): a full image
+6. Later: own buildroot, self-contained (now the OpenX6X00 image is the base): a full image
    and an applications-only package (TODO, Image and distribution).
 
 ## Working notes

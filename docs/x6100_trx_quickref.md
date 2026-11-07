@@ -8,7 +8,15 @@ panel. `x6100_rx` is the same program, receive only (PTT and tune refused).
 Stop the stock GUI first (`scripts/x6100_ui.sh stop`). That also starts wfserver when it is
 installed and set up (`contrib/wfserver`): it runs while x6100_trx serves the CI-V pty (always on, `catpty`);
 `x6100_ui.sh wfserver off` / `on` switches that off / on, `x6100_ui.sh start` stops it.
-x6100_trx refuses to start while the IU1WXY or R1CBU GUI or another x6100_trx still runs.
+x6100_trx refuses to start while a GUI (OpenX6X00 / R1CBU x6100_gui, IU1WXY) or another
+x6100_trx still runs.
+
+At boot, instead of the GUI (OpenX6X00, 2026-11-07): `x6100_ui.sh boot trx` (the GUI again:
+`x6100_ui.sh boot gui`; `x6100_ui.sh status` says which). Our init script
+`/etc/init.d/S96x6100_trx` (installed by `build.sh deploy`) then stops the GUI loop after
+S95gui and starts x6100_trx detached, its output in `/tmp/x6100_trx.log`; when x6100_trx
+quits (PWR) the GUI comes back. No file of the image is changed.
+
 Right after a GUI let the baseband go it may not answer on I2C for a moment: x6100_trx tries
 the calibration read and the first register write 10 times over 5 s (console: again n/10);
 if it still fails, `x6100_trx --bbreset` resets the baseband (else a power cycle).

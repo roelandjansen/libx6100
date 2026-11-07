@@ -208,6 +208,12 @@ deploy() {
 	scp -- "${C_DEPLOY[@]}" "${G_HOST}:/root/"
 	printf 'deployed to %s:/root: %s\n' "${G_HOST}" "${C_DEPLOY[*]}"
 
+	# The boot script (OpenX6X00): x6100_trx at boot when /etc/x6100/boot.trx exists
+	# (x6100_ui.sh boot trx | gui); without that file it does nothing
+	scp -q -- scripts/S96x6100_trx "${G_HOST}:/etc/init.d/S96x6100_trx"
+	ssh -- "${G_HOST}" "chmod 755 /etc/init.d/S96x6100_trx"
+	printf '%s\n' 'deployed /etc/init.d/S96x6100_trx (boot: x6100_ui.sh boot trx|gui)'
+
 	# Built only with cmake present: copied when there
 	if [[ -f "${C_OUT}/x6100_liquid" ]]; then
 		scp -q -- "${C_OUT}/x6100_liquid" "${G_HOST}:/root/"

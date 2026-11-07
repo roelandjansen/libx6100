@@ -11,6 +11,11 @@ Status: 2026-11-07 (v0.17.10). Summary and next steps: `STATUS.md`.
 
 ## Radio
 
+- OpenX6X00 image as the base (2026-11-07, the IU1WXY image left: README "Why the IU1WXY
+  image was left"). x6100_trx at boot: `x6100_ui.sh boot trx|gui`, scripts/S96x6100_trx
+  (installed by build.sh deploy). To check: STATUS item 34. Later maybe: the IU1WXY-only
+  bits (S48sntp / S49ntp check, x6100-iu1wxy-gui in x6100_ui.sh) can go when nobody uses
+  that image any more.
 - Faster tuning when the VFO knob turns fast (2026-11-07), as on Icom radios: at a high
   turning rate the step grows (e.g. 10x, then 100x the set step), back to the set step
   as soon as the knob slows down; only on the VFO knob, not the MFK; the threshold and

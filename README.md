@@ -153,7 +153,8 @@ Not yet: GPIO (hand mic PTT is invisible to Linux), Icom LAN server, keyer.
 | `tools/x6100_trx.c` | transceiver: x6100_rx plus PTT, ATU, TX power, TX meters |
 | `tools/x6100_spk.c` | experiment, negative: speaker through Linux via reg 12 bit 0x8 (capture loses RX audio in play mode), kept for reference |
 | `tools/x6100_iqcal.c` | RX IQ image calibration attempt (registers 48/49); parked: flow IQ too little range to measure |
-| `scripts/x6100_ui.sh` | stop/start the GUI (stock, R1CBU and IU1WXY images); wfserver autostart |
+| `scripts/x6100_ui.sh` | stop/start the GUI (stock, R1CBU, IU1WXY and OpenX6X00 images); wfserver autostart; `boot trx|gui` (x6100_trx at boot) |
+| `scripts/S96x6100_trx` | init script (OpenX6X00): x6100_trx at boot when `/etc/x6100/boot.trx` exists, the GUI back when it quits; installed by `build.sh deploy` |
 | `scripts/x6100_bt_hfp_test.sh` | test whether a Bluetooth headset mic reaches Linux (HFP, mSBC / CVSD); 2026-10-31: no |
 | `docs/x6100_control_interface.md` | protocol documentation |
 | `docs/x6100_netaudio_design.md` | network audio / wfview design (draft) |
@@ -205,12 +206,36 @@ The GUI must be stopped: it writes the same bus every millisecond.
 
 ## Test setup and thanks
 
-Development and the pictures above are done on an X6100 that boots the operating
-system and GUI image by Giovanni Ricciardi IU1WXY
-([github.com/IU1WXY](https://github.com/IU1WXY)), with the stock Xiegu baseband
-(BASE 1.1.9). `scripts/x6100_ui.sh stop` stops his GUI so that `x6100_trx` owns the
-baseband, and `start` brings it back. Many thanks to IU1WXY for a well-kept image to
-boot from. libx6100 contains no code from it.
+Since 2026-11-07 development runs on an X6100 that boots the open **OpenX6X00** image
+([github.com/Guru-RF/OpenX6X00](https://github.com/Guru-RF/OpenX6X00)), with the stock
+Xiegu baseband (BASE 1.1.9). `scripts/x6100_ui.sh stop` stops its GUI so that
+`x6100_trx` owns the baseband, and `start` brings it back; `x6100_ui.sh boot trx`
+starts x6100_trx at boot instead of the GUI (our own `/etc/init.d/S96x6100_trx`, no file
+of the image changed), `boot gui` goes back.
+
+Until then it ran on the operating system and GUI image by Giovanni Ricciardi IU1WXY
+([github.com/IU1WXY](https://github.com/IU1WXY)), and most of the pictures above were made
+on it. Many thanks to IU1WXY for a well-kept image to boot from. libx6100 contains no code
+from it.
+
+### Why the IU1WXY image was left
+
+Not for its quality, but because x6100_trx could no longer be used on it the way it is
+meant to be:
+
+1. **No ssh in version 0.2 (2026-11-07).** The radio answers on the web ports (80, 8080,
+   8081, 8443) and 50001 only; port 22 is gone. x6100_trx is deployed, started, watched
+   and debugged over ssh (`build.sh deploy`, the console, the logs), so without ssh it
+   cannot be worked on.
+2. **The image checks its own files.** Starting x6100_trx at boot by putting it in place
+   of the GUI binary made the image refuse to start: "This firmware has been modified,
+   reinstall it from x6100-link.it". That check is the author's choice for his image;
+   working around it is not something to do or to ask others to do.
+3. **The image is closed (since v0.128).** How it starts programs, and whether ssh or an
+   autostart hook will come back, cannot be seen or changed from outside.
+
+OpenX6X00 is open (LGPL-2.1, the image GPLv3): ssh is there, the init scripts can be read,
+and x6100_trx starts at boot with a script of its own next to the image's.
 
 ## References
 
@@ -220,7 +245,8 @@ from them: register facts and ideas only, credited in the docs where they are us
 - **OpenX6X00** by Joeri Van Dooren ON6URE / Guru-RF
   ([github.com/Guru-RF/OpenX6X00](https://github.com/Guru-RF/OpenX6X00),
   [openx6x00.org](https://openx6x00.org/), LGPL-2.1, the image GPLv3): open firmware
-  for the X6100 and X6200, the open continuation of the R1CBU / x6100_gui line. Used for:
+  for the X6100 and X6200, the open continuation of the R1CBU / x6100_gui line, and the
+  image x6100_trx runs on since 2026-11-07. Used for:
   the birdie scan design comparison (`src/birdie.c`), the TX audio ranges, and the note
   that baseband I2C writes can fail and need resending (`src/base_guard.h`).
 - **X6100Control** by Georgy Dyuldin R2RFE
@@ -233,7 +259,7 @@ from them: register facts and ideas only, credited in the docs where they are us
   ([github.com/gdyuldin/x6100_gui](https://github.com/gdyuldin/x6100_gui), LGPL-2.1):
   registers added after 2023, the CI-V cross-check (`docs/x6100_civ.md`).
 - **IU1WXY image** by Giovanni Ricciardi IU1WXY (closed from v0.128): the image this
-  is developed on, and the idea of a birdie scan with an automatic notch, from its
+  was developed on until 2026-11-07, and the idea of a birdie scan with an automatic notch, from its
   public release notes (v0.128). Its screens are not reproduced.
 - **wfview** by Elliott Liggett W6EL, Phil Taylor M0VSE and Roeland Jansen
   ([wfview.org](https://wfview.org/), [gitlab.com/eliggett/wfview](https://gitlab.com/eliggett/wfview)):

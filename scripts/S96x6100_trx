@@ -1,0 +1,74 @@
+#!/bin/sh
+#
+# S96x6100_trx - start x6100_trx at boot instead of the GUI, on OpenX6X00 (2026-11-07)
+#
+# Only when /etc/x6100/boot.trx exists (x6100_ui.sh boot trx; x6100_ui.sh boot gui
+# removes it): runs after S95gui, stops the GUI loop with x6100_ui.sh stop (which also
+# starts the wfserver watcher), then x6100_trx detached, its output in /tmp/x6100_trx.log.
+# When x6100_trx ends (PWR, quit) the GUI comes back (x6100_ui.sh start), so the radio is
+# never left with a dark screen. No file of the image is changed: this script is ours.
+#
+# Installed by build.sh deploy as /etc/init.d/S96x6100_trx. Busybox sh: POSIX only.
+#
+
+readonly C_FLAG="/etc/x6100/boot.trx"
+readonly C_UI="/root/x6100_ui.sh"
+readonly C_TRX="/root/x6100_trx"
+readonly C_LOG="/tmp/x6100_trx.log"
+readonly C_PID="/var/run/x6100_trx_boot.pid"
+
+#
+# Start x6100_trx in place of the GUI, when chosen
+#
+
+boot_start() {
+	if [ ! -f "${C_FLAG}" ]; then
+		return 0
+	fi
+
+	if [ ! -x "${C_TRX}" ] || [ ! -x "${C_UI}" ]; then
+		printf '%s\n' "x6100_trx: ${C_TRX} or ${C_UI} missing, the GUI stays"
+		return 0
+	fi
+
+	printf '%s' 'Starting x6100_trx: '
+	"${C_UI}" stop > /dev/null 2>&1 || true
+
+	# A detached shell runs x6100_trx and brings the GUI back when it ends
+	setsid sh -c "\"${C_TRX}\" >> \"${C_LOG}\" 2>&1 < /dev/null; \"${C_UI}\" start > /dev/null 2>&1" \
+		< /dev/null > /dev/null 2>&1 &
+	printf '%s\n' "$!" > "${C_PID}"
+	printf '%s\n' 'OK'
+}
+
+#
+# Stop x6100_trx (it saves its state on SIGTERM); the GUI comes back
+#
+
+boot_stop() {
+	if pidof x6100_trx > /dev/null 2>&1; then
+		printf '%s' 'Stopping x6100_trx: '
+		killall x6100_trx 2> /dev/null || true
+		printf '%s\n' 'OK'
+	fi
+
+	rm -f "${C_PID}"
+}
+
+case "${1:-}" in
+	start)
+		boot_start
+		;;
+	stop)
+		boot_stop
+		;;
+	restart)
+		boot_stop
+		sleep 1
+		boot_start
+		;;
+	*)
+		printf 'usage: %s start|stop|restart\n' "$0" >&2
+		exit 1
+		;;
+esac

@@ -5,7 +5,9 @@
 # Supports these images:
 #   stock Xiegu   x6100_ui_v100, supervised by monit (/etc/monitrc, poll 10 s)
 #   R1CBU-based   x6100_gui, respawned by the /usr/sbin/x6100_daemon shell loop
-#   IU1WXY        /usr/sbin/x6100-iu1wxy-gui, started from an init script
+#   IU1WXY        /usr/sbin/x6100-iu1wxy-gui, started from an init script (closed image,
+#                 left 2026-11-07)
+#   OpenX6X00     x6100_gui in the x6100_daemon loop (S95gui), as R1CBU-based
 #
 # After stopping, checks that nothing holds the display (/dev/dri): x6100_trx
 # needs to be DRM master, else "display not available (Permission denied)".
@@ -19,6 +21,7 @@
 #
 # Usage: x6100_ui.sh stop|start|status
 #        x6100_ui.sh wfserver on|off    autostart on (and start now) / off (and stop now)
+#        x6100_ui.sh boot trx|gui      at boot x6100_trx (S96x6100_trx) or the GUI
 #
 
 set -eu
@@ -37,6 +40,8 @@ readonly C_WFS_OFF="/etc/x6100/wfserver.off"
 readonly C_WFS_PID="/var/run/x6100_wfserver.pid"
 readonly C_WFS_LOG="/tmp/wfserver.log"
 readonly C_CIV_LINK="/tmp/x6100-civ"
+readonly C_BOOT_TRX="/etc/x6100/boot.trx"	# S96x6100_trx starts x6100_trx at boot when it exists
+readonly C_BOOT_INIT="/etc/init.d/S96x6100_trx"
 
 #
 # Print the PIDs of shell processes running the respawn loop
@@ -323,6 +328,7 @@ ui_status() {
 
 	printf '%-17s %s\n' 'monit:' "$(pidof monit || printf '%s' 'not running')"
 	printf '%-17s %s\n' 'display held by:' "$(dri_holders | tr '\n' ' ')"
+	printf '%-17s %s\n' 'boot:' "$([ -f "${C_BOOT_TRX}" ] && printf '%s' 'x6100_trx (S96x6100_trx)' || printf '%s' 'the GUI')"
 
 	L_WHY="$(wfs_why_not)"
 	L_PID="$(wfs_pid)"
@@ -367,12 +373,34 @@ case "${1:-}" in
 				;;
 		esac
 		;;
+	boot)
+		case "${2:-}" in
+			trx)
+				if [ ! -x "${C_BOOT_INIT}" ]; then
+					printf '%s\n' "error: ${C_BOOT_INIT} missing (build.sh deploy installs it)" >&2
+					exit 1
+				fi
+
+				mkdir -p "${C_BOOT_TRX%/*}"
+				: > "${C_BOOT_TRX}"
+				printf '%s\n' 'boot: x6100_trx from the next start (the GUI when it quits)'
+				;;
+			gui)
+				rm -f "${C_BOOT_TRX}"
+				printf '%s\n' 'boot: the GUI from the next start'
+				;;
+			*)
+				printf 'usage: %s boot trx|gui\n' "$0" >&2
+				exit 1
+				;;
+		esac
+		;;
 	wfloop)		# internal: the detached watcher started by wfs_start
 		printf '%s\n' "$$" > "${C_WFS_PID}"
 		wfs_loop
 		;;
 	*)
-		printf 'usage: %s stop|start|status|wfserver on|off\n' "$0" >&2
+		printf 'usage: %s stop|start|status|wfserver on|off|boot trx|gui\n' "$0" >&2
 		exit 1
 		;;
 esac
