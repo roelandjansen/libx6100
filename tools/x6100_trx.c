@@ -7674,10 +7674,10 @@ static uint32_t rgb_dim(uint32_t c, float f)
 
 //
 // Draw it in columns 0 .. w - 1 of the waterfall area (y0, h); cursor_x: the VFO column
-// on the front line (outside 0 .. w - 1: none)
+// on the front line (outside 0 .. w - 1: none); tune: also the tune line across the floor
 //
 
-static void wf3d_draw(x6100_lcd_t *lcd, int y0, int h, int w, int cursor_x)
+static void wf3d_draw(x6100_lcd_t *lcd, int y0, int h, int w, int cursor_x, bool tune)
 {
 	const float zstep = 0.022f, sb = 1.0f / (1.0f + zstep * (WF3D_N - 1));	/* the back line's scale */
 	const float yf = (float) (y0 + h - 3), yb = (float) y0 + (float) h * 0.22f;	/* front, back baselines */
@@ -7755,6 +7755,11 @@ static void wf3d_draw(x6100_lcd_t *lcd, int y0, int h, int w, int cursor_x)
 			prev = ytop[x];
 		}
 	}
+
+	// While tuning (and TUNE_LINE_MS after): the VFO from the front to the back of the floor,
+	// in front of the ridges, as the tune line of the flat waterfall (2026-11-07)
+	if (tune && cursor_x >= 0 && cursor_x < w)
+		x6100_lcd_line(lcd, cursor_x, yfi, (int) lroundf(cx + ((float) cursor_x - cx) * sb), ybi, 2, SCR_WARN);
 
 	if (cursor_x >= 0 && cursor_x < w)	/* the VFO on the front line */
 		x6100_lcd_vline(lcd, cursor_x, yfi - 6, yfi, SCR_WARN);
@@ -8000,6 +8005,12 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 	const bool portrait = lcd->h > lcd->w;
 
 	tune_line_restore(lcd);	/* the waterfall under last frame's tune line, before anything moves it */
+
+	// A changed frequency shows the tune line for TUNE_LINE_MS (flat and 3D waterfall)
+	if (rx->freq != g_tl_freq) {
+		g_tl_until = g_tl_freq != 0 ? now_ms() + TUNE_LINE_MS : 0;
+		g_tl_freq = rx->freq;
+	}
 
 	//
 	// Layout geometry: the scope under the landscape top, or lower in portrait
@@ -8527,7 +8538,11 @@ scope:
 	const int cur_x = f_to_x(&v, rx->freq);
 	const bool pnl = panel_open(rx);
 
-	if (wf3d && (new_line || g_wf3d_dirty || cur_x != wf3d_cx || pnl != wf3d_panel)) {
+	static bool wf3d_tune;
+	const bool tune = now_ms() < g_tl_until;
+
+	if (wf3d && (new_line || g_wf3d_dirty || cur_x != wf3d_cx || pnl != wf3d_panel || tune != wf3d_tune)) {
+		wf3d_tune = tune;
 		g_wf3d_dirty = false;
 		wf3d_cx = cur_x;
 		wf3d_panel = pnl;
@@ -8543,7 +8558,7 @@ scope:
 			wf3d_push(t, n);
 		}
 
-		wf3d_draw(lcd, WF_Y, WF_H(lcd), SW, cur_x);
+		wf3d_draw(lcd, WF_Y, WF_H(lcd), SW, cur_x, tune);
 	}
 
 	//
@@ -8879,15 +8894,7 @@ overlays:
 			draw_audio_wf_line(scr, rx, SW, W - SW);
 	}
 
-	//
-	// Tune line: a changed frequency shows it for TUNE_LINE_MS; flat waterfall only (3D has
-	// its own cursor on the floor), not under a panel
-	//
-	if (rx->freq != g_tl_freq) {
-		g_tl_until = g_tl_freq != 0 ? now_ms() + TUNE_LINE_MS : 0;
-		g_tl_freq = rx->freq;
-	}
-
+	// Tune line in the flat waterfall, not under a panel (3D: drawn by wf3d_draw)
 	if (view != 1 && g_sp[SP_WF] && !wf3d && !panel_open(rx) && now_ms() < g_tl_until) {
 		int cx = f_to_x(&v, tx_apart(rx) ? rx_hz(rx) : rx->freq);
 

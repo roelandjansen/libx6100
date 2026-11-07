@@ -408,7 +408,9 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     Tune line: the VFO frequency as a red line through the waterfall while tuning, 10 s
     after the last change (pixels under it restored each frame: no trace left, tested on
     the PC). To check: region uk on 60 m (TX in / between segments, CH), the tune line in
-    CENTER and SCROLL modes, with split / RIT, in portrait, with F3 long.
+    CENTER and SCROLL modes, with split / RIT, in portrait, with F3 long. 2026-11-07: in
+    3D it seemed to scroll away: that was the 3D cursor, 3D had no tune line; now the
+    tune line runs across the 3D floor too.
 
 ## Next steps (suggested order)
 
