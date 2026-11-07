@@ -7900,10 +7900,15 @@ static void marker_hz(const rx_t *rx, int64_t hz[3])
 	hz[2] = tx_hz(rx);
 }
 
-// Shown (scope panel MARKERS: M, M S, M T, M S T): M always
-static bool marker_shown(int i)
+// Shown (scope panel MARKERS: A, A B, A T, A B T): A always. T only where TX is possible:
+// outside the region's allocations without oob x6100_trx refuses TX, so no T there and A
+// and B show as without TX (2026-11-07)
+static bool marker_shown(const rx_t *rx, int i)
 {
 	int m = g_sp[SP_MARKERS];
+
+	if (i == 2 && !g_allow_oob && !in_allocation(tx_hz(rx)))
+		return false;
 
 	return i == 0 || (i == 1 && (m == 1 || m == 3)) || (i == 2 && (m == 2 || m == 3));
 }
@@ -7932,13 +7937,13 @@ static void draw_markers(x6100_lcd_t *lcd, const rx_t *rx, const view_t *v, int 
 		uint32_t on[3];
 		bool lead = true;
 
-		if (!marker_shown(i) || x[i] < LBL_W || x[i] >= sw)
+		if (!marker_shown(rx, i) || x[i] < LBL_W || x[i] >= sw)
 			continue;
 
 		for (int q = 0; q < 3; q++) {
 			int k = prio[q];
 
-			if (!marker_shown(k) || abs(x[k] - x[i]) > 1)
+			if (!marker_shown(rx, k) || abs(x[k] - x[i]) > 1)
 				continue;
 
 			lead = lead && q >= p;	/* the group is drawn by its first in tag order */
@@ -7971,7 +7976,7 @@ static void draw_markers(x6100_lcd_t *lcd, const rx_t *rx, const view_t *v, int 
 	// Out of view: an arrow at that edge in the marker's colour, one slot down per marker
 	//
 	for (int i = 0; i < 3; i++) {
-		if (!marker_shown(i) || (x[i] >= LBL_W && x[i] < sw))
+		if (!marker_shown(rx, i) || (x[i] >= LBL_W && x[i] < sw))
 			continue;
 
 		const char *a = x[i] < LBL_W ? "<<" : ">>";
@@ -9262,7 +9267,7 @@ overlays:
 		for (int i = 1; i < 3; i++) {
 			int mx = f_to_x(&v, hz[i]);
 
-			if (marker_shown(i) && mx >= LBL_W && mx < SW)
+			if (marker_shown(rx, i) && mx >= LBL_W && mx < SW)
 				wf_line_draw(lcd, mx, WF_Y, WF_H(lcd), col[i], true);
 		}
 	}

@@ -438,7 +438,8 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     MARKERS A / A B / A T / A B T (default A B T), `markers a|ab|at|abt`; tagged A = VFO A, B =
     VFO B (the IC-7851 M / S; before: the VFO in use and the other), T = TX; B and T dashed through the
     flat waterfall (no trace left, tested on the PC). No legend chips (the scope top is
-    full). To check: each MARKERS value, A/B swap (A stays on VFO A), split.
+    full). No T where TX is refused (outside the allocations without oob). To check:
+    each MARKERS value, A/B swap (A stays on VFO A), split, GEN without oob (no T).
 
 ## Next steps (suggested order)
 
