@@ -70,7 +70,7 @@ Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
 | F5 | filter FIL1 / FIL2 / FIL3 | filter panel |
 | PTT | hold = TX; tap (< 400 ms) = latch, next press drops | |
 | ATU | tuner in / out; on shows the tuner memory it uses, nearest the TX frequency within 0.5 % (`ATU 14074 L 23 C 112 S 1`), or `ATU ON: NO MEMORY` (straight through until a tune) | tune (keys TX at tune power); the result becomes a tuner memory |
-| LOCK | lock knobs and keys (PTT, volume, mute and squelch (VOL long: SQL) still work; since 2026-11-05) | |
+| LOCK | lock knobs and keys (PTT, volume, mute and squelch (VOL long: SQL) still work; since 2026-11-05); acts on release | screenshot: the screen as seen, PNG in /tmp (`/tmp/x6100_shot_<UTC>.png`), also while locked (2026-11-07) |
 | PWR | display on / off | release after 1.5-4 s: quit; hold 4 s: power off (as the stock UI). TX is dropped and filters saved first |
 | GEN | settings panel: brightness, CAT, wfserver, NTP (MFK turn = row, push = switch or edit, long = default: see Panels; GEN, other key or 10 s idle closes) | status page: IP, uptime, battery, CAT, NTP result, build (any key or 30 s closes) |
 | KEY | key type: straight / paddle / paddle reversed | keyer panel |
@@ -430,6 +430,7 @@ The status line starts with the VFO in use (A / B); with split, RIT or XIT it ad
 | `ifshift_tx 1` | keep the IF shift while transmitting (verified); 0: off in TX and in CW |
 | `hold on`, `hold off` | scope HOLD (as CI-V 27 17 from wfview): scope and waterfall frozen, the S-meter goes on; label HOLD; not kept |
 | `bbreset` | reset the baseband (its GPIO reset line, 100 ms) and send it everything again; the calibration is read again (kept when that fails). For a hung baseband: no flow for 5 s shows BASEBAND NOT RESPONDING in red on the screen (redrawn every second), and the console says so once (2026-11-05). Also without a console (started at boot): MFK push while that shows, or `printf 'bbreset\n' > /tmp/x6100_trx.cmd` over ssh; allowed while locked (2026-11-07) |
+| `shot` | screenshot: the screen as it is (landscape, or portrait upright, panels included) as a PNG, `/tmp/x6100_shot_<UTC>.png` (uncompressed, about 1.1 MB; the path in the log); LOCK long does the same; by the command pipe: `printf '%s\n' 'shot' > /tmp/x6100_trx.cmd` (2026-11-07) |
 | `step ch` | 60 m channel steps |
 | `memr` | list the used memory channels |
 | `memr 5`, `memw 5`, `memc 5` | recall / write the VFO into / clear memory channel 5 |

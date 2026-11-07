@@ -430,6 +430,10 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
 43. SQL push (2026-11-07): with the VOL knob on SQL (VOL long) a push sets the squelch just
     above the noise now (the highest bar position of the last second, + 2; toast SQL nn);
     on VOL it still mutes. Verified 2026-11-07.
+44. Screenshot (2026-11-07): `shot` (console, command pipe) or LOCK long writes the screen
+    as seen as a PNG to /tmp/x6100_shot_<UTC>.png (uncompressed, no zlib; tested on the
+    PC: identical to the canvas, landscape and portrait). LOCK short now acts on release.
+    To check: LOCK long, locked and not; shot by pipe; the PNG on the PC; LOCK still locks.
 
 ## Next steps (suggested order)
 

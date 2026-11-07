@@ -167,6 +167,7 @@ static uint64_t g_sql_below;	/* below the threshold since (ms), 0 = not below */
 static int g_bb_reset_fd = -1;		/* line handle, held once requested */
 static bool g_bb_reset_req;		/* console bbreset: done in the main loop */
 #define CMD_FIFO	"/tmp/x6100_trx.cmd"	/* command pipe: console lines without a console */
+static bool g_shot_req;			/* screenshot asked (shot, LOCK long): the main loop takes it */
 static bool g_bb_dead;			/* no flow frames for BB_DEAD_MS: shown on screen */
 
 #define BB_DEAD_MS	5000		/* flow frames come every 35 ms */
@@ -3930,7 +3931,7 @@ static bool has_long(int key)
 		|| key == X6100_KEY_F1 || key == X6100_KEY_F2 || key == X6100_KEY_F3 || key == X6100_KEY_F4 || key == X6100_KEY_F5 || key == X6100_KEY_DFN || key == X6100_KEY_DFL
 		|| key == X6100_KEY_GEN || key == X6100_KEY_AB
 		|| key == X6100_KEY_VM || key == X6100_KEY_AGC || key == X6100_KEY_KEY || key == X6100_KEY_MSG
-		|| key == X6100_KEY_APP || key == X6100_KEY_VOL_PUSH;
+		|| key == X6100_KEY_APP || key == X6100_KEY_VOL_PUSH || key == X6100_KEY_LOCK;	/* LOCK long: screenshot */
 }
 
 static bool on_long_key(rx_t *rx, int key)
@@ -3948,6 +3949,12 @@ static bool on_long_key(rx_t *rx, int key)
 
 	if (send_stop(rx))	/* a message or the SWR scan */
 		return true;
+
+	// LOCK long: a screenshot (2026-11-07), locked or not; LOCK short still locks
+	if (key == X6100_KEY_LOCK) {
+		g_shot_req = true;
+		return true;
+	}
 
 	// VOL long: the VOL knob to VOL / SQL / RFG (short: mute). Locked, VOL / SQL only: the
 	// squelch stays free with the volume (2026-11-05), the RF gain stays locked
@@ -7950,6 +7957,149 @@ static void draw_markers(x6100_lcd_t *lcd, const rx_t *rx, const view_t *v, int 
 	}
 }
 
+
+//
+// Screenshot (2026-11-07): console / pipe `shot` or LOCK long. The canvas as drawn (the
+// screen as seen, portrait upright) as a PNG in /tmp. Uncompressed (deflate stored
+// blocks): no zlib needed, about 1.1 MB for 800 x 480, opens anywhere.
+//
+
+
+static uint32_t png_crc(uint32_t crc, const uint8_t *b, size_t n)
+{
+	static uint32_t table[256];
+
+	if (table[1] == 0) {
+		for (uint32_t i = 0; i < 256; i++) {
+			uint32_t c = i;
+
+			for (int k = 0; k < 8; k++)
+				c = c & 1 ? 0xEDB88320u ^ c >> 1 : c >> 1;
+
+			table[i] = c;
+		}
+	}
+
+	crc = ~crc;
+
+	for (size_t i = 0; i < n; i++)
+		crc = table[(crc ^ b[i]) & 0xFF] ^ crc >> 8;
+
+	return ~crc;
+}
+
+static void png_be32(uint8_t *p, uint32_t v)
+{
+	p[0] = (uint8_t) (v >> 24);
+	p[1] = (uint8_t) (v >> 16);
+	p[2] = (uint8_t) (v >> 8);
+	p[3] = (uint8_t) v;
+}
+
+// One chunk: length, type, data, CRC over type and data
+static bool png_chunk(FILE *fp, const char *type, const uint8_t *d, size_t n)
+{
+	uint8_t h[8], c[4];
+	uint32_t crc = png_crc(0, (const uint8_t *) type, 4);
+
+	png_be32(h, (uint32_t) n);
+	memcpy(h + 4, type, 4);
+	crc = png_crc(crc, d, n);
+	png_be32(c, crc);
+
+	return fwrite(h, 1, 8, fp) == 8 && (n == 0 || fwrite(d, 1, n, fp) == n) && fwrite(c, 1, 4, fp) == 4;
+}
+
+// The canvas as an RGB PNG at path; false on an error
+static bool png_write(const x6100_lcd_t *lcd, const char *path)
+{
+	static const uint8_t sig[8] = { 0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n' };
+	const size_t row = (size_t) lcd->w * 3 + 1, raw = row * (size_t) lcd->h;
+	const size_t nblk = (raw + 65534) / 65535, zlen = 2 + raw + nblk * 5 + 4;
+	uint8_t ihdr[13] = { 0 }, *z = malloc(zlen), *r = malloc(row);
+	uint32_t a = 1, b = 0;	/* Adler-32 of the raw rows */
+	size_t o = 0, left = raw, y = 0, x = row;
+	FILE *fp;
+	bool ok;
+
+	if (z == NULL || r == NULL || (fp = fopen(path, "wb")) == NULL) {
+		free(z);
+		free(r);
+		return false;
+	}
+
+	png_be32(ihdr, (uint32_t) lcd->w);
+	png_be32(ihdr + 4, (uint32_t) lcd->h);
+	ihdr[8] = 8;	/* bit depth */
+	ihdr[9] = 2;	/* RGB */
+
+	z[o++] = 0x78;	/* zlib header: deflate, no dictionary */
+	z[o++] = 0x01;
+
+	// Stored blocks of at most 65535 bytes, filled from the rows (filter 0 + RGB)
+	while (left > 0) {
+		size_t n = left > 65535 ? 65535 : left;
+
+		z[o++] = left == n ? 1 : 0;
+		z[o++] = (uint8_t) n;
+		z[o++] = (uint8_t) (n >> 8);
+		z[o++] = (uint8_t) ~n;
+		z[o++] = (uint8_t) (~n >> 8);
+
+		for (size_t i = 0; i < n; i++) {
+			if (x == row) {
+				const uint32_t *p = lcd->pix + y * (size_t) lcd->w;
+
+				r[0] = 0;
+
+				for (int k = 0; k < lcd->w; k++) {
+					r[1 + k * 3] = (uint8_t) (p[k] >> 16);
+					r[2 + k * 3] = (uint8_t) (p[k] >> 8);
+					r[3 + k * 3] = (uint8_t) p[k];
+				}
+
+				x = 0;
+				y++;
+			}
+
+			z[o] = r[x++];
+			a = (a + z[o]) % 65521;
+			b = (b + a) % 65521;
+			o++;
+		}
+
+		left -= n;
+	}
+
+	png_be32(z + o, b << 16 | a);
+	o += 4;
+
+	ok = fwrite(sig, 1, 8, fp) == 8 && png_chunk(fp, "IHDR", ihdr, 13) && png_chunk(fp, "IDAT", z, o)
+		&& png_chunk(fp, "IEND", NULL, 0);
+	ok = fclose(fp) == 0 && ok;
+	free(z);
+	free(r);
+	return ok;
+}
+
+// Take the screenshot: /tmp/x6100_shot_<UTC>.png; says where on the console / log
+static void shot_take(const x6100_lcd_t *lcd)
+{
+	char path[64];
+	time_t now = time(NULL);
+	struct tm tm;
+
+	gmtime_r(&now, &tm);
+	strftime(path, sizeof(path), "/tmp/x6100_shot_%Y%m%dT%H%M%SZ.png", &tm);
+
+	if (png_write(lcd, path)) {
+		printf("\nscreenshot: %s\n", path);
+		toast("SCREENSHOT");
+	} else {
+		fprintf(stderr, "\nscreenshot: %s not written\n", path);
+		toast("SCREENSHOT FAILED");
+	}
+}
 // A panel or page open: they are drawn for landscape, so portrait turns back meanwhile
 static bool panel_open(const rx_t *rx)
 {
@@ -9251,6 +9401,12 @@ static bool console_token(rx_t *rx, const char *t)
 	if (strcasecmp(t, "oob") == 0) {
 		g_allow_oob = true;
 		return true;
+	}
+
+	// shot: a screenshot of the screen as it is, PNG in /tmp (also LOCK long)
+	if (strcasecmp(t, "shot") == 0) {
+		g_shot_req = true;
+		return false;
 	}
 
 	// bbreset: reset the baseband (GPIO line) and send it everything again (main loop)
@@ -13119,6 +13275,15 @@ int main(int argc, char **argv)
 
 			g_lock_auto = false;
 			dirty = true;
+		}
+
+		// Screenshot (shot, LOCK long): the canvas as last drawn
+		if (g_shot_req) {
+			if (scr.on)
+				shot_take(&scr.lcd);
+
+			g_shot_req = false;
+			dirty = true;	/* the toast */
 		}
 
 		if (scr.on && (new_frame || dirty) && t - last_disp >= DISP_MS) {
