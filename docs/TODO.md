@@ -87,8 +87,10 @@ Status: 2026-11-06 (v0.17.9). Summary and next steps: `STATUS.md`.
   off: does the comb on 14064 / 70352 kHz move or go? Third scan 2026-11-07 with the
   display off, battery only, no USB: every birdie from 16 dB the same (frequency and
   strength), the comb too: the source is inside the radio (WiFi still on; next test: WiFi
-  and Bluetooth off: `birdiescan all quiet` does that from the console, WiFi back on after
-  it). A question for Jin too. 6 m and
+  and Bluetooth off: `birdiescan all quiet`). Fourth scan 2026-11-07, WiFi and Bluetooth
+  off too: unchanged (119 of 130 the same, the comb to the dB). Display, supply, USB,
+  WiFi and BT ruled out: the comb is the radio's own (R16 clocks, a regulator, or the
+  baseband); the question is with Jin (From Xiegu). 6 m and
   10 m held many weak ones (10-15 dB): they came and went between the scans (noise), so
   the scan threshold is 16 dB now (was 10), and weaker ones are dropped when read.
 - LAN and CAT indicators under the scope clock (2026-11-03): LAN while a wfview client is
@@ -370,6 +372,11 @@ under GEN until a better key turns up.
   measured; ask under which terms the protocol may be used / published in libx6100
   (GPL); test the beta CI-V against `x6100_civ_compare.md` (send him that list first,
   so the rewrite can cover the known gaps: 07 A0, 0F 10-12, 1C 03).
+- Birdie comb (2026-11-07), a question for Jin: on every band a comb of about 7.58 kHz
+  spacing (40 m 7028.4 / 7043.6, 20 m 14041.7 / 14064.4 at 43 dB, 4 m 70337.3 / 70344.8
+  / 70352.4 at 54 dB / 70375.2 / 70382.7), the same with the display off, on battery, no
+  USB, WiFi and Bluetooth off. Which oscillator or regulator in the radio runs at, or
+  modulates with, about 7.58 kHz? Strongest single ones: 21339.3 (48 dB), 51165.4 (53 dB).
 
 ## Parked
 
