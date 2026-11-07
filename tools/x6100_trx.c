@@ -8842,6 +8842,18 @@ overlays:
 	// Baseband watchdog: no flow (and so no new scope lines), red in the middle of the
 	// waterfall, with what to do; the screen is redrawn every second meanwhile
 	//
+	// The box sits in the waterfall area, so it is part of the waterfall: when the baseband
+	// answers again the whole waterfall (stale since the hang) is cleared, else the box
+	// scrolled down with the new lines (2026-11-07)
+	static bool bb_was_dead;
+
+	if (bb_was_dead && !g_bb_dead) {
+		x6100_lcd_fill(lcd, 0, WF_Y, W, WF_H(lcd), 0x000000);
+		wf3d_clear();
+	}
+
+	bb_was_dead = g_bb_dead;
+
 	if (g_bb_dead) {
 		static const char *l1 = "BASEBAND NOT RESPONDING", *l2 = "CONSOLE: BBRESET, ELSE A POWER CYCLE";
 		int w1 = x6100_lcd_text_width(l1, 3), w2 = x6100_lcd_text_width(l2, 2);

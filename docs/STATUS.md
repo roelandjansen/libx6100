@@ -108,7 +108,7 @@ Verified on the radio:
 - birdie scans: repeatable from 16 dB, the same with display off, battery, no USB, WiFi
   and BT off (2026-11-06 / 07); the WiFi symbol (2026-11-07)
 - bbreset: the baseband resets over its GPIO line and comes back (2026-11-05, on a
-  healthy baseband; not yet on a real hang)
+  healthy baseband; on a real hang 2026-11-07: BASEBAND NOT RESPONDING, bbreset, back)
 - portrait layout (rotation 180, GEN row and command line, auto lock, frame rate) and the
   console help (2026-11-05)
 - tuning range: LW 198 kHz received (MW bleeds through at 77.5 kHz), RX and TX at 75 MHz
@@ -349,7 +349,9 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
 30. (done) Portrait: rotation 180, scope and waterfall, the GEN row and the command line,
     the auto lock, the frame rate, and landscape while a panel is open (portrait again
     when it closes or times out) verified 2026-11-05.
-31. Next baseband hang: `bbreset` first, and note time and what ran.
+31. (done 2026-11-07) A real baseband hang: BASEBAND NOT RESPONDING, `bbreset` brought it
+    back. The red box then scrolled down with the new waterfall lines: the waterfall is
+    now cleared when the baseband answers again. What ran before the hang: not noted.
 
 32. (done) VOL knob: VOL / SQL / RFG switching, the fall-back to VOL after 10 s, mute (also
     locked) and the portrait footer verified 2026-11-05. Locked, the knob does VOL and
@@ -415,7 +417,7 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     colour (half transparent was too faint), the gaps show the signal. Squelch from
     wfview: the squelch muted the speaker but not wfview (the codec capture is before
     the RX volume); Mic1 capture off did not do it (wfview still open); now the digital
-    AIF1 ADC capture switch goes off while closed (to check). SQL both ways verified:
+    AIF1 ADC capture switch goes off while closed: wfview silent, verified. SQL both ways verified:
     wfview's SQ slider moves the radio's marker, the radio's SQL moves wfview's slider
     (2026-11-07).
 
