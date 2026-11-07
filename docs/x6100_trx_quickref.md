@@ -303,8 +303,8 @@ kill or a power loss keeps them; a row set in `x6100_trx.conf` cannot be changed
 | CI-V ADDRESS | IC-705 A4 (default) / X6100 61 (wfview with `contrib/wfview/X6100.rig`); `civaddr` in the conf fixes it | at once |
 | CAT MEMORIES | READ ONLY (default) / READ / WRITE: may a CAT client (wfview, rigctl) write and clear memory channels (09, 0B, 1A 00 with content)? Read only: those answer NG, reading and using channels (08, 0A, 1A 00) still works; `catmem` in the conf fixes it | at once |
 | CAT CLOCK | IF NOT SYNCED (default) / OFF / ON: may a CAT client (wfview Set Clock) set the clock? If not synced: only while NTP does not keep it (unknown, set by hand or by CAT, the OS without a kernel sync); the hint says whether it may now. Otherwise NG; `cattime` in the conf fixes it | at once |
-| DATA OFF MOD | TX audio in SSB / AM / FM: MIC (default) / USB (the codec: audio from Linux, wfserver); PTT key and CAT PTT, the hand mic is always MIC; also CI-V 1A 05 0118; `modin` in the conf fixes both rows | at once |
-| DATA MOD | the same for USB-D / LSB-D: USB (default) / MIC; CI-V 1A 05 0119 | at once |
+| DATA OFF MOD | TX audio in SSB / AM / FM: MIC (default) / USB (the codec: audio from Linux, wfserver) / LAN (the codec when CAT keys, e.g. wfview over wfserver; the mic when the PTT key keys: local and remote without switching; 2026-11-07); push edits, turn picks, hold: default; the hand mic PTT is always MIC; also CI-V 1A 05 0118 (00 MIC, 01 USB, 03 = LAN as the IC-705 WLAN, 02 MIC,USB also gives LAN); `modin` in the conf fixes both rows | at once |
+| DATA MOD | the same for USB-D / LSB-D: USB (default) / MIC / LAN; CI-V 1A 05 0119 | at once |
 | WFSERVER | ON / OFF (ON), N/A when not installed: runs `x6100_ui.sh wfserver on\|off` (autostart while x6100_trx serves the CI-V pty, which is always on); MFK hold starts it (also when x6100_trx was not started by `x6100_ui.sh stop`); the second column shows RUNNING, NOT RUNNING, STOPPING or NEEDS THE CI-V PTY (catpty off) | at once (off: up to 10 s) |
 | NTP SYNC | AT START / OFF | next start |
 | WIFI | ON / OFF (NetworkManager); shows network, IP and signal | at once |
@@ -407,7 +407,7 @@ The status line starts with the VFO in use (A / B); with split, RIT or XIT it ad
 | `catmem ro`, `catmem rw` | CAT and memory channels: ro (default) lets clients read and use them only, write / clear (09, 0B, 1A 00 with content) answer NG; rw as an Icom; also the GEN row CAT MEMORIES (state); in the settings file it fixes that row |
 | `cattime off`, `cattime unsynced`, `cattime on` | CAT and the clock (1A 05 0165 / 0166 / 0170): unsynced (default) only while NTP does not keep it, off never, on always; also the GEN row CAT CLOCK (state); in the settings file it fixes that row |
 | `vfofast on`, `vfofast off` | faster tuning when the VFO knob turns fast (default on): steps up to 1 kHz x2, x5, x10 by the dial speed; also the GEN row VFO SPEED (state); in the settings file it fixes that row |
-| `modin mic usb` | TX audio input DATA OFF MOD, DATA MOD: mic or usb (the codec, a Linux program such as wfserver); also the GEN rows (state); in the settings file it fixes them |
+| `modin mic usb` | TX audio input DATA OFF MOD, DATA MOD: mic, usb (the codec, a Linux program such as wfserver) or lan (the codec when CAT keys, the mic for the PTT key); also the GEN rows (state); in the settings file it fixes them |
 | `ntp <server>`, `ntp on`, `ntp off` | NTP sync at start (settings file) |
 | `bt on`, `bt off` | Bluetooth as last set on the GEN row BLUETOOTH, applied at start (state; without it the image's choice stays) |
 | `btauto 70:26:05:C0:19:7B`, `btauto off` | the Bluetooth headset connected again by itself (state; set by the GEN row BT DEVICE) |
@@ -578,7 +578,7 @@ nothing changes until a value is set. Ranges and register layout as in X6100Cont
 
 While transmitting, the top left of the arc meter shows where the TX audio comes from
 (2026-11-07): MIC INT, MIC AUTO, MIC HAND (red: the internal mic is not used then), USB
-(GEN DATA OFF MOD / DATA MOD on USB with the PTT key or CAT), CW, MSG (a message being
+(GEN DATA OFF MOD / DATA MOD on USB with the PTT key or CAT), LAN (on LAN, keyed by CAT), CW, MSG (a message being
 sent), TUNE. The hand mic's own PTT always takes the mic row's choice.
 
 | Value | Range (default) | Register |

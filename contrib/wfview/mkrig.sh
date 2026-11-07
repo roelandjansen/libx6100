@@ -55,6 +55,7 @@ BEGIN {
 		want["Modes", a[i]] = 1
 	want["Inputs", "MIC"] = 1
 	want["Inputs", "USB"] = 1
+	want["Inputs", "WLAN"] = 1	# x6100_trx LAN: CAT PTT sends the network audio, the PTT key the mic
 	want["Preamps", "0"] = 1
 	want["Preamps", "1"] = 1
 	# The record field that names it

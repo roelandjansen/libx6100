@@ -384,7 +384,13 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     MIC on HAND): while transmitting, top left of the dial MIC INT / AUTO / HAND (red),
     USB, CW, MSG, TUNE, landscape and portrait. To check: PTT key with MIC AUTO and
     HAND, a DATA mode with USB, CW, a message. OOB now also in TX (under the source) and
-    in portrait: check with --oob outside the band.
+    in portrait: verified 2026-11-07.
+40. LAN as TX audio input (2026-11-07): GEN DATA OFF MOD / DATA MOD MIC / USB / LAN;
+    LAN: CAT PTT (wfview over wfserver) sends the codec (network audio), the PTT key and
+    the hand mic the mic, so local and remote work without switching. CI-V 1A 05 0118 /
+    0119: 03 = LAN (IC-705 WLAN), X6100.rig has WLAN as third input (mkrig.sh). The arc
+    meter shows LAN or the mic. To check: wfview voice TX in USB with LAN (PC audio out,
+    LAN on the meter), then the PTT key (mic); wfview's input menu shows WLAN and sets it.
 
 ## Next steps (suggested order)
 

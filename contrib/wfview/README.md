@@ -44,7 +44,7 @@ data are the IC-705's. Only the identity and what the radio can do differ:
 | Bands | HF, 6 m, 2 m, 70 cm, air, WFM, LF | HF, 60 m, 6 m, 4 m (as the IC-7300 / 7100 files: no band stacking register, the button sets the frequency); Gen 0.1485-75 MHz |
 | Modes | 10 | LSB, USB, AM, CW, FM, CW-R; AM filter up to 6 kHz |
 | Preamp | off, 1, 2 | off, on (Preamp Status max 1) |
-| Inputs | MIC, USB, M/U, WLAN | MIC, USB |
+| Inputs | MIC, USB, M/U, WLAN | MIC, USB, WLAN (x6100_trx LAN: the network audio when wfview keys, the mic for the PTT key; 2026-11-07) |
 | Memories | 100 groups, 1A 00 gg gg cc cc | one bank, channels 1-99, 1A 00 cc cc (MemGroups=0, MemFormat without the group: wfview then sends no group, as for an IC-7300; with the group field it timed out, 2026-11-02) |
 | Memory Contents string | `\\x1a\\00` (the x missing: wfview sends 1A 5C 30 30, answered FA; an upstream bug, 2026-11-02; fix for wfview: `patches/0001-IC-705.rig-fix-Memory-Contents-command-string.patch`, `git am` in a wfview checkout) | `\\x1a\\x00` |
 | AGC (16 12) | as AGC Time Constant (that is 1A 04, 0-13) | as AGC Status, as wfview's IC-7300 file (01 fast, 02 mid, 03 slow; 2026-11-03). The wfview GUI uses neither; its rigctld `AGC` level maps to AGC Time Constant with a x2 scaling that fits neither 16 12 nor hamlib's values: a wfview issue, not one for the rig file |

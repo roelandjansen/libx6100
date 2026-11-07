@@ -426,6 +426,7 @@ typedef struct
 	int txpwr;		/* 0.1 W units */
 	bool mfk_pwr;		/* MFK adjusts TX power instead of RF gain */
 	bool ptt;		/* PTT requested (key held or latched) */
+	bool ptt_cat;		/* that PTT came from CAT (wfview, wfserver, hamlib): DATA (OFF) MOD LAN sends the codec audio */
 	bool ptt_latch;
 	uint64_t ptt_since;
 	bool atu_on;
@@ -596,7 +597,9 @@ enum { CAT_EP_DEV, CAT_EP_PTY, CAT_N };
 static bool g_i2c_down;		/* 2 s of failed I2C writes: TX dropped and refused, still trying */
 static int g_civ_addr = X6100_CIV_ADDR_IC705;	/* conf token civaddr: a4 (IC-705) or 61 (X6100 rig file) */
 static bool g_cat_mem_rw;	/* CAT may write / clear memories (09, 0B, 1A 00): conf token catmem rw; default ro */
-static int g_modin[2] = { 0, 1 };	/* TX audio input, DATA OFF MOD / DATA MOD (1A 05 0118 / 0119): 0 MIC, 1 USB (codec) */
+enum { MODIN_MIC, MODIN_USB, MODIN_LAN };	/* LAN: CAT PTT the codec (network audio), the PTT key / hand mic the mic */
+static int g_modin[2] = { MODIN_MIC, MODIN_USB };	/* TX audio input, DATA OFF MOD / DATA MOD (1A 05 0118 / 0119) */
+static const char *const g_modin_word[3] = { "mic", "usb", "lan" };	/* console / state; CI-V 0 / 1 / 3 (IC-705 WLAN) */
 static char g_ntp_server[64];	/* conf token ntp <server> | off; empty = ntp.conf or pool.ntp.org */
 static int g_bright;		/* backlight level, % (10-100); 0 = leave as the OS set it */
 static unsigned g_conf_set;	/* GEN rows that x6100_trx.conf fixes (bit = row): shown CONF, locked */
@@ -1634,12 +1637,14 @@ static bool tx_usb_in(const rx_t *rx)
 	bool data = mode == X6100_MODE_LSB_DIG || mode == X6100_MODE_USB_DIG;
 	bool cw = mode == X6100_MODE_CW || mode == X6100_MODE_CWR;
 
-	return rx->ptt && !rx->tuning && rx->send == SEND_NONE && !cw && g_modin[data];
+	return rx->ptt && !rx->tuning && rx->send == SEND_NONE && !cw
+		&& (g_modin[data] == MODIN_USB || (g_modin[data] == MODIN_LAN && rx->ptt_cat));	/* LAN: CAT keyed */
 }
 
 //
 // Where the TX audio comes from, shown on the arc meter while transmitting (2026-11-07):
-// MIC INT / HAND / AUTO (TX panel MIC), USB (DATA (OFF) MOD on USB), CW, MSG, TUNE. warn:
+// MIC INT / HAND / AUTO (TX panel MIC), USB or LAN (DATA (OFF) MOD; LAN only when CAT
+// keyed, else the mic), CW, MSG, TUNE. warn:
 // the hand mic is selected, so the internal mic is not used
 //
 
@@ -1660,7 +1665,7 @@ static const char *tx_source(const rx_t *rx, bool *warn)
 		return "CW";
 
 	if (tx_usb_in(rx))
-		return "USB";
+		return g_modin[mode == X6100_MODE_LSB_DIG || mode == X6100_MODE_USB_DIG] == MODIN_LAN ? "LAN" : "USB";
 
 	*warn = rx->micsel == 1;
 	return mic[rx->micsel < 0 || rx->micsel > 2 ? 2 : rx->micsel];
@@ -4139,6 +4144,7 @@ static bool on_ptt(rx_t *rx, int value)
 			return true;
 
 		rx->ptt = true;
+		rx->ptt_cat = false;	/* the PTT key: LAN takes the mic */
 		rx->ptt_since = t;
 		rx->warn = NULL;
 		return true;
@@ -6360,7 +6366,7 @@ static void gen_value(int row, char *s, size_t n)
 		break;
 	case GEN_MODOFF:
 	case GEN_MODDATA:
-		snprintf(s, n, "%s", g_modin[row == GEN_MODDATA] ? "USB" : "MIC");
+		snprintf(s, n, "%s", g_modin[row == GEN_MODDATA] == MODIN_LAN ? "LAN" : g_modin[row == GEN_MODDATA] == MODIN_USB ? "USB" : "MIC");
 		break;
 	case GEN_WFS:
 		snprintf(s, n, "%s", !wfs_installed() ? "N/A" : access(WFS_OFF, F_OK) == 0 ? "OFF" : "ON");
@@ -6434,7 +6440,7 @@ static void gen_hint(int row, char *s, size_t n)
 		break;
 	case GEN_MODOFF:	/* the TX audio a PTT key or CAT PTT uses; the hand mic PTT is always MIC */
 	case GEN_MODDATA:
-		snprintf(s, n, "%s  USB: AUDIO FROM LINUX (WFSERVER)", row == GEN_MODDATA ? "USB-D LSB-D" : "SSB AM FM");
+		snprintf(s, n, "%s  USB: LINUX (WFSERVER)  LAN: CAT PTT USB, KEY MIC", row == GEN_MODDATA ? "USB-D LSB-D" : "SSB AM FM");
 		break;
 	case GEN_WFS:
 		if (!wfs_installed())
@@ -6521,7 +6527,8 @@ static void gen_adjust(int row, int dir, bool def)
 		break;
 	case GEN_MODOFF:	/* MIC <-> USB; default as an Icom: MIC, data USB */
 	case GEN_MODDATA:
-		g_modin[row == GEN_MODDATA] = def ? row == GEN_MODDATA : !g_modin[row == GEN_MODDATA];
+		g_modin[row == GEN_MODDATA] = def ? (row == GEN_MODDATA ? MODIN_USB : MODIN_MIC)
+			: clampi(g_modin[row == GEN_MODDATA] + dir, MODIN_MIC, MODIN_LAN);
 		break;
 	case GEN_WFS: {	/* turn: on / off; hold: on (the default) */
 		char on[] = "on", off[] = "off", sh[] = "sh", ui[] = UI_SH, wfs[] = "wfserver";
@@ -6608,7 +6615,7 @@ static void gen_adjust(int row, int dir, bool def)
 }
 
 // MFK push on a GEN row of two values: the other one (row_toggle); false for a row with
-// more values (brightness, CAT speed, CAT clock, WiFi network, BT device): those edit
+// more values (brightness, CAT speed, CAT clock, mod inputs, WiFi network, BT device): those edit
 static bool gen_toggle(int row)
 {
 	bool on;
@@ -6618,8 +6625,6 @@ static bool gen_toggle(int row)
 	case GEN_VFOFAST:
 	case GEN_CIVADDR:
 	case GEN_CATMEM:
-	case GEN_MODOFF:
-	case GEN_MODDATA:
 	case GEN_NTP:
 		gen_adjust(row, 1, false);	/* these flip whatever the direction */
 		return true;
@@ -9368,19 +9373,25 @@ static bool console_line(rx_t *rx, char *line)
 			continue;
 		}
 
-		// modin <mic|usb> <mic|usb>: TX audio input for DATA OFF MOD and DATA MOD (GEN rows
-		// too; in the conf it fixes them). usb: the codec, played by a Linux program (wfserver)
+		// modin <mic|usb|lan> <mic|usb|lan>: TX audio input for DATA OFF MOD and DATA MOD (GEN
+		// rows too; in the conf it fixes them). usb: the codec, played by a Linux program
+		// (wfserver); lan: the codec when CAT keys (wfview), the mic for the PTT key
 		if (strcasecmp(t, "modin") == 0) {
-			const char *v0 = strtok(NULL, " \t\r\n"), *v1 = strtok(NULL, " \t\r\n");
-			int m0 = v0 == NULL ? -1 : strcasecmp(v0, "mic") == 0 ? 0 : strcasecmp(v0, "usb") == 0 ? 1 : -1;
-			int m1 = v1 == NULL ? -1 : strcasecmp(v1, "mic") == 0 ? 0 : strcasecmp(v1, "usb") == 0 ? 1 : -1;
+			const char *v[2] = { strtok(NULL, " \t\r\n"), NULL };
+			int m[2] = { -1, -1 };
 
-			if (m0 >= 0 && m1 >= 0) {
-				g_modin[0] = m0;
-				g_modin[1] = m1;
+			v[1] = strtok(NULL, " \t\r\n");
+
+			for (int i = 0; i < 2; i++)
+				for (int k = 0; k < 3 && v[i] != NULL; k++)
+					m[i] = strcasecmp(v[i], g_modin_word[k]) == 0 ? k : m[i];
+
+			if (m[0] >= 0 && m[1] >= 0) {
+				g_modin[0] = m[0];
+				g_modin[1] = m[1];
 				g_conf_set |= g_conf_reading ? 1u << GEN_MODOFF | 1u << GEN_MODDATA : 0;
 			} else {
-				fprintf(stderr, "\nmodin: <mic|usb> <mic|usb> (data off, data)\n");
+				fprintf(stderr, "\nmodin: <mic|usb|lan> <mic|usb|lan> (data off, data)\n");
 			}
 
 			continue;
@@ -10229,7 +10240,7 @@ static void state_write(const rx_t *rx)
 	fprintf(fp, "layout %s ", g_layout_portrait ? "portrait" : "landscape");
 	fprintf(fp, "vfofast %s ", g_vfo_fast ? "on" : "off");
 	fprintf(fp, "cattime %s ", g_cat_time == CT_OFF ? "off" : g_cat_time == CT_ON ? "on" : "unsynced");
-	fprintf(fp, "modin %s %s ", g_modin[0] ? "usb" : "mic", g_modin[1] ? "usb" : "mic");
+	fprintf(fp, "modin %s %s ", g_modin_word[g_modin[0]], g_modin_word[g_modin[1]]);
 	fprintf(fp, "ntp %s", strcmp(g_ntp_server, "off") == 0 ? "off" : "on");
 
 	if (g_bright > 0)
@@ -10735,7 +10746,7 @@ static bool cat_get(void *ctx, x6100_civ_item_t item, int vfo, int32_t *v)
 		*v = g_cat_utc_ofs;
 		return true;
 	case X6100_CIV_MOD_IN:		/* vfo 0 DATA OFF MOD, 1 DATA MOD */
-		*v = g_modin[vfo != 0];
+		*v = g_modin[vfo != 0] == MODIN_LAN ? 3 : g_modin[vfo != 0];	/* LAN as the IC-705 WLAN */
 		return true;
 	default:
 		return false;	/* NB, NR, DNF, RIT, other levels */
@@ -10828,7 +10839,10 @@ static bool cat_set(void *ctx, x6100_civ_item_t item, int vfo, int32_t v)
 		if (g_conf_set & (1u << GEN_MODOFF))
 			return false;
 
-		g_modin[vfo != 0] = v != 0;
+		if (v < 0 || v > 3)
+			return false;
+
+		g_modin[vfo != 0] = v == 0 ? MODIN_MIC : v == 1 ? MODIN_USB : MODIN_LAN;	/* 2 (MIC,USB), 3 (WLAN): LAN */
 		break;
 	case X6100_CIV_FREQ:
 		if (v < (int32_t) FREQ_MIN || v > (int32_t) FREQ_MAX)
@@ -10945,6 +10959,7 @@ static bool cat_set(void *ctx, x6100_civ_item_t item, int vfo, int32_t v)
 				return false;
 
 			rx->ptt = true;
+			rx->ptt_cat = true;	/* CAT PTT: LAN takes the codec (network audio) */
 			rx->ptt_latch = true;
 			rx->ptt_since = now_ms();
 			rx->warn = NULL;
