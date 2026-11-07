@@ -11,6 +11,10 @@ Status: 2026-11-07 (v0.17.10). Summary and next steps: `STATUS.md`.
 
 ## Radio
 
+- Faster tuning when the VFO knob turns fast (2026-11-07), as on Icom radios: at a high
+  turning rate the step grows (e.g. 10x, then 100x the set step), back to the set step
+  as soon as the knob slows down; only on the VFO knob, not the MFK; the threshold and
+  factor to tune on the radio (a conf token to switch it off).
 - Band keys (2026-11-02): GEN sits in the band order at its frequency (5450 kHz: 60m,
   GEN, 40m; was after 6m); verified on the radio 2026-11-02.
 - wfview memory window (2026-11-02): as IC-705 (A4) 1A 00 takes the group as two bytes
