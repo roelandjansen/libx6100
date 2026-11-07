@@ -7807,7 +7807,8 @@ static void vline_blend(x6100_lcd_t *lcd, int x, int y0, int y1, uint32_t rgb)
 // Scope markers as on the IC-7851 (2026-11-07): M (red) the VFO in use (RIT included), S
 // (green) the other VFO, T (yellow) the TX frequency. Each a half-transparent line with a
 // lettered tag under the frequency labels; lines on the same column dashed in their
-// colours (M and T together: red / yellow, the usual case). A marker outside the view: an
+// colours (M and T together: red / yellow, the usual case; the tag then T only, as the
+// IC-7851), a single line dashed with gaps. A marker outside the view: an
 // arrow at that edge in its colour (the IC-7851's << for the sub VFO). Columns 0 .. sw - 1.
 //
 
@@ -7819,69 +7820,71 @@ static void draw_markers(x6100_lcd_t *lcd, const rx_t *rx, const view_t *v, int 
 {
 	const uint32_t col[3] = { MARK_M, MARK_S, MARK_T };
 	const char *const name[3] = { "M", "S", "T" };
+	static const int prio[3] = { 2, 0, 1 };	/* the tag a shared column shows: T, then M, then S */
 	const int64_t hz[3] = { (int64_t) rx->freq + (rx->rit ? rx->rit_hz : 0), rx->b_freq, tx_hz(rx) };
 	const int tag_w = 16, tag_h = 17, row_y = SPEC_Y + 20;
-	int x[3], row[3];
+	int x[3], tag_x[3], ntag = 0;
 
 	for (int i = 0; i < 3; i++)
 		x[i] = f_to_x(v, hz[i]);
 
 	//
-	// Lines: the markers on one column (within a pixel) share it, dashed 6 px a colour
+	// Lines and tags, in tag order: the markers on one column (within a pixel) are one
+	// group with one line, dashed 6 px a colour (a single marker: 6 px on, 3 off), and
+	// one tag; a tag that would cover one already drawn drops a row
 	//
-	for (int i = 0; i < 3; i++) {
+	for (int p = 0; p < 3; p++) {
+		int i = prio[p], n = 0, row = 0;
 		uint32_t on[3];
-		int n = 0;
-		bool first = true;
+		bool lead = true;
 
 		if (x[i] < LBL_W || x[i] >= sw)
 			continue;
 
-		for (int k = 0; k < 3; k++) {
-			if (abs(x[k] - x[i]) <= 1) {
-				first = first && k >= i;	/* drawn once, by the first of the group */
-				on[n++] = col[k];
-			}
+		for (int q = 0; q < 3; q++) {
+			int k = prio[q];
+
+			if (abs(x[k] - x[i]) > 1)
+				continue;
+
+			lead = lead && q >= p;	/* the group is drawn by its first in tag order */
+			on[n++] = col[k];
 		}
 
-		if (!first)
+		if (!lead)
 			continue;
 
-		for (int y = SPEC_Y; y < SPEC_Y + SPEC_H; y += 6) {
+		for (int y = SPEC_Y; y < SPEC_Y + SPEC_H; y += n == 1 ? 9 : 6) {
 			int y1 = y + 5 < SPEC_Y + SPEC_H - 1 ? y + 5 : SPEC_Y + SPEC_H - 1;
 
 			vline_blend(lcd, x[i], y, y1, on[(y - SPEC_Y) / 6 % n]);
 		}
+
+		int tx = x[i] - tag_w / 2;
+
+		tx = tx < LBL_W ? LBL_W : tx + tag_w > sw ? sw - tag_w : tx;
+
+		for (int k = 0; k < ntag; k++)
+			row += abs(tag_x[k] - tx) < tag_w + 2 ? 1 : 0;
+
+		tag_x[ntag++] = tx;
+		x6100_lcd_fill(lcd, tx, row_y + row * (tag_h + 2), tag_w, tag_h, col[i]);
+		x6100_lcd_text(lcd, tx + (tag_w - x6100_lcd_text_width(name[i], 2)) / 2, row_y + row * (tag_h + 2) + 2, 2,
+			name[i], 0x000000);
 	}
 
 	//
-	// Tags: M and S on the first row, T on the second; one that would cover another
-	// drops a row. Out of view: the arrow at the edge, one slot down per marker
+	// Out of view: an arrow at that edge in the marker's colour, one slot down per marker
 	//
 	for (int i = 0; i < 3; i++) {
-		row[i] = i == 2 ? 1 : 0;
+		if (x[i] >= LBL_W && x[i] < sw)
+			continue;
 
-		for (int k = 0; k < i; k++)
-			if (row[k] == row[i] && abs(x[k] - x[i]) < tag_w + 2 && x[k] >= LBL_W && x[k] < sw)
-				row[i]++;
-	}
+		const char *a = x[i] < LBL_W ? "<<" : ">>";
+		int ay = SPEC_Y + SPEC_H / 2 - 16 + i * 16, ax = x[i] < LBL_W ? LBL_W + 2 : sw - 4 - x6100_lcd_text_width(a, 2);
 
-	for (int i = 0; i < 3; i++) {
-		int y = row_y + row[i] * (tag_h + 2);
-
-		if (x[i] >= LBL_W && x[i] < sw) {
-			int tx = x[i] - tag_w / 2;
-
-			tx = tx < LBL_W ? LBL_W : tx + tag_w > sw ? sw - tag_w : tx;
-			x6100_lcd_fill(lcd, tx, y, tag_w, tag_h, col[i]);
-			x6100_lcd_text(lcd, tx + (tag_w - x6100_lcd_text_width(name[i], 2)) / 2, y + 2, 2, name[i], 0x000000);
-		} else {
-			const char *a = x[i] < LBL_W ? "<<" : ">>";
-			int ay = SPEC_Y + SPEC_H / 2 - 16 + i * 16, ax = x[i] < LBL_W ? LBL_W + 2 : sw - 4 - x6100_lcd_text_width(a, 2);
-
-			x6100_lcd_fill(lcd, ax - 1, ay - 1, x6100_lcd_text_width(a, 2) + 2, 16, 0x000000);
-			x6100_lcd_text(lcd, ax, ay, 2, a, col[i]);
-		}
+		x6100_lcd_fill(lcd, ax - 1, ay - 1, x6100_lcd_text_width(a, 2) + 2, 16, 0x000000);
+		x6100_lcd_text(lcd, ax, ay, 2, a, col[i]);
 	}
 }
 
