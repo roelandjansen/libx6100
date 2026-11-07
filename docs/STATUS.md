@@ -411,7 +411,8 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     CENTER and SCROLL modes, with split / RIT, in portrait, with F3 long. 2026-11-07: in
     3D it seemed to scroll away: that was the 3D cursor, 3D had no tune line; now the
     tune line runs across the 3D floor too, and on up to the scope (verified, then
-    lengthened).
+    lengthened). The scope's VFO / RX / TX lines are now half transparent: the
+    spectrum shows through them instead of being covered.
 
 ## Next steps (suggested order)
 

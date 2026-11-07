@@ -7783,6 +7783,26 @@ static void draw_oob(x6100_lcd_t *lcd, const rx_t *rx)
 		x6100_lcd_text(lcd, VU_X + 8, VU_Y + 24, 2, "OOB", SCR_WARN);
 }
 
+//
+// A vertical line mixed half and half with what is under it: the scope's VFO / RX / TX
+// line, so the spectrum shows through it (2026-11-07; solid, it covered the signal)
+//
+
+static void vline_blend(x6100_lcd_t *lcd, int x, int y0, int y1, uint32_t rgb)
+{
+	if (x < 0 || x >= lcd->w)
+		return;
+
+	y0 = y0 < 0 ? 0 : y0;
+	y1 = y1 >= lcd->h ? lcd->h - 1 : y1;
+
+	for (int y = y0; y <= y1; y++) {
+		uint32_t *p = lcd->pix + (size_t) y * (size_t) lcd->w + (size_t) x;
+
+		*p = (*p >> 1 & 0x7F7F7F) + (rgb >> 1 & 0x7F7F7F);
+	}
+}
+
 // A panel or page open: they are drawn for landscape, so portrait turns back meanwhile
 static bool panel_open(const rx_t *rx)
 {
@@ -8504,10 +8524,12 @@ scope:
 		int rxx = f_to_x(&v, rx_hz(rx)), txx = f_to_x(&v, tx_hz(rx));
 
 		if (rxx >= 0 && rxx < SW)
-			x6100_lcd_fill(lcd, rxx, SPEC_Y, 2, SPEC_H, 0x3CC83C);
+			for (int k = 0; k < 2; k++)
+				vline_blend(lcd, rxx + k, SPEC_Y, SPEC_Y + SPEC_H - 1, 0x3CC83C);
 
 		if (txx >= 0 && txx < SW) {
-			x6100_lcd_fill(lcd, txx, SPEC_Y, 2, SPEC_H, SCR_WARN);
+			for (int k = 0; k < 2; k++)
+				vline_blend(lcd, txx + k, SPEC_Y, SPEC_Y + SPEC_H - 1, SCR_WARN);
 			x6100_lcd_fill(lcd, txx + 3, SPEC_Y + 44, x6100_lcd_text_width("TX", 2) + 4, 17, 0x000000);
 			x6100_lcd_text(lcd, txx + 5, SPEC_Y + 46, 2, "TX", SCR_WARN);
 		}
@@ -8515,7 +8537,7 @@ scope:
 		int cx = f_to_x(&v, rx->freq);
 
 		if (cx >= 0 && cx < SW)
-			x6100_lcd_vline(lcd, cx, SPEC_Y, SPEC_Y + SPEC_H - 1, SCR_WARN);
+			vline_blend(lcd, cx, SPEC_Y, SPEC_Y + SPEC_H - 1, SCR_WARN);	/* the spectrum shows through */
 		else if (cx < 0)
 			x6100_lcd_text(lcd, LBL_W + 2, SPEC_Y + SPEC_H / 2 - 7, 2, "<", SCR_WARN);
 		else
