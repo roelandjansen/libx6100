@@ -1,6 +1,10 @@
 # libx6100 / x6100_trx — status
 
-Snapshot: 2026-11-06. Last tag: v0.17.9 (2026-11-06; the start names the IP addresses and the
+Snapshot: 2026-11-07. Last tag: v0.17.10 (2026-11-07; x6100_trx goes on when the ssh
+session closes (SIGHUP); the birdie list 1024 entries (256 filled up on 6 m), the scan
+threshold 16 dB, `birdiescan [all] [quiet]` (WiFi and Bluetooth off meanwhile); the WiFi
+symbol (verified); the birdie comb of 7.58 kHz shown to be the radio's own (display,
+supply, USB, WiFi, BT ruled out)), on v0.17.9 (2026-11-06; the start names the IP addresses and the
 wfserver UDP ports (control, CI-V, audio, from wfserver.ini), again when an address or
 the wfserver state changes), on v0.17.8 (2026-11-05; the VOL knob as VOL / SQL / RFG (VOL
 long, back to VOL after 10 s), mute, volume and squelch free under LOCK; the portrait footer in
@@ -87,6 +91,8 @@ Verified on the radio:
 - LAN indicator with wfview over the network; CAT blank with only wfserver; battery
   CHARGING below 100 % (2026-11-04)
 - PRE key short = ATT, long = PRE (2026-11-04)
+- birdie scans: repeatable from 16 dB, the same with display off, battery, no USB, WiFi
+  and BT off (2026-11-06 / 07); the WiFi symbol (2026-11-07)
 - bbreset: the baseband resets over its GPIO line and comes back (2026-11-05, on a
   healthy baseband; not yet on a real hang)
 - portrait layout (rotation 180, GEN row and command line, auto lock, frame rate) and the
