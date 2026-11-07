@@ -429,7 +429,7 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     (and note what ran before it).
 43. SQL push (2026-11-07): with the VOL knob on SQL (VOL long) a push sets the squelch just
     above the noise now (the highest bar position of the last second, + 2; toast SQL nn);
-    on VOL it still mutes. To check: NFM on noise, push: closes; a carrier opens it.
+    on VOL it still mutes. Verified 2026-11-07.
 
 ## Next steps (suggested order)
 
