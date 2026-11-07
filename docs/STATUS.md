@@ -427,6 +427,9 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     waterfall is cleared when the baseband answers again. The pipe verified 2026-11-07
     (vol 30) and bbreset by pipe (2026-11-07). Open: the MFK push at the next real hang
     (and note what ran before it).
+43. SQL push (2026-11-07): with the VOL knob on SQL (VOL long) a push sets the squelch just
+    above the noise now (the highest bar position of the last second, + 2; toast SQL nn);
+    on VOL it still mutes. To check: NFM on noise, push: closes; a carrier opens it.
 
 ## Next steps (suggested order)
 

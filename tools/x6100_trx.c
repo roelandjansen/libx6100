@@ -3373,6 +3373,7 @@ static int *dsp_value(rx_t *rx, int i)
 
 static int *g_row_edit;
 static bool gen_toggle(int row);
+static int sql_from_noise(void);	/* SQL push: the squelch just above the noise */
 
 // The open panel with rows: its row index, the number of rows, its idle timer; NULL none
 static int *row_sel(rx_t *rx, int *n, uint64_t **since)
@@ -3838,7 +3839,18 @@ static bool on_key(rx_t *rx, int key)
 		rx->agc = (x6100_agc_t) ((rx->agc + 1) % 4);
 		break;
 	case X6100_KEY_VOL_PUSH:
-		rx->mute = !rx->mute;
+		// Knob on SQL (VOL long): the squelch just above the noise now (2026-11-07), and
+		// the knob stays on SQL to fine-tune; else mute
+		if (g_vol_fn == 1) {
+			char msg[24];	/* toast() copies it */
+
+			rx->sql = sql_from_noise();
+			g_vol_fn_ms = now_ms();
+			snprintf(msg, sizeof(msg), "SQL %d", rx->sql);
+			toast(msg);
+		} else {
+			rx->mute = !rx->mute;
+		}
 		break;
 	case X6100_KEY_ATU:
 		rx->atu_on = !rx->atu_on;
@@ -5192,6 +5204,39 @@ static void sql_update(const rx_t *rx, double dbm, bool tx)
 		g_sql_below = now_ms();
 	else if (now_ms() - g_sql_below >= SQL_HANG_MS)
 		g_sql_open = false;
+}
+
+//
+// The noise for SQL push (2026-11-07): with the VOL knob on SQL a push sets the squelch
+// just above what comes in now. The highest bar position (meter_frac) of the last second
+// to a full second ago, so a noise peak does not open it again at once.
+//
+
+#define SQL_SET_MARGIN	2	/* SQL above that peak: about a third of an S unit */
+
+static double g_noise_max[2];	/* the highest bar position: this second, the one before */
+static uint64_t g_noise_at;	/* when this second began (ms) */
+
+static void sql_noise_track(double dbm)
+{
+	uint64_t t = now_ms();
+	double fr = meter_frac(dbm);
+
+	if (t - g_noise_at >= 1000) {
+		g_noise_max[1] = g_noise_max[0];
+		g_noise_max[0] = 0.0;
+		g_noise_at = t;
+	}
+
+	g_noise_max[0] = fr > g_noise_max[0] ? fr : g_noise_max[0];
+}
+
+// SQL just above the noise of the last second or two
+static int sql_from_noise(void)
+{
+	double n = g_noise_max[0] > g_noise_max[1] ? g_noise_max[0] : g_noise_max[1];
+
+	return clampi((int) ceil(n * 100.0) + SQL_SET_MARGIN, 1, 100);
 }
 
 //
@@ -12964,6 +13009,9 @@ int main(int argc, char **argv)
 
 			sql_update(&rx, scr.sig_dbm, scr.tx || rx.ptt);
 			sql_capture();	/* the audio to Linux (wfserver) as well */
+
+			if (!scr.tx)
+				sql_noise_track(scr.sig_dbm);	/* for SQL push */
 		}
 
 		if (t - last_meter >= METER_MS && level_n > 0) {
