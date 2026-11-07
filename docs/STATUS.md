@@ -1,6 +1,9 @@
 # libx6100 / x6100_trx — status
 
-Snapshot: 2026-11-07. Last tag: v0.17.11 (2026-11-07; OpenX6X00 (ON6URE) as the base
+Snapshot: 2026-11-07. Last tag: v0.17.12 (2026-11-07; faster VFO tuning when the knob
+turns fast (x2 / x5 / x10 on steps up to 1 kHz, GEN row VFO SPEED, verified); the
+gimmick: a 3D waterfall, scope panel WATERFALL 3D (works)), on v0.17.11 (2026-11-07;
+OpenX6X00 (ON6URE) as the base
 image instead of IU1WXY (README: why); x6100_trx at boot via S96x6100_trx and
 `x6100_ui.sh boot trx|gui`, quit brings the GUI back, power off does not), on v0.17.10
 (2026-11-07; x6100_trx goes on when the ssh
@@ -354,11 +357,10 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     (F3 audio scope, a voice message). Verified: the boot (the GUI first via S95gui, then
     S96x6100_trx switches to x6100_trx), PWR 1.5-4 s (quit) brings the GUI back, PWR held
     4 s powers the radio off without the GUI (the marker /tmp/x6100_trx.poweroff).
-35. Faster VFO tuning and the 3D waterfall (2026-11-07): turn the VFO knob slowly (the
-    set step), then fast (1 kHz step: 2, 5, 10 kHz per detent), turn back (x1 at once);
-    are 12 / 25 / 45 detents per second right for the knob? GEN row VFO SPEED off: fixed
-    step. Scope panel WATERFALL 3D on: the look (landscape, portrait, F3 long), top for
-    the CPU at speed FAST, a panel over it, tuning in a scrolling mode.
+35. Faster VFO tuning and the 3D waterfall (2026-11-07). Verified: VFO SPEED (x2 / x5 /
+    x10 from 12 / 25 / 45 detents per second, the thresholds right for the knob), the 3D
+    waterfall works. Still to check: top for the CPU with 3D at speed FAST, 3D in
+    portrait and with F3 long; a photo for the README.
 
 ## Next steps (suggested order)
 

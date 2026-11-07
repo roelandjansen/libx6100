@@ -1,6 +1,6 @@
 # libx6100 / x6100_trx — to do
 
-Status: 2026-11-07 (v0.17.11). Summary and next steps: `STATUS.md`.
+Status: 2026-11-07 (v0.17.12). Summary and next steps: `STATUS.md`.
 
 ## Display
 
@@ -11,7 +11,7 @@ Status: 2026-11-07 (v0.17.11). Summary and next steps: `STATUS.md`.
 - The gimmick, a 3D waterfall (built 2026-11-07, Yaesu style, as the OpenX6X00 GUI): scope panel row
   WATERFALL 3D, `wf3d on|off` (default off). The last 32 waterfall lines in perspective,
   each a ridge hiding what is behind it, the newest in front; redrawn only for a new
-  line, a shift, a moved cursor or a panel. To check on the radio: CPU (top) with it on,
+  line, a shift, a moved cursor or a panel. Works on the radio (2026-11-07); to check: CPU (top),
   FAST speed; the look in landscape and portrait. Later maybe: the depth (32) and the
   tilt as rows.
 
@@ -25,9 +25,9 @@ Status: 2026-11-07 (v0.17.11). Summary and next steps: `STATUS.md`.
 - Faster tuning when the VFO knob turns fast (built 2026-11-07, as on Icom radios): the
   dial speed (detents within the last 250 ms) multiplies steps up to 1 kHz by 2, 5, 10
   (from 12, 25, 45 detents per second), x1 again as it slows or turns back; only the VFO
-  knob; GEN row VFO SPEED, `vfofast on|off` (default on). To check on the radio: the
-  thresholds (VFO_FAST_X2 / X5 / X10) against the real knob; conf tokens if they differ
-  per hand.
+  knob; GEN row VFO SPEED, `vfofast on|off` (default on). Verified on the radio 2026-11-07,
+  the thresholds (VFO_FAST_X2 / X5 / X10) right for the knob. Later maybe: conf tokens
+  for them if someone wants it otherwise.
 - Band keys (2026-11-02): GEN sits in the band order at its frequency (5450 kHz: 60m,
   GEN, 40m; was after 6m); verified on the radio 2026-11-02.
 - wfview memory window (2026-11-02): as IC-705 (A4) 1A 00 takes the group as two bytes
