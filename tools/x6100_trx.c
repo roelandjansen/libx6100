@@ -7784,28 +7784,9 @@ static void draw_oob(x6100_lcd_t *lcd, const rx_t *rx)
 }
 
 //
-// A vertical line mixed half and half with what is under it: the scope's VFO / RX / TX
-// line, so the spectrum shows through it (2026-11-07; solid, it covered the signal)
-//
-
-static void vline_blend(x6100_lcd_t *lcd, int x, int y0, int y1, uint32_t rgb)
-{
-	if (x < 0 || x >= lcd->w)
-		return;
-
-	y0 = y0 < 0 ? 0 : y0;
-	y1 = y1 >= lcd->h ? lcd->h - 1 : y1;
-
-	for (int y = y0; y <= y1; y++) {
-		uint32_t *p = lcd->pix + (size_t) y * (size_t) lcd->w + (size_t) x;
-
-		*p = (*p >> 1 & 0x7F7F7F) + (rgb >> 1 & 0x7F7F7F);
-	}
-}
-
-//
 // Scope markers as on the IC-7851 (2026-11-07): M (red) the VFO in use (RIT included), S
-// (green) the other VFO, T (yellow) the TX frequency. Each a half-transparent line with a
+// (green) the other VFO, T (yellow) the TX frequency. Each a dashed line (solid colour;
+// half-transparent was too faint on the radio) with a
 // lettered tag under the frequency labels; lines on the same column dashed in their
 // colours (M and T together: red / yellow, the usual case; the tag then T only, as the
 // IC-7851), a single line dashed with gaps. A marker outside the view: an
@@ -7857,7 +7838,7 @@ static void draw_markers(x6100_lcd_t *lcd, const rx_t *rx, const view_t *v, int 
 		for (int y = SPEC_Y; y < SPEC_Y + SPEC_H; y += n == 1 ? 9 : 6) {
 			int y1 = y + 5 < SPEC_Y + SPEC_H - 1 ? y + 5 : SPEC_Y + SPEC_H - 1;
 
-			vline_blend(lcd, x[i], y, y1, on[(y - SPEC_Y) / 6 % n]);
+			x6100_lcd_vline(lcd, x[i], y, y1, on[(y - SPEC_Y) / 6 % n]);	/* solid dashes: the gaps show the signal */
 		}
 
 		int tx = x[i] - tag_w / 2;
