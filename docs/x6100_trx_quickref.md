@@ -395,7 +395,7 @@ The status line starts with the VFO in use (A / B); with split, RIT or XIT it ad
 | `memr` | list the used memory channels |
 | `memr 5`, `memw 5`, `memc 5` | recall / write the VFO into / clear memory channel 5 |
 | `mem 5 7074000 lsb fil1 [tx 7076000 lsb] [dupoff \| dup- 100 \| dup+ 100] [name text]` | set a memory channel (as in memories.conf) |
-| `birdiescan [all]`, `birdiestop`, `birdies`, `birdieclear` | birdie scan (this band / all), stop, list, clear |
+| `birdiescan [all] [quiet]`, `birdiestop`, `birdies`, `birdieclear` | birdie scan (this band / all), stop, list, clear. `quiet`: WiFi and Bluetooth off for the scan (they may be the source), WiFi back on when it is done (Bluetooth if it was on); the ssh session goes with the WiFi, x6100_trx carries on: log in again afterwards |
 | `birdiemarks`, `nobirdiemarks`, `birdienotch`, `nobirdienotch` | birdie ticks, automatic notch on / off |
 | `vfob 7074000 lsb fil1`, `vfo a\|b` | the VFO not in use; which one is in use (state file) |
 | `region r1\|r2\|r3\|nl\|uk` | transmit allocations for the TX check and the OOB marker (default r1); nl and uk also have 4 m (70.0-70.5 MHz); uk has 60 m as WRC-15 for now (its own segments 5258.5-5406.5 kHz not yet in) |

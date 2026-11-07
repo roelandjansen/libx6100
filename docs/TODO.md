@@ -87,7 +87,8 @@ Status: 2026-11-06 (v0.17.9). Summary and next steps: `STATUS.md`.
   off: does the comb on 14064 / 70352 kHz move or go? Third scan 2026-11-07 with the
   display off, battery only, no USB: every birdie from 16 dB the same (frequency and
   strength), the comb too: the source is inside the radio (WiFi still on; next test: WiFi
-  and Bluetooth off). A question for Jin too. 6 m and
+  and Bluetooth off: `birdiescan all quiet` does that from the console, WiFi back on after
+  it). A question for Jin too. 6 m and
   10 m held many weak ones (10-15 dB): they came and went between the scans (noise), so
   the scan threshold is 16 dB now (was 10), and weaker ones are dropped when read.
 - LAN and CAT indicators under the scope clock (2026-11-03): LAN while a wfview client is

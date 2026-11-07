@@ -1331,6 +1331,7 @@ static int g_birdie_full;		/* birdies that found the list full in this scan */
 static bool g_bmarks = true;		/* ticks on the scope */
 static bool g_bnotch;			/* automatic notch; off until checked on the radio */
 static int g_bscan_req;			/* GEN / console: 1 start a scan, -1 stop it (main loop) */
+static bool g_bscan_quiet;		/* console birdiescan ... quiet: WiFi and Bluetooth off meanwhile */
 
 static void passband(const rx_t *rx, int *lo, int *hi);
 
@@ -8171,7 +8172,7 @@ static void help_console(void)
 		"            af3 af6   hold on|off   fixedge <range> <edge> <lo> <hi>\n"
 		"  memory    memr [n]   memw n   memc n   mem n <Hz> <mode> fil<n> [...] [name text]\n"
 		"  messages  msg   msg n cw <text> | voice <file> | clear   msgsend n   msgstop   msgrepeat <s>\n"
-		"  birdies   birdiescan [all]   birdiestop   birdies   birdieclear   birdiemarks   birdienotch\n"
+		"  birdies   birdiescan [all] [quiet]   birdiestop   birdies   birdieclear   birdiemarks   birdienotch\n"
 		"  cat       cat <baud>|off   catpty on|off   civaddr a4|61   catmem ro|rw   cattime off|unsynced|on\n"
 		"            modin mic|usb mic|usb\n"
 		"  system    layout portrait|landscape   portraitrot 0|180   autolock <s>   bright 5-100\n"
@@ -8932,10 +8933,26 @@ static bool console_line(rx_t *rx, char *line)
 			continue;
 		}
 
+		// birdiescan [all] [quiet]: quiet switches WiFi and Bluetooth off for the scan
+		// (they could be the source), and WiFi back on when it is done
 		if (strcasecmp(t, "birdiescan") == 0) {
-			const char *as = strtok(NULL, " \t\r\n");
+			g_bscan_all = false;
+			g_bscan_quiet = false;
 
-			g_bscan_all = as != NULL && strcasecmp(as, "all") == 0;
+			for (int k = 0; k < 2; k++) {
+				const char *as = strtok(NULL, " \t\r\n");
+
+				if (as == NULL)
+					break;
+
+				if (strcasecmp(as, "all") == 0)
+					g_bscan_all = true;
+				else if (strcasecmp(as, "quiet") == 0)
+					g_bscan_quiet = true;
+				else
+					fprintf(stderr, "\nbirdiescan [all] [quiet]: %s?\n", as);
+			}
+
 			g_bscan_req = 1;
 			continue;
 		}
@@ -11333,6 +11350,7 @@ int main(int argc, char **argv)
 	bool new_frame = false;
 	bool dirty = false;
 	uint64_t last_flow_ms = now_ms();	/* last flow frame: the baseband watchdog */
+	bool quiet_on = false;		/* a quiet birdie scan switched WiFi and Bluetooth off */
 	hold_t hold = { .key = -1 };
 	uint64_t pwr_since = 0;	/* PWR pressed at (ms), 0 = not held */
 	const char *pwr_msg = NULL;	/* the PWR hint we put in rx.warn */
@@ -11538,12 +11556,32 @@ int main(int argc, char **argv)
 
 		// Birdie scan asked for (GEN row, console): start / stop here, with rx at hand
 		if (g_bscan_req != 0) {
-			if (g_bscan_req > 0)
-				bscan_start(&rx, g_bscan_all);
-			else
+			if (g_bscan_req > 0 && bscan_start(&rx, g_bscan_all) && g_bscan_quiet) {
+				// birdiescan ... quiet: WiFi and Bluetooth off for the scan, back on after
+				// it (WiFi always, Bluetooth if it was on); the ssh session goes with the
+				// WiFi, x6100_trx goes on without it (2026-11-07)
+				printf("\nbirdie scan: WiFi and Bluetooth off until it is done\n");
+				fflush(stdout);
+				bt_cmd("power", "off");
+				wifi_set(false);
+				quiet_on = true;
+			} else if (g_bscan_req < 0) {
 				bscan_stop(&rx, false);
+			}
 
 			g_bscan_req = 0;
+			g_bscan_quiet = false;
+			dirty = true;
+		}
+
+		if (quiet_on && !bscan_running()) {
+			quiet_on = false;
+			wifi_set(true);
+
+			if (g_bt_power == 1)
+				bt_cmd("power", "on");
+
+			toast("WIFI BACK ON");
 			dirty = true;
 		}
 
