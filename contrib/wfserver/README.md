@@ -150,7 +150,10 @@ Voice TX from wfview needs the radio's TX audio input on LAN (or USB):
    is for the data modes (USB-D, LSB-D); USB or LAN there.
 3. On the radio GEN row DATA OFF MOD then shows LAN. LAN sends the network audio when
    wfview (CAT) keys and the mic when the PTT key or the hand mic keys: local and remote
-   work without switching. While transmitting the arc meter shows LAN or the mic.
+   work without switching. While transmitting the arc meter shows LAN or the mic. First
+   come, first served: a wfview TX stays LAN while the hand mic PTT is pressed, a hand mic
+   TX stays the mic while wfview keys (verified 2026-11-07). The radio's PTT key ends a
+   wfview TX, as it ends any latched TX.
 
 ## Notes
 

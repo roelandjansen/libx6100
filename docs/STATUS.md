@@ -394,7 +394,9 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     2026-11-07: WLAN came out as 00 (MIC): wfserver on the radio builds the CI-V from its
     own X6100.rig (old, no WLAN); build.sh deploy now updates that copy too. The input
     is now named LAN in X6100.rig. Verified 2026-11-07: wfview Data Off = LAN, voice TX
-    from wfview works, LAN on the meter. Still to check: the PTT key on LAN (mic), whether a wfview
+    from wfview works, LAN on the meter; the hand mic on LAN sends the mic. First come,
+    first served: a LAN TX stays LAN while the hand mic PTT is pressed, a hand mic TX
+    stays the mic while wfview keys. Still to check: whether a wfview
     reconnect sends 18 00 again (seen at connect before).
 
 ## Next steps (suggested order)
