@@ -9329,7 +9329,7 @@ static void help_console(void)
 		"            modin mic|usb mic|usb\n"
 		"  system    layout portrait|landscape   portraitrot 0|180   autolock <s>   bright 5-100\n"
 		"            region r1|r2|r3|nl|uk   freqmin freqmax <Hz>   time <UTC>   ntp on|off|<server>\n"
-		"            vfofast on|off   bt on|off   btauto <MAC>|off   bbreset   oob   nolimit\n"
+		"            vfofast on|off   bt on|off   btauto <MAC>|off   bbreset   oob   nooob   nolimit\n"
 		"  help, ?   this list (all of it: docs/x6100_trx_quickref.md)\n");
 }
 
@@ -9455,6 +9455,13 @@ static bool console_token(rx_t *rx, const char *t)
 	// Safety checks off, as --oob / --no-limit (the operator's responsibility)
 	if (strcasecmp(t, "oob") == 0) {
 		g_allow_oob = true;
+		return true;
+	}
+
+	// nooob: the band check on again without a restart (2026-11-07; the conf line oob or
+	// --oob still switch it on at the next start)
+	if (strcasecmp(t, "nooob") == 0) {
+		g_allow_oob = false;
 		return true;
 	}
 
