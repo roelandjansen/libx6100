@@ -520,10 +520,12 @@ typedef struct
 	uint32_t high;
 } seg_t;
 
+#define SEG_MAX		24	/* TX segments per region (uk: 11 on 60 m alone) */
+
 typedef struct
 {
 	const char *name;
-	seg_t seg[12];
+	seg_t seg[SEG_MAX];
 } region_t;
 
 static const region_t g_regions[] = {
@@ -544,8 +546,11 @@ static const region_t g_regions[] = {
 		{ 10100000, 10150000 }, { 14000000, 14350000 }, { 18068000, 18168000 }, { 21000000, 21450000 },
 		{ 24890000, 24990000 }, { 28000000, 29700000 }, { 50000000, 52000000 },
 		{ 70000000, 70500000 } } },	/* 4 m (2026-11-04); no ITU allocation, so not in r1-r3 */
-	{ "uk", {	/* 60 m as WRC-15 here: the UK has its own segments 5258.5-5406.5 kHz (to add) */
-		{ 1810000, 2000000 }, { 3500000, 3800000 }, { 5351500, 5366500 }, { 7000000, 7200000 },
+	{ "uk", {	/* 60 m: the 11 UK segments (Ofcom, Full licence; 2026-11-07), not WRC-15 */
+		{ 1810000, 2000000 }, { 3500000, 3800000 },
+		{ 5258500, 5264000 }, { 5276000, 5284000 }, { 5288500, 5292000 }, { 5298000, 5307000 },
+		{ 5313000, 5323000 }, { 5333000, 5338000 }, { 5354000, 5358000 }, { 5362000, 5374500 },
+		{ 5378000, 5382000 }, { 5395000, 5401500 }, { 5403500, 5406500 }, { 7000000, 7200000 },
 		{ 10100000, 10150000 }, { 14000000, 14350000 }, { 18068000, 18168000 }, { 21000000, 21450000 },
 		{ 24890000, 24990000 }, { 28000000, 29700000 }, { 50000000, 52000000 },
 		{ 70000000, 70500000 } } },	/* 4 m */
@@ -560,7 +565,7 @@ static bool in_allocation(uint32_t hz)
 {
 	const region_t *r = &g_regions[g_region];
 
-	for (int i = 0; i < 12 && r->seg[i].high != 0; i++) {
+	for (int i = 0; i < SEG_MAX && r->seg[i].high != 0; i++) {
 		if (hz >= r->seg[i].low && hz <= r->seg[i].high)
 			return true;
 	}
@@ -3270,10 +3275,13 @@ static void am_mode(rx_t *rx, x6100_mode_t mode)
 //   r1 / r3 / nl: no official channels in the WRC-15 segment (5351.5-5366.5 kHz):
 //       the segment edge for CW, the FT8 frequency and a 3 kHz raster for USB,
 //       as a convenience. The band plan, not this list, says what goes where.
+//   uk: the lower edge of each of the 11 UK segments (Ofcom; 2026-11-07).
 //
 
 static const uint32_t g_ch60_r2[] = { 5330500, 5346500, 5357000, 5371500, 5403500 };
 static const uint32_t g_ch60_wrc[] = { 5351500, 5354000, 5357000, 5360000, 5363000 };
+static const uint32_t g_ch60_uk[] = { 5258500, 5276000, 5288500, 5298000, 5313000, 5333000, 5354000, 5362000,
+	5378000, 5395000, 5403500 };
 
 static bool on_60m(const rx_t *rx)
 {
@@ -3282,9 +3290,11 @@ static bool on_60m(const rx_t *rx)
 
 static void ch60_step(rx_t *rx, int dir)
 {
-	bool r2 = strcmp(g_regions[g_region].name, "r2") == 0;
-	const uint32_t *ch = r2 ? g_ch60_r2 : g_ch60_wrc;
-	int n = r2 ? (int) (sizeof(g_ch60_r2) / sizeof(g_ch60_r2[0])) : (int) (sizeof(g_ch60_wrc) / sizeof(g_ch60_wrc[0]));
+	const char *rn = g_regions[g_region].name;
+	bool r2 = strcmp(rn, "r2") == 0, uk = strcmp(rn, "uk") == 0;
+	const uint32_t *ch = r2 ? g_ch60_r2 : uk ? g_ch60_uk : g_ch60_wrc;
+	int n = r2 ? (int) (sizeof(g_ch60_r2) / sizeof(g_ch60_r2[0])) : uk ? (int) (sizeof(g_ch60_uk) / sizeof(g_ch60_uk[0]))
+		: (int) (sizeof(g_ch60_wrc) / sizeof(g_ch60_wrc[0]));
 	int i = 0;
 
 	// Nearest channel at or above (dir > 0: strictly above) the current frequency
@@ -7939,12 +7949,58 @@ static void draw_portrait(screen_t *scr, const rx_t *rx)
 	}
 }
 
+//
+// Tune line (2026-11-07): while tuning, the VFO (RX) frequency as a line through the
+// flat waterfall, as the cursor on the scope; gone TUNE_LINE_MS after the last change of
+// the frequency. The waterfall lives in the frame buffer and scrolls in place, so the
+// line is drawn last and the pixels under it are put back first thing in the next frame.
+//
+
+#define TUNE_LINE_MS	10000
+
+static struct
+{
+	int x, y0, h, w;	/* where it was drawn (x -1: not drawn), the canvas width then */
+	uint32_t px[800];	/* the waterfall pixels under it */
+} g_tl = { .x = -1 };
+
+static uint64_t g_tl_until;	/* shown until (ms) */
+static uint32_t g_tl_freq;	/* frequency seen last; 0 at start: the first is not a tune */
+
+static void tune_line_restore(x6100_lcd_t *lcd)
+{
+	if (g_tl.x >= 0 && lcd->w == g_tl.w)
+		for (int y = 0; y < g_tl.h; y++)
+			lcd->pix[(size_t) (g_tl.y0 + y) * (size_t) lcd->w + (size_t) g_tl.x] = g_tl.px[y];
+
+	g_tl.x = -1;
+}
+
+static void tune_line_draw(x6100_lcd_t *lcd, int x, int y0, int h)
+{
+	h = h > 800 ? 800 : h;
+
+	if (x < 0 || x >= lcd->w || h <= 0)
+		return;
+
+	for (int y = 0; y < h; y++)
+		g_tl.px[y] = lcd->pix[(size_t) (y0 + y) * (size_t) lcd->w + (size_t) x];
+
+	g_tl.x = x;
+	g_tl.y0 = y0;
+	g_tl.h = h;
+	g_tl.w = lcd->w;
+	x6100_lcd_vline(lcd, x, y0, y0 + h - 1, SCR_WARN);
+}
+
 static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 {
 	x6100_lcd_t *lcd = &scr->lcd;
 	int W = lcd->w;
 	char s[64];
 	const bool portrait = lcd->h > lcd->w;
+
+	tune_line_restore(lcd);	/* the waterfall under last frame's tune line, before anything moves it */
 
 	//
 	// Layout geometry: the scope under the landscape top, or lower in portrait
@@ -8409,7 +8465,7 @@ scope:
 				x6100_lcd_vline(lcd, x, SPEC_Y, SPEC_Y + 2, BAND_OUT);
 		}
 
-		for (int i = 0; i < 12 && rg->seg[i].high != 0; i++) {
+		for (int i = 0; i < SEG_MAX && rg->seg[i].high != 0; i++) {
 			const uint32_t edge[2] = { rg->seg[i].low, rg->seg[i].high };
 
 			for (int k = 0; k < 2; k++) {
@@ -8822,6 +8878,22 @@ overlays:
 
 		if (view == 2)
 			draw_audio_wf_line(scr, rx, SW, W - SW);
+	}
+
+	//
+	// Tune line: a changed frequency shows it for TUNE_LINE_MS; flat waterfall only (3D has
+	// its own cursor on the floor), not under a panel
+	//
+	if (rx->freq != g_tl_freq) {
+		g_tl_until = g_tl_freq != 0 ? now_ms() + TUNE_LINE_MS : 0;
+		g_tl_freq = rx->freq;
+	}
+
+	if (view != 1 && g_sp[SP_WF] && !wf3d && !panel_open(rx) && now_ms() < g_tl_until) {
+		int cx = f_to_x(&v, tx_apart(rx) ? rx_hz(rx) : rx->freq);
+
+		if (cx >= 0 && cx < SW)
+			tune_line_draw(lcd, cx, WF_Y, WF_H(lcd));
 	}
 }
 

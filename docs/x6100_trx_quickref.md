@@ -243,6 +243,7 @@ Values are kept in the last state (see Settings); defaults NR 20, NB 10 / 10, no
   amber under 20 %, red under 10 %; a note on the scope at 20 % and 10 %
 - OVF (red, top left of the dial): flow IQ at its clip level
 - OOB (red, under OVF; in TX under the audio source; also in portrait, since 2026-11-07): band check off (`--oob` or `oob` in the conf) and tuned outside the region's allocations; where you transmit is your responsibility
+- Tune line (2026-11-07): while you tune (the frequency changes: VFO knob, keys, CAT), the VFO frequency is drawn as a red line through the waterfall too, as the cursor on the scope; it goes 10 s after the last change. Flat waterfall only (the 3D one has its cursor on the floor), not while a panel is open
 - NB / NR / MN (blue, top right of the dial) in fixed places, e.g. `NB    MN`, `   NR   `, `NB NR MN`; MN = manual notch, as on Icom radios
 - Tune panel (ATU long press / CAT): amber TUNING with live PO and SWR bars (SWR green / yellow / red), then green TUNED for 4 s with the time taken and the network (L, C, S in decimal, relay bits and hex)
 - Clock under the filter label: system time, UTC, ISO 8601 (`2026-10-24T10:08:27Z`); hidden behind the filter panel while that is open. At start x6100_trx runs one NTP sync with the image's busybox `ntpd -q` (server: `ntp` in the conf, else /etc/ntp.conf, else pool.ntp.org) and reports the result on the console (a failure as a warning); skipped when the image syncs itself (init.d S48sntp / S49ntp, as on IU1WXY), when a time daemon runs, or with `ntp off`. The clock is grey once the time is known (NTP synced, synced by the OS, or set by hand) and amber while not (NTP failed, off or still running, or a time before 2026: a clock never set, e.g. no network in the field). Set it by hand on the console: `time 2026-10-31T10:15:00Z` (UTC; the Z may be left out) or `time 10:15[:00]` for today; not from the settings or state file. From CAT (wfview Set Clock or "set radio time on connect": 1A 05 0170 UTC offset, 0166 time, 0165 date): only while NTP does not keep the clock (`cattime`, GEN row CAT CLOCK); the status page then says "set by CAT"
@@ -430,7 +431,7 @@ The status line starts with the VFO in use (A / B); with split, RIT or XIT it ad
 | `birdiescan [all] [quiet]`, `birdiestop`, `birdies`, `birdieclear` | birdie scan (this band / all), stop, list, clear. `quiet`: WiFi and Bluetooth off for the scan (they may be the source), WiFi back on when it is done (Bluetooth if it was on); the ssh session goes with the WiFi, x6100_trx carries on: log in again afterwards |
 | `birdiemarks`, `nobirdiemarks`, `birdienotch`, `nobirdienotch` | birdie ticks, automatic notch on / off |
 | `vfob 7074000 lsb fil1`, `vfo a\|b` | the VFO not in use; which one is in use (state file) |
-| `region r1\|r2\|r3\|nl\|uk` | transmit allocations for the TX check and the OOB marker (default r1); nl and uk also have 4 m (70.0-70.5 MHz); uk has 60 m as WRC-15 for now (its own segments 5258.5-5406.5 kHz not yet in) |
+| `region r1\|r2\|r3\|nl\|uk` | transmit allocations for the TX check and the OOB marker (default r1); nl and uk also have 4 m (70.0-70.5 MHz); uk has the 11 UK 60 m segments (Ofcom, 5258.5-5264, 5276-5284, 5288.5-5292, 5298-5307, 5313-5323, 5333-5338, 5354-5358, 5362-5374.5, 5378-5382, 5395-5401.5, 5403.5-5406.5 kHz; FST CH steps through their lower edges; 2026-11-07) |
 | `oob`, `nolimit` | as `--oob` / `--no-limit` (settings file): warned at every start, red OOB on the dial |
 | `freqmin 148500`, `freqmax 75000000` | tuning range in Hz (VFO, CAT, memories), each within 5 kHz - 75 MHz, freqmin below freqmax; default 148.5 kHz (the LW broadcast band edge; below it MW bleeds through, 77.5 kHz tried) - 75 MHz (RX and TX work up to there, 2026-11-04; TX above 54 MHz is past the low-pass filters: into a dummy load only); kept in the state; below the IF shift (a few kHz) the LO goes above the receive frequency |
 
@@ -706,6 +707,7 @@ until you leave CH), the VFO knob fine-tunes around them in 100 Hz steps.
 |---|---|
 | r2 | 5330.5, 5346.5, 5357.0, 5371.5, 5403.5 (US; outside 5351.5-5366.5 TX needs oob) |
 | r1, r3, nl | 5351.5, 5354.0, 5357.0, 5360.0, 5363.0 (no official channels in the WRC-15 segment: edge, FT8 and a 3 kHz raster as a convenience) |
+| uk | 5258.5, 5276.0, 5288.5, 5298.0, 5313.0, 5333.0, 5354.0, 5362.0, 5378.0, 5395.0, 5403.5 (the lower edge of each UK segment; 2026-11-07) |
 
 ## Regions (TX allocations)
 
@@ -715,6 +717,7 @@ until you leave CH), the VFO knob fine-tunes around them in 100 Hz steps.
 | r2 | 1800-2000 | 3500-4000 | 5351.5-5366.5 | 7000-7300 | as r1 | 50-54 MHz |
 | r3 | 1800-2000 | 3500-3900 | 5351.5-5366.5 | 7000-7300 | as r1 | 50-54 MHz |
 | nl | 1810-1880 | 3500-3800 | 5351.5-5366.5 | 7000-7200 | as r1 | 50-52 MHz |
+| uk | 1810-2000 | 3500-3800 | 11 segments: 5258.5-5264, 5276-5284, 5288.5-5292, 5298-5307, 5313-5323, 5333-5338, 5354-5358, 5362-5374.5, 5378-5382, 5395-5401.5, 5403.5-5406.5 (Ofcom) | 7000-7200 | as r1 | 50-52 MHz; 4 m 70.0-70.5 |
 
 kHz unless stated. The dial frequency is checked, not the edges of the signal. nl: F
 registration (stcrt 2015-3772, 2021-31799; 60 m per WRC-15). National rules and power

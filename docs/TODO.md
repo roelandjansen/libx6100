@@ -88,9 +88,11 @@ Status: 2026-11-07 (v0.17.13). Summary and next steps: `STATUS.md`.
   a spectrum analyser (harmonics, power reading) before going on air. No IC-705 band
   code for 4 m (1A 01): X6100.rig has a 4m band as wfview's IC-7300 / 7100 files (BSR 0,
   the button sets the frequency); no fixed edge range (the IC-705 ranges end at 60 MHz).
-- Region uk (2026-11-04): r1 with 4 m; 60 m as WRC-15 for now. The UK has its own 60 m
-  segments (5258.5-5406.5 kHz, several pieces): to add from the Ofcom licence terms,
-  then the 60 m channel list (FST CH) for uk as well.
+- Region uk (2026-11-04): r1 with 4 m. 60 m: the 11 UK segments (Ofcom, 2026-11-07;
+  5258.5-5406.5 kHz in pieces, from RSGB / Ofcom figures; the WRC-15 segment
+  5351.5-5366.5 is not added, only where the UK segments cover it), FST CH steps through
+  their lower edges. To check: the edges against the current Ofcom licence (OFW611),
+  and whether UK Full licences also have WRC-15.
 - Birdie list (2026-11-06): the all-bands scan filled the 256-entry list on 6 m (from
   52.7 MHz on and 4 m lost, unseen). Now 1024 entries; when full the weakest gives way
   and the scan says so. Second scan with that: 334 birdies, 6 m complete, 4 m in.

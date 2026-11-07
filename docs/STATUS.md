@@ -403,6 +403,12 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     first served: a LAN TX stays LAN while the hand mic PTT is pressed, a hand mic TX
     stays the mic while wfview keys. A wfview reconnect sends 18 03 / 19 03: LAN stays
     (the earlier 18 00 at connect was wfview's MIC choice then). Done.
+41. UK 60 m and the tune line (2026-11-07): region uk has the 11 UK 60 m segments (TX
+    check, OOB, FST CH through their lower edges; regions now hold up to 24 segments).
+    Tune line: the VFO frequency as a red line through the waterfall while tuning, 10 s
+    after the last change (pixels under it restored each frame: no trace left, tested on
+    the PC). To check: region uk on 60 m (TX in / between segments, CH), the tune line in
+    CENTER and SCROLL modes, with split / RIT, in portrait, with F3 long.
 
 ## Next steps (suggested order)
 
