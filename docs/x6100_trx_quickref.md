@@ -132,7 +132,7 @@ trace, AF colours).
 | WATERFALL SPEED | SLOW, MID, FAST (FAST): a line every 4th / 2nd / frame | `wfspeed slow\|mid\|fast` |
 | WATERFALL SIZE | SMALL, MID, LARGE (MID): the scope above takes or gives the rows | `wfsize small\|mid\|large` |
 | WF PEAK LEVEL | 30-80 dB in steps of 10 (50): the range from the noise to the top colour | `wflevel 50` |
-| WATERFALL 3D | OFF, ON (OFF): the last 32 waterfall lines as spectra in perspective, the newest in front, the VFO a red tick on the front edge; the waterfall speed sets how fast they move back (as the 3D view in the OpenX6X00 GUI) | `wf3d on\|off` |
+| WATERFALL 3D | OFF, ON (OFF): the gimmick, Yaesu style: the last 32 waterfall lines as spectra in perspective, the newest in front, the VFO a red tick on the front edge; the waterfall speed sets how fast they move back (as the 3D view in the OpenX6X00 GUI) | `wf3d on\|off` |
 | SCOPE DURING TX | ON, OFF (ON): off keeps the last RX picture while transmitting | `txscope on\|off`; CI-V 27 1B |
 | AF REF LEVEL | -30 to +30 dB (0): the audio scope reference level | `aref` |
 | AF WAVEFORM TYPE, AF AVERAGING, AF MAX HOLD | as the RF rows, for the audio scope (F3) | `afwave`, `afavg`, `afhold` |

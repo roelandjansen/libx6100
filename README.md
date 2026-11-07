@@ -25,6 +25,14 @@ the 9 kHz step, locked, 2026-11-05.
 The same screen rendered by its own drawing code, with 20 m SSB activity modelled
 on the photo (stations every few kHz, voice in syllables on the waterfall).
 
+![x6100_trx 3D waterfall](docs/images/x6100_trx_wf3d.png)
+
+The gimmick (2026-11-07): a 3D waterfall, the kind of eye candy Yaesu puts on its
+radios and the OpenX6X00 GUI has too. Scope panel (hold F1) WATERFALL 3D, `wf3d on`,
+off by default: the last 32 waterfall lines in perspective, newest in front, each one
+hiding what lies behind it, the VFO a red tick on the front edge. Rendered by its own
+drawing code with synthetic 40 m signals.
+
 ![x6100_trx filter panel](docs/images/x6100_trx_filter.png)
 
 Filter panel (hold F5), IC-705 style: MFK sets BW or SFT, per mode group and FIL1-3.

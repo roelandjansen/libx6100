@@ -8,7 +8,7 @@ Status: 2026-11-07 (v0.17.11). Summary and next steps: `STATUS.md`.
   console `time` to set it by hand (built and verified 2026-10-31: grey after start, time
   works). Later
   maybe: a GPS (NMEA on USB) as time source in the field.
-- 3D waterfall (built 2026-11-07, after the one in the OpenX6X00 GUI): scope panel row
+- The gimmick, a 3D waterfall (built 2026-11-07, Yaesu style, as the OpenX6X00 GUI): scope panel row
   WATERFALL 3D, `wf3d on|off` (default off). The last 32 waterfall lines in perspective,
   each a ridge hiding what is behind it, the newest in front; redrawn only for a new
   line, a shift, a moved cursor or a panel. To check on the radio: CPU (top) with it on,
