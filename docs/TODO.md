@@ -84,9 +84,12 @@ Status: 2026-11-06 (v0.17.9). Summary and next steps: `STATUS.md`.
   70337.3, 70344.8, 70352.4 (55 dB, the strongest of all), 70367.6, 70375.2 ...): the same
   spacing on every band, so one source with a 7.58 kHz modulation or clock, not separate
   oscillators. Test: the display off (PWR), another backlight level, WiFi / Bluetooth
-  off: does the comb on 14064 / 70352 kHz move or go? A question for Jin too. 6 m and
-  10 m hold many weak ones (10-13 dB): a higher threshold above 28 MHz (15 dB?) if they
-  turn out to be noise.
+  off: does the comb on 14064 / 70352 kHz move or go? Third scan 2026-11-07 with the
+  display off, battery only, no USB: every birdie from 16 dB the same (frequency and
+  strength), the comb too: the source is inside the radio (WiFi still on; next test: WiFi
+  and Bluetooth off). A question for Jin too. 6 m and
+  10 m held many weak ones (10-15 dB): they came and went between the scans (noise), so
+  the scan threshold is 16 dB now (was 10), and weaker ones are dropped when read.
 - LAN and CAT indicators under the scope clock (2026-11-03): LAN while a wfview client is
   connected through wfserver (UDP rate from /proc/net/snmp, wfserver running), CAT while
   CI-V frames arrive (3 s; the pty only without wfserver, which polls it with no client

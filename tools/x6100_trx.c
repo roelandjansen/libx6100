@@ -727,6 +727,15 @@ static void gen_adjust(int row, int dir, bool def);
 static uint64_t g_gen_save_at;	/* GEN setting changed: the state goes to disk at this time (ms), 0 none */
 #define GEN_SAVE_MS	2000		/* after the last GEN change: one write for a run of MFK steps */
 
+// SIGHUP: the ssh session (the console) went away, e.g. with the WiFi; x6100_trx goes on
+static volatile sig_atomic_t g_hup;
+
+static void on_hup(int sig)
+{
+	(void) sig;
+	g_hup = 1;
+}
+
 static void on_signal(int sig)
 {
 	(void) sig;
@@ -4494,7 +4503,7 @@ static void spectrum_update(screen_t *scr, const x6100_flow_frame_t *f)
 #define BS_DC_BINS	4		/* centre +- 4 bins left out */
 #define BS_SETTLE_MS	300
 #define BS_FRAMES	32
-#define BS_SNR_DB	10
+#define BS_SNR_DB	16		/* 2026-11-07: two scans agree on all from 16 dB; 10-15 dB came and went (noise) */
 #define BS_WIDE_BINS	3
 
 typedef struct
@@ -8906,7 +8915,7 @@ static bool console_line(rx_t *rx, char *line)
 
 			if (hz < FREQ_MIN || hz > FREQ_MAX || ds == NULL)
 				fprintf(stderr, "\nbirdie: <Hz> <dB over the noise>\n");
-			else
+			else if (atoi(ds) >= BS_SNR_DB)	/* weaker ones of older scans: noise, left out */
 				birdie_add(hz, atoi(ds));
 
 			continue;
@@ -11161,6 +11170,8 @@ int main(int argc, char **argv)
 	console_raw();	/* character mode: our own echo after the status line */
 	signal(SIGINT, on_signal);
 	signal(SIGTERM, on_signal);
+	signal(SIGHUP, on_hup);		/* the console gone: go on without it (2026-11-07) */
+	signal(SIGPIPE, SIG_IGN);	/* output to a pipe whose reader went away */
 
 	if (open_inputs(fds) < IN_COUNT)
 		fprintf(stderr, "warning: not all front panel devices found\n");
@@ -11983,6 +11994,18 @@ int main(int argc, char **argv)
 			level = 0.0;
 			level_n = 0;
 			last_meter = t;
+			dirty = true;
+		}
+
+		// The console went away (SIGHUP: the ssh session closed, the WiFi gone): x6100_trx
+		// goes on without it, a birdie scan, CAT and TX included (before, SIGHUP killed it:
+		// no state saved). Its input is dropped, its output goes to /dev/null
+		if (g_hup) {
+			g_hup = 0;
+			pfd[stdin_slot].fd = -1;
+			(void) !freopen("/dev/null", "w", stdout);
+			(void) !freopen("/dev/null", "w", stderr);
+			toast("CONSOLE GONE");
 			dirty = true;
 		}
 

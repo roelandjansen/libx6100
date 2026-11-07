@@ -328,6 +328,10 @@ sh ./build.sh deploy     # also puts back settings the radio lacks (conf, memori
 
 ## Console (ssh)
 
+When the ssh session closes (the WiFi gone, the laptop asleep), x6100_trx goes on without
+the console (SIGHUP; 2026-11-07): RX, TX, CAT and a running scan carry on, a toast says
+CONSOLE GONE. Before, it was killed and saved nothing.
+
 Type a line + Enter while running; tokens can be combined (`14074000 usb`). `help` or `?`
 lists the commands in short, grouped (also while locked, as `layout`).
 
@@ -475,8 +479,11 @@ load, and keep PRE / ATT as you normally listen.
   refused and the tuner is out (straight through) while it runs; the VFO and the tuner
   come back at the end.
 - The scan steps 36 kHz windows over the band (80 m about 20 s, all bands about 6 min),
-  averages 32 spectrum frames per window and keeps narrow peaks at least 10 dB over the
-  noise. Progress shows on the scope (cyan); the console prints each birdie.
+  averages 32 spectrum frames per window and keeps narrow peaks at least 16 dB over the
+  noise (10 dB until 2026-11-07: two scans agreed on all from 16 dB, the weaker ones came
+  and went; weaker entries in an older list are dropped when it is read). Progress shows
+  on the scope (cyan); the console prints each birdie. A scan started on the console goes
+  on when the ssh session closes (WiFi gone): x6100_trx keeps running without a console.
 - Kept in `/etc/x6100/birdies.conf` (`birdie <Hz> <dB over the noise>`); a scan of a
   band replaces that band's entries. `birdies` lists them, `birdieclear` empties the
   list. Part of `build.sh backup`.
