@@ -383,7 +383,8 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
 39. TX audio source on the arc meter (2026-11-07; the internal mic was silent: TX panel
     MIC on HAND): while transmitting, top left of the dial MIC INT / AUTO / HAND (red),
     USB, CW, MSG, TUNE, landscape and portrait. To check: PTT key with MIC AUTO and
-    HAND, a DATA mode with USB, CW, a message.
+    HAND, a DATA mode with USB, CW, a message. OOB now also in TX (under the source) and
+    in portrait: check with --oob outside the band.
 
 ## Next steps (suggested order)
 

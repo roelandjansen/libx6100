@@ -7745,6 +7745,18 @@ static void wf3d_draw(x6100_lcd_t *lcd, int y0, int h, int w, int cursor_x)
 		x6100_lcd_vline(lcd, cursor_x, yfi - 6, yfi, SCR_WARN);
 }
 
+//
+// Band check off (--oob / conf oob) and the TX frequency outside the region's allocations:
+// OOB in red under the top left of the arc meter, in RX and TX, landscape and portrait
+// (2026-11-07: before RX only, landscape only)
+//
+
+static void draw_oob(x6100_lcd_t *lcd, const rx_t *rx)
+{
+	if (g_allow_oob && !in_allocation(tx_hz(rx)))
+		x6100_lcd_text(lcd, VU_X + 8, VU_Y + 24, 2, "OOB", SCR_WARN);
+}
+
 // A panel or page open: they are drawn for landscape, so portrait turns back meanwhile
 static bool panel_open(const rx_t *rx)
 {
@@ -7824,6 +7836,7 @@ static void draw_portrait(screen_t *scr, const rx_t *rx)
 		const char *src = tx_source(rx, &src_warn);
 
 		x6100_lcd_text(lcd, VU_X + 8, VU_Y + 6, 2, src, src_warn ? SCR_WARN : SCR_ACCENT);
+		draw_oob(lcd, rx);
 	} else {
 		char l1[16], l2[16];
 
@@ -7834,6 +7847,8 @@ static void draw_portrait(screen_t *scr, const rx_t *rx)
 
 		if (now_ms() < scr->ovf_until)
 			x6100_lcd_text(lcd, VU_X + 8, VU_Y + 6, 2, "OVF", SCR_WARN);
+
+		draw_oob(lcd, rx);
 	}
 
 	//
@@ -8191,6 +8206,7 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 		const char *src = tx_source(rx, &src_warn);
 
 		x6100_lcd_text(lcd, VU_X + 8, VU_Y + 6, 2, src, src_warn ? SCR_WARN : SCR_ACCENT);
+		draw_oob(lcd, rx);
 	} else {
 		char l1[16], l2[16];
 
@@ -8204,9 +8220,7 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 		if (now_ms() < scr->ovf_until)
 			x6100_lcd_text(lcd, VU_X + 8, VU_Y + 6, 2, "OVF", SCR_WARN);
 
-		// Band check off (--oob / conf oob) and tuned outside the region's allocations
-		if (g_allow_oob && !in_allocation(tx_hz(rx)))
-			x6100_lcd_text(lcd, VU_X + 8, VU_Y + 24, 2, "OOB", SCR_WARN);
+		draw_oob(lcd, rx);
 
 		// Baseband noise blanker / reduction on, top right of the dial
 		{
