@@ -433,7 +433,7 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
 44. Screenshot (2026-11-07): `shot` (console, command pipe) or LOCK long writes the screen
     as seen as a PNG to /tmp/x6100_shot_<UTC>.png (uncompressed, no zlib; tested on the
     PC: identical to the canvas, landscape and portrait). LOCK short now acts on release.
-    To check: LOCK long, locked and not; shot by pipe; the PNG on the PC; LOCK still locks.
+    Verified 2026-11-07: a real screenshot from the radio (GEN 5.450, A B T markers).
 45. Markers as the IC-7851 MARKER key (2026-11-07, from photos of it): scope panel row
     MARKERS A / A B / A T / A B T (default A B T), `markers a|ab|at|abt`; tagged A = VFO A, B =
     VFO B (the IC-7851 M / S; before: the VFO in use and the other), T = TX; B and T dashed through the
