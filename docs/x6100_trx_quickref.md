@@ -266,7 +266,7 @@ verified). Top to bottom (on the radio, MW AM, locked; and the mock-up in RX and
   V and %; the whole line red with TX (or
   TUNE) while transmitting
 - the arc meter: S in RX, the F4 meter (PO / SWR / ALC) in TX
-- the frequency, MHz.kHz.10 Hz, large (to the Hz with the 1 Hz step, FST long)
+- the frequency, MHz.kHz.Hz, large: always three digits after the kHz, the last one 0 unless the 1 Hz step is on (FST long), so the width stays the same (2026-11-07)
 - mode, filter, step; under it AGC, ATT / PRE / NB / NR / ATU when on, SPLIT or DUP
 - a small scope (its mode label top right) and the waterfall
 - footer, in fixed columns: LOCK (amber) or the auto lock count-down (LOCK IN n), then
