@@ -17,9 +17,8 @@ Status: 2026-11-07 (v0.17.14). Summary and next steps: `STATUS.md`.
 
 ## Radio
 
-- Test at the next baseband hang (2026-11-07): MFK push while BASEBAND NOT RESPONDING
-  shows (bbreset without a console); note what ran before the hang (mode, scan, wfview,
-  TX). bbreset by console and by the command pipe already verified.
+- Baseband hangs (2026-11-05 .. 11-09, several): bbreset by console, pipe and MFK push all
+  verified. Open: what triggers them (note mode, scan, wfview, TX before the next one).
 - OpenX6X00 image as the base (2026-11-07, the IU1WXY image left: README "Why the IU1WXY
   image was left"). x6100_trx at boot: `x6100_ui.sh boot trx|gui`, scripts/S96x6100_trx
   (installed by build.sh deploy). To check: STATUS item 34. Later maybe: the IU1WXY-only

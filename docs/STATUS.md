@@ -430,8 +430,8 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     command pipe /tmp/x6100_trx.cmd takes console lines over ssh (`printf 'bbreset\n' >
     /tmp/x6100_trx.cmd`), replies in /tmp/x6100_trx.log; bbreset also while locked. The
     waterfall is cleared when the baseband answers again. The pipe verified 2026-11-07
-    (vol 30) and bbreset by pipe (2026-11-07). Open: the MFK push at the next real hang
-    (and note what ran before it).
+    (vol 30) and bbreset by pipe (2026-11-07). MFK push on a real hang verified 2026-11-09:
+    the baseband came back, the box went (the waterfall cleared). Done.
 43. SQL push (2026-11-07): with the VOL knob on SQL (VOL long) a push sets the squelch just
     above the noise now (the highest bar position of the last second, + 2; toast SQL nn);
     on VOL it still mutes. Verified 2026-11-07.
