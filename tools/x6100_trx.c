@@ -168,6 +168,9 @@ static int g_bb_reset_fd = -1;		/* line handle, held once requested */
 static bool g_bb_reset_req;		/* console bbreset: done in the main loop */
 #define CMD_FIFO	"/tmp/x6100_trx.cmd"	/* command pipe: console lines without a console */
 static bool g_shot_req;			/* screenshot asked (shot, LOCK long): the main loop takes it */
+static const char *g_bb_reset_src = "console";	/* who asked the bbreset: console, pipe, MFK push (hang log) */
+static const char *g_cmd_src = "console";	/* where the console line being handled came from */
+#define BB_HANG_LOG	"/etc/x6100/bb_hangs.log"	/* one line per hang and per recovery, kept over reboots */
 static bool g_bb_dead;			/* no flow frames for BB_DEAD_MS: shown on screen */
 
 #define BB_DEAD_MS	5000		/* flow frames come every 35 ms */
@@ -3522,6 +3525,7 @@ static bool on_key(rx_t *rx, int key)
 	// Baseband not responding: MFK push resets it (2026-11-07; started at boot there is
 	// no console for bbreset), locked or not
 	if (g_bb_dead && key == X6100_KEY_MFK_PUSH) {
+		g_bb_reset_src = "MFK push";
 		g_bb_reset_req = true;
 		return true;
 	}
@@ -9477,6 +9481,7 @@ static bool console_token(rx_t *rx, const char *t)
 	// bbreset: reset the baseband (GPIO line) and send it everything again (main loop)
 	if (strcasecmp(t, "bbreset") == 0) {
 		g_bb_reset_req = true;
+		g_bb_reset_src = g_cmd_src;
 		return true;
 	}
 
@@ -10759,6 +10764,8 @@ static bool console_read(rx_t *rx, int fd, char *buf, size_t size, size_t *len)
 	bool changed = false;
 	char in[64];
 	ssize_t n = read(fd, in, sizeof(in));	/* stdin or the command pipe (CMD_FIFO) */
+
+	g_cmd_src = fd == STDIN_FILENO ? "console" : "pipe";	/* for the hang log (bbreset) */
 
 	if (n <= 0)
 		return false;
@@ -12225,6 +12232,63 @@ static void ntp_poll(void)
 	printf(WIFEXITED(st) && WEXITSTATUS(st) == 0 ? "\nntp: %s\n" : "\nwarning: ntp %s; clock as the OS has it\n", g_ntp_msg);
 }
 
+//
+// Baseband hang log (2026-11-09): one line when the watchdog sees a hang (written at once,
+// so it is there after a power cycle too) and one when the flow is back, with how long
+// and what reset it. In /etc/x6100, so it outlives reboots. To find what the hangs have
+// in common (2026-11-09: one came while just receiving).
+//
+
+static uint64_t g_t_start;	/* x6100_trx started (ms) */
+
+static void bb_hang_stamp(char *s, size_t n)
+{
+	time_t now = time(NULL);
+	struct tm tm;
+
+	gmtime_r(&now, &tm);
+	strftime(s, n, "%Y-%m-%dT%H:%M:%SZ", &tm);
+}
+
+static void bb_hang_log_start(const rx_t *rx, const screen_t *scr, const x6100_ctl_t *ctl, uint64_t silent_ms)
+{
+	uint64_t up = (now_ms() - g_t_start) / 1000;
+	uint64_t ms = now_ms();
+	bool cat = (g_cat_rx_ms[CAT_EP_DEV] != 0 && ms - g_cat_rx_ms[CAT_EP_DEV] < 60000)
+		|| (g_cat_rx_ms[CAT_EP_PTY] != 0 && ms - g_cat_rx_ms[CAT_EP_PTY] < 60000);
+	int b = band_of(rx->freq);
+	char ts[32];
+	FILE *fp;
+
+	bb_hang_stamp(ts, sizeof(ts));
+
+	if ((fp = fopen(BB_HANG_LOG, "a")) == NULL)
+		return;
+
+	fprintf(fp, "%s HANG  no flow %llu s; up %lluh%02llum; %u.%06u %s %s; TX %s; wfview %s, wfserver %s, CAT in the last min %s; "
+		"supply %s %.1f V, battery %.1f V %d %%; I2C resent %u lost %u\n",
+		ts, (unsigned long long) (silent_ms / 1000), (unsigned long long) (up / 3600), (unsigned long long) (up / 60 % 60),
+		rx->freq / 1000000, rx->freq % 1000000, mode_name(rx->mode), b >= 0 ? g_bands[b].name : "GEN",
+		scr->tx || rx->ptt ? "yes" : "no", g_lan ? "connected" : "no", g_wfs_run ? "running" : "no", cat ? "yes" : "no",
+		scr->ext ? "external" : "battery", scr->ext ? scr->vext : scr->vbat, scr->vbat, scr->batcap, ctl->resent, ctl->lost);
+	fclose(fp);
+}
+
+static void bb_hang_log_back(uint64_t hung_ms, const char *reset)
+{
+	char ts[32];
+	FILE *fp;
+
+	bb_hang_stamp(ts, sizeof(ts));
+
+	if ((fp = fopen(BB_HANG_LOG, "a")) == NULL)
+		return;
+
+	fprintf(fp, "%s BACK  after %llu s; %s\n", ts, (unsigned long long) (hung_ms / 1000),
+		reset != NULL ? reset : "came back by itself");
+	fclose(fp);
+}
+
 int main(int argc, char **argv)
 {
 	x6100_i2c_t i2c;
@@ -12241,6 +12305,8 @@ int main(int argc, char **argv)
 	char fcmd[128];		/* a line from the command pipe (CMD_FIFO) */
 	size_t fcmd_len = 0;
 	int fifo_slot = -1;
+	uint64_t hang_since = 0;	/* hang log: the last flow frame before the hang (ms) */
+	char hang_reset[48] = "";	/* hang log: what reset it, empty: nothing yet */
 	int stdin_slot = -1;
 	int cat_slot[CAT_N] = { -1, -1 };
 	int apcm_slot = -1;	/* audio scope capture, fd -1 while closed */
@@ -12252,6 +12318,8 @@ int main(int argc, char **argv)
 		.txpwr = TXPWR_DEF, .scope = SCOPE_CENTER, .span = 96000,	/* the widest span (g_spans) */
 		.nr_lvl = 20, .nb_lvl = 10, .nb_w = 10, .dnf_f = 1000, .dnf_w = 50 };	/* defaults: g_dsp[] */
 	int rc;
+
+	g_t_start = now_ms();	/* the hang log gives the time since this start */
 
 	// --help / -h / help / ?: the options, before anything is read or opened
 	for (int i = 1; i < argc; i++) {
@@ -13015,6 +13083,9 @@ int main(int argc, char **argv)
 			g_bb_reset_req = false;
 			tx_drop(&rx, "BASEBAND RESET");
 
+			if (g_bb_dead)	/* for the hang log line when the flow is back */
+				snprintf(hang_reset, sizeof(hang_reset), "reset by bbreset (%s)", g_bb_reset_src);
+
 			if ((rc = bb_reset_pulse()) < 0) {
 				fprintf(stderr, "\nbbreset: %s\n", strerror(-rc));
 				toast("BASEBAND RESET FAILED");
@@ -13290,11 +13361,17 @@ int main(int argc, char **argv)
 			bool dead = t - last_flow_ms >= BB_DEAD_MS;
 
 			if (dead != g_bb_dead) {
-				if (dead)
-					fprintf(stderr, "\nbaseband: no flow for %d s, no answer? bbreset on the console resets it\n",
+				// The hang log (BB_HANG_LOG): a line now, one when the flow is back
+				if (dead) {
+					fprintf(stderr, "\nbaseband: no flow for %d s, no answer? bbreset (console, pipe, MFK push) resets it\n",
 						BB_DEAD_MS / 1000);
-				else
+					hang_since = last_flow_ms;
+					hang_reset[0] = '\0';
+					bb_hang_log_start(&rx, &scr, &ctl, t - last_flow_ms);
+				} else {
 					fprintf(stderr, "\nbaseband: flow again\n");
+					bb_hang_log_back(t - hang_since, hang_reset[0] != '\0' ? hang_reset : NULL);
+				}
 
 				g_bb_dead = dead;
 				dirty = true;

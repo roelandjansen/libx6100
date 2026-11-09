@@ -448,6 +448,11 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     GEN 5.450 without oob; nooob switches the band check on again at runtime. oob / nooob
     now saved in the state (the conf wins, --oob over both): both survive a restart
     (verified 2026-11-07).
+46. Baseband hang log (2026-11-09): every hang appends a HANG line to
+    /etc/x6100/bb_hangs.log (time, run time, frequency / mode / band, TX, wfview /
+    wfserver / CAT, supply and battery, I2C retries) and a BACK line when the flow is back
+    (how long, reset by bbreset from console / pipe / MFK push, or by itself). Tested on
+    the PC; x6100_giveaway.sh removes it. To check: the lines at the next hang.
 
 ## Next steps (suggested order)
 

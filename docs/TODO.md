@@ -19,7 +19,8 @@ Status: 2026-11-07 (v0.17.14). Summary and next steps: `STATUS.md`.
 
 - Baseband hangs (2026-11-05 .. 11-09, several): bbreset by console, pipe and MFK push all
   verified. Open: what triggers them. 2026-11-09: just receiving, idle (no TX, no scan).
-  Next time note: uptime, wfview connected or not, external supply or battery.
+  Since 2026-11-09 x6100_trx logs every hang itself: /etc/x6100/bb_hangs.log (HANG and
+  BACK lines). After a few: compare them.
 - OpenX6X00 image as the base (2026-11-07, the IU1WXY image left: README "Why the IU1WXY
   image was left"). x6100_trx at boot: `x6100_ui.sh boot trx|gui`, scripts/S96x6100_trx
   (installed by build.sh deploy). To check: STATUS item 34. Later maybe: the IU1WXY-only

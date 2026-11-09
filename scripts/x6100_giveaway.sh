@@ -27,7 +27,7 @@
 set -eu
 
 readonly C_X6100="/etc/x6100"
-readonly C_FILES="x6100_trx.state x6100_trx.conf birdies.conf memories.conf messages.conf wfserver.ini"
+readonly C_FILES="x6100_trx.state x6100_trx.conf birdies.conf memories.conf messages.conf wfserver.ini bb_hangs.log"
 readonly C_SYSTEM="/etc/NetworkManager/system-connections/* /var/lib/bluetooth/* /root/.ssh/authorized_keys /root/.ssh/known_hosts /root/.ash_history /root/.bash_history"
 readonly C_HOSTKEYS="/etc/ssh/ssh_host_* /etc/dropbear/dropbear_*_host_key"
 readonly C_LOGS="/mnt/app_logs/*"
