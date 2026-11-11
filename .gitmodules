@@ -2,3 +2,7 @@
 	path = third_party/liquid-dsp
 	url = https://github.com/jgaeddert/liquid-dsp.git
 	shallow = true
+[submodule "third_party/libx6100_app"]
+	path = third_party/libx6100_app
+	url = https://github.com/roelandjansen/libx6100_app
+	branch = master

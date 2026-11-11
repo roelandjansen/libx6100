@@ -90,6 +90,10 @@
 #include "x6100_lcd.h"
 #include "x6100_pcm.h"
 
+#ifdef X6100_REMOTE
+#include "x6100_remote.h"
+#endif
+
 #ifndef X6100_REV
 #define X6100_REV	"dev"	/* build.sh passes the git revision */
 #endif
@@ -1097,6 +1101,12 @@ static void fil_default(fgroup_t g, int n)
 
 static bool g_allow_oob;	/* --oob: skip the band check, enable TX in the baseband everywhere */
 
+#ifdef X6100_REMOTE
+static bool g_remote_req;		/* --remote: control head for a remote Icom, receive only */
+static x6100_remote_cfg_t g_remote_cfg = { .rig_dir = "/opt/wfserver/share/wfview/rigs" };
+static x6100_remote_t *g_remote;
+#endif
+
 //
 // Repeater duplex: TX = RX - / + the shift. AUTO (the default) gives -100 kHz in
 // NFM on the 10 m repeater outputs (29.620-29.680 MHz, IARU and US band plans),
@@ -1533,7 +1543,7 @@ static void atu_store(uint32_t hz, const x6100_atu_t *net)
 	g_atum[i].net = *net;
 }
 
-static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
+static void apply_local(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 {
 	uint32_t low, high;
 	bool keyed = rx->ptt || rx->tuning || rx->bb_tx || rx->send != SEND_NONE
@@ -1685,7 +1695,7 @@ static const char *tx_source(const rx_t *rx, bool *warn)
 // Register 12 from the TX state: PTT, tuner enable, tune
 //
 
-static void apply_flags(x6100_ctl_t *ctl, const rx_t *rx)
+static void apply_flags_local(x6100_ctl_t *ctl, const rx_t *rx)
 {
 	bool usb_in = tx_usb_in(rx);	/* the codec is the TX audio: no PTT bit */
 
@@ -1698,6 +1708,53 @@ static void apply_flags(x6100_ctl_t *ctl, const rx_t *rx)
 }
 
 //
+// The rig behind the UI: the baseband (apply_local / apply_flags_local), or with
+// --remote an Icom over the network. In remote mode the baseband still follows the
+// frequency (its own scope, for now) but is held as an audio output only: TX enable
+// off on both VFOs, TX power 0, RX volume without our squelch, and register 12 is
+// play mode alone (no PTT, codec TX, tuner or SWR scan bit). The overrides come after
+// apply_local in the same pass: x6100_ctl_sync sends only the last value
+//
+
+static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
+{
+	apply_local(ctl, cal, rx);
+
+#ifdef X6100_REMOTE
+	if (g_remote_req) {
+		x6100_atu_t none = { 0, 0, 0 };
+
+		x6100_ctl_set(ctl, X6100_REG_VFOA_BAND, 0);
+		x6100_ctl_set(ctl, X6100_REG_VFOB_BAND, 0);
+		x6100_set_txpwr(ctl, 0.0f);
+		x6100_atu_set_network(ctl, &none);
+		x6100_ctl_set(ctl, X6100_REG_RXVOL, rx->mute ? 0 : (uint32_t) rx->vol);
+
+		if (g_remote != NULL) {
+			x6100_remote_rx_t r = {
+				.freq_hz = rx->freq, .mode = rx->mode, .filter = rx->fil, .agc = rx->agc,
+				.att = rx->att, .pre = rx->pre, .rfg = rx->rfg, .nr = rx->nr, .nb = rx->nb,
+			};
+
+			x6100_remote_apply(g_remote, &r);
+		}
+	}
+#endif
+}
+
+static void apply_flags(x6100_ctl_t *ctl, const rx_t *rx)
+{
+#ifdef X6100_REMOTE
+	if (g_remote_req) {
+		x6100_ctl_set(ctl, X6100_REG_FLAGS, X6100_FLAG_VOICE_REC);
+		return;
+	}
+#endif
+
+	apply_flags_local(ctl, rx);
+}
+
+//
 // TX allowed here? Sets rx->warn when not
 //
 
@@ -1707,6 +1764,13 @@ static bool tx_allowed(rx_t *rx)
 #ifdef X6100_RX_ONLY
 	rx->warn = "RX ONLY";
 	return false;
+#endif
+
+#ifdef X6100_REMOTE
+	if (g_remote_req) {
+		rx->warn = "REMOTE RX";
+		return false;
+	}
 #endif
 
 	if (bscan_running()) {
@@ -9304,6 +9368,11 @@ static void help_options(FILE *fp, const char *argv0)
 		"options:\n"
 		"  --oob             band check off (you are responsible for where you transmit)\n"
 		"  --no-limit        tune 10 kHz - 100 MHz (baseband probe)\n"
+#ifdef X6100_REMOTE
+		"  --remote <host> <port> <user> <password>\n"
+		"                    control head for a remote Icom (wfserver or its LAN port), receive only\n"
+		"  --rigs <dir>      wfview .rig files for --remote (default /opt/wfserver/share/wfview/rigs)\n"
+#endif
 		"  --cat[=baud|pty]  CI-V on the DEV port (4800-19200), or the pty only\n"
 		"  --cat-log         print CI-V commands and refusals\n"
 		"  --probe           print the flow flags and IQ peak (overflow hunt)\n"
@@ -12405,6 +12474,30 @@ int main(int argc, char **argv)
 			continue;
 		}
 
+#ifdef X6100_REMOTE
+		if (strcmp(argv[i], "--remote") == 0) {
+			int port = i + 4 < argc ? atoi(argv[i + 2]) : 0;
+
+			if (port <= 0 || port > 65535) {
+				fprintf(stderr, "--remote <host> <port> <user> <password>\n");
+				return 1;
+			}
+
+			g_remote_req = true;
+			g_remote_cfg.host = argv[i + 1];
+			g_remote_cfg.port = (uint16_t) port;
+			g_remote_cfg.user = argv[i + 3];
+			g_remote_cfg.pass = argv[i + 4];
+			i += 4;
+			continue;
+		}
+
+		if (strcmp(argv[i], "--rigs") == 0 && i + 1 < argc) {
+			g_remote_cfg.rig_dir = argv[++i];
+			continue;
+		}
+#endif
+
 		if (strcmp(argv[i], "--oob") == 0) {
 			g_allow_oob = true;
 			continue;
@@ -12560,6 +12653,26 @@ int main(int argc, char **argv)
 			strerror(-rc));
 		return 1;
 	}
+
+#ifdef X6100_REMOTE
+	//
+	// Remote head: the head state is on the baseband (first apply above), now the
+	// session; it connects in its own thread, the UI starts right away
+	//
+	if (g_remote_req) {
+		apply_flags(&ctl, &rx);
+		x6100_ctl_sync(&ctl);
+
+		if ((rc = x6100_remote_open(&g_remote, &g_remote_cfg)) < 0) {
+			fprintf(stderr, "remote: %s:%u: %s\n", g_remote_cfg.host, g_remote_cfg.port, strerror(-rc));
+			x6100_ctl_set(&ctl, X6100_REG_FLAGS, 0);
+			x6100_ctl_sync(&ctl);
+			return 1;
+		}
+
+		fprintf(stderr, "remote: %s:%u, receive only\n", g_remote_cfg.host, g_remote_cfg.port);
+	}
+#endif
 
 	static screen_t scr;
 
@@ -13058,6 +13171,43 @@ int main(int argc, char **argv)
 			changed = true;
 		}
 
+#ifdef X6100_REMOTE
+		//
+		// Remote head: what the rig changed itself (its own knob, another client) is
+		// taken over; our own changes go out with apply below
+		//
+		if (g_remote != NULL) {
+			x6100_remote_status_t rs;
+
+			x6100_remote_poll(g_remote, &rs);
+
+			if (rs.freq_changed) {
+				rx.freq = rs.freq_hz;
+				changed = true;
+			}
+
+			if (rs.mode_changed) {
+				rx.mode = rs.mode;
+				rx.fil = rs.filter;
+				changed = true;
+			}
+
+			// Status line: only on a change, so other warnings are not overwritten
+			static int remote_shown = -1;	/* 0 link down, 1 up, 2 rig keyed */
+			int remote_now = !rs.connected ? 0 : rs.rig_tx ? 2 : 1;
+
+			if (remote_now != remote_shown) {
+				static const char *const msg[] = { "REMOTE LINK", NULL, "REMOTE TX" };
+
+				if (msg[remote_now] != NULL || remote_shown != 1)
+					rx.warn = msg[remote_now];
+
+				remote_shown = remote_now;
+				changed = true;
+			}
+		}
+#endif
+
 		if (changed) {
 			show(&rx);
 			dirty = true;
@@ -13307,6 +13457,15 @@ int main(int argc, char **argv)
 				sql_noise_track(scr.sig_dbm);	/* for SQL push */
 		}
 
+#ifdef X6100_REMOTE
+		// Remote head: the S meter is the rig's, not the baseband's passband level
+		if (g_remote != NULL) {
+			double dbm;
+
+			scr.sig_dbm = x6100_remote_smeter(g_remote, &dbm) ? dbm : -127.0;
+		}
+#endif
+
 		if (t - last_meter >= METER_MS && level_n > 0) {
 			scr.meter_db = level / level_n;
 			// Readings go on the status line, before a line being typed: RX level, or
@@ -13466,6 +13625,17 @@ int main(int argc, char **argv)
 		x6100_lcd_flush(&scr.lcd);
 		x6100_lcd_close(&scr.lcd);
 	}
+
+#ifdef X6100_REMOTE
+	// Remote head: the session and the playback go, the baseband back out of play mode
+	if (g_remote != NULL) {
+		x6100_remote_close(g_remote);
+		g_remote = NULL;
+	}
+
+	if (g_remote_req)
+		x6100_ctl_set(&ctl, X6100_REG_FLAGS, 0);
+#endif
 
 	x6100_ctl_set(&ctl, X6100_REG_RXVOL, 0);
 	x6100_ctl_sync(&ctl);

@@ -67,13 +67,92 @@ build_sniff() {
 	printf 'built %s\n' "${C_OUT}/x6100_i2csniff.so"
 }
 
+#
+# Build the network client core of libx6100_app (third_party/libx6100_app, git
+# submodule): core/, model/ and its vendored Opus and ADPCM, as out/libx6100_core.a.
+# Only x6100_trx links it (--remote); the library stays baseband control only.
+# The Opus source list comes from libx6100_app's own make fragment, so a new
+# pin of the submodule brings its list along.
+#
+
+build_core() {
+	local L_APP="third_party/libx6100_app"
+	local L_OBJ="${C_OUT}/core-obj"
+	local L_SRC
+	local L_O
+	local L_OPUS_SRCS
+	local L_CORE_SRCS
+	local L_OBJS=()
+
+	if [[ ! -f "${L_APP}/core/session.h" ]]; then
+		git submodule update --init -- "${L_APP}"
+	fi
+
+	if ! L_OPUS_SRCS="$(make -s -C "${L_APP}" -f mk/third_party.mk \
+		--eval='print-tp: ; @printf "%s\n" $(SRC_THIRD_PARTY)' print-tp)"; then
+		printf '%s\n' 'error: cannot read the source list from libx6100_app mk/third_party.mk' >&2
+		exit 1
+	fi
+
+	L_CORE_SRCS="$(cd -- "${L_APP}" && find core model -maxdepth 1 -name '*.c' | sort)"
+	mkdir -p -- "${L_OBJ}"
+
+	while IFS= read -r L_SRC; do
+		L_O="${L_OBJ}/${L_SRC//\//_}.o"
+		zcc_core -c -o "${L_O}" "${L_APP}/${L_SRC}"
+		L_OBJS+=("${L_O}")
+	done <<< "${L_CORE_SRCS}"
+
+	while IFS= read -r L_SRC; do
+		L_O="${L_OBJ}/${L_SRC//\//_}.o"
+		zcc_tp -c -o "${L_O}" "${L_APP}/${L_SRC}"
+		L_OBJS+=("${L_O}")
+	done <<< "${L_OPUS_SRCS}"
+
+	rm -f -- "${C_OUT}/libx6100_core.a"
+	"${G_ZIG}" ar rcs "${C_OUT}/libx6100_core.a" "${L_OBJS[@]}"
+	printf 'built %s (libx6100_app %s)\n' "${C_OUT}/libx6100_core.a" \
+		"$(git -C "${L_APP}" rev-parse --short HEAD 2>/dev/null || printf '%s' '?')"
+}
+
+#
+# Compile wrappers for libx6100_app: its own code with its own flags, the vendored
+# third-party code (Opus, ADPCM) unmodified and without warnings, as its make does
+#
+
+zcc_core() {
+	"${G_ZIG}" cc -target "${C_TARGET}" -mcpu="${C_CPU}" -std=c11 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -O2 \
+		-DNDEBUG -Ithird_party/libx6100_app "$@"
+}
+
+zcc_tp() {
+	local L_OPUS="third_party/libx6100_app/third_party/opus"
+
+	"${G_ZIG}" cc -target "${C_TARGET}" -mcpu="${C_CPU}" -std=gnu11 -w -O2 -DNDEBUG -DOPUS_BUILD -DUSE_ALLOCA \
+		-DHAVE_LRINTF -DHAVE_LRINT '-DPACKAGE_VERSION="1.5.2"' -I"${L_OPUS}/include" -I"${L_OPUS}/celt" \
+		-I"${L_OPUS}/silk" -I"${L_OPUS}/silk/float" "$@"
+}
+
 build_tools() {
 	local L_TOOL
 
 	for L_TOOL in "${C_TOOLS[@]}"; do
+		if [[ "${L_TOOL}" == x6100_trx ]]; then
+			continue	# below, with the remote head
+		fi
+
 		zcc -static -s -o "${C_OUT}/${L_TOOL}" "tools/${L_TOOL}.c" "${C_OUT}/libx6100.a"
 		printf 'built %s\n' "${C_OUT}/${L_TOOL}"
 	done
+
+	#
+	# x6100_trx with --remote (control head for a remote Icom): tools/x6100_remote.c
+	# and the libx6100_app core
+	#
+
+	zcc -static -s -DX6100_REMOTE -Ithird_party/libx6100_app -o "${C_OUT}/x6100_trx" tools/x6100_trx.c \
+		tools/x6100_remote.c "${C_OUT}/libx6100.a" "${C_OUT}/libx6100_core.a" -lpthread
+	printf 'built %s\n' "${C_OUT}/x6100_trx"
 
 	#
 	# x6100_rx: the x6100_trx source built receive-only
@@ -519,6 +598,7 @@ if [[ "${G_FORCE}" -eq 0 && -f "${C_STAMP}" && "$(cat -- "${C_STAMP}")" == "${G_
 else
 	printf 'zig %s\n' "$("${G_ZIG}" version)"
 	build_lib
+	build_core
 	build_tools
 	build_sniff
 	build_liquid
