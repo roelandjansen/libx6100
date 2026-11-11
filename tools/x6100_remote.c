@@ -57,6 +57,13 @@ struct x6100_remote
 	int64_t mode_sent_ms;
 
 	//
+	// Logged on a change (stderr)
+	//
+	int log_state;
+	int log_reason;
+	int log_ctl;
+
+	//
 	// What the rig last reported
 	//
 	uint64_t rig_freq;
@@ -205,6 +212,7 @@ int x6100_remote_open(x6100_remote_t **out, const x6100_remote_cfg_t *cfg)
 		return -ENOMEM;
 
 	r->rig_mode_num = -1;
+	r->log_state = -1;
 	atomic_init(&r->stop, false);
 
 	memset(&p, 0, sizeof(p));
@@ -217,11 +225,16 @@ int x6100_remote_open(x6100_remote_t **out, const x6100_remote_cfg_t *cfg)
 
 	//
 	// RX: LPCM 16 bit stereo 48 kHz (no decode cost on the R16), 150 ms as wfview.
-	// TX: none (no capture rate, PTT disabled)
+	// TX: the stream request still carries a TX codec, rate and buffer as wfview
+	// sends them (a rig that announces TX ignores a request with zeros there: no
+	// streams, no LAN on the 7851). No TX all the same: no capture rate, PTT disabled
 	//
 	p.rx_codec = AUDIO_CODEC_PCM16_2;
 	p.rx_sample = C_RATE;
 	p.rx_latency = 150;
+	p.tx_codec = AUDIO_CODEC_PCM16_1;
+	p.tx_sample = C_RATE;
+	p.tx_latency = 150;
 	p.dev_rate = C_RATE;
 	p.cap_rate = 0;
 	p.enable_ptt = false;
@@ -333,6 +346,16 @@ void x6100_remote_poll(x6100_remote_t *r, x6100_remote_status_t *st)
 	st->connected = info.state == SESSION_CONNECTED;
 	snprintf(st->state, sizeof(st->state), "%s", session_state_name(info.state));
 	snprintf(st->radio, sizeof(st->radio), "%s", info.radio_name);
+
+	if ((int) info.state != r->log_state || (int) info.reason != r->log_reason
+		|| (int) info.control_state != r->log_ctl) {
+		fprintf(stderr, "\nremote: %s, reason %s, control %s, radio '%s' civ 0x%02x: %s\n",
+			session_state_name(info.state), session_reason_name(info.reason),
+			control_state_name(info.control_state), info.radio_name, info.civ_addr, info.status);
+		r->log_state = (int) info.state;
+		r->log_reason = (int) info.reason;
+		r->log_ctl = (int) info.control_state;
+	}
 
 	//
 	// Link down: everything is pushed again once it is back (a rig restart loses
