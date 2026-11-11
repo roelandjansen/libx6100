@@ -12,6 +12,7 @@
 
 #include <errno.h>
 #include <pthread.h>
+#include <sched.h>
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -24,7 +25,8 @@
 #include "core/session.h"
 #include "model/radio_state.h"
 
-#define C_RATE		48000
+#define C_RATE		48000		/* codec playback */
+#define C_NET_RATE	16000		/* the stream from the rig, resampled to C_RATE by the core */
 #define C_PERIOD	480		/* 10 ms */
 #define C_PERIODS	4
 #define C_ECHO_MS	400		/* rig reports this soon after our own change: our echo */
@@ -64,6 +66,13 @@ struct x6100_remote
 	int log_reason;
 	int log_ctl;
 	uint32_t log_rejected;
+	int64_t log_audio_ms;
+	uint32_t log_under;
+	uint32_t log_over;
+	uint32_t log_late;
+	uint32_t log_decode;
+	uint32_t log_xrun;
+	atomic_uint xruns;		/* playback write failures (audio thread) */
 
 	//
 	// What the rig last reported
@@ -199,7 +208,7 @@ static void *audio_main(void *arg)
 		}
 
 		if (x6100_pcm_write(&r->pcm, out, C_PERIOD) < 0)
-			fprintf(stderr, "\nremote: playback write failed\n");	/* the pcm layer recovers xruns */
+			atomic_fetch_add(&r->xruns, 1);	/* counted, logged from the main loop; the pcm layer recovers */
 	}
 
 	return NULL;
@@ -220,6 +229,7 @@ int x6100_remote_open(x6100_remote_t **out, const x6100_remote_cfg_t *cfg)
 	r->rig_mode_num = -1;
 	r->log_state = -1;
 	atomic_init(&r->stop, false);
+	atomic_init(&r->xruns, 0);
 
 	memset(&p, 0, sizeof(p));
 	snprintf(p.host, sizeof(p.host), "%s", cfg->host);
@@ -230,13 +240,13 @@ int x6100_remote_open(x6100_remote_t **out, const x6100_remote_cfg_t *cfg)
 	snprintf(p.rig_dir, sizeof(p.rig_dir), "%s", cfg->rig_dir);
 
 	//
-	// RX: LPCM 16 bit stereo 48 kHz (no decode cost on the R16), 150 ms as wfview.
+	// RX: LPCM 16 bit stereo at C_NET_RATE (no decode cost on the R16), 150 ms as wfview.
 	// TX: the stream request still carries a TX codec, rate and buffer as wfview
 	// sends them (a rig that announces TX ignores a request with zeros there: no
 	// streams, no LAN on the 7851). No TX all the same: no capture rate, PTT disabled
 	//
 	p.rx_codec = AUDIO_CODEC_PCM16_2;
-	p.rx_sample = C_RATE;
+	p.rx_sample = C_NET_RATE;
 	p.rx_latency = 150;
 	p.tx_codec = AUDIO_CODEC_PCM16_1;
 	p.tx_sample = C_RATE;
@@ -255,6 +265,8 @@ int x6100_remote_open(x6100_remote_t **out, const x6100_remote_cfg_t *cfg)
 		return rc;
 	}
 
+	fprintf(stderr, "remote: playback %u Hz, stream %u Hz\n", r->pcm.rate, (unsigned) C_NET_RATE);
+
 	if (session_connect(&r->s, &p, &h) != 0) {
 		x6100_pcm_close(&r->pcm);
 		free(r);
@@ -266,6 +278,15 @@ int x6100_remote_open(x6100_remote_t **out, const x6100_remote_cfg_t *cfg)
 		x6100_pcm_close(&r->pcm);
 		free(r);
 		return -rc;
+	}
+
+	// Playback ahead of the UI: a busy main loop must not starve it (root on the
+	// radio; without the right it runs at normal priority)
+	{
+		struct sched_param sp = { .sched_priority = 10 };
+
+		if (pthread_setschedparam(r->audio, SCHED_FIFO, &sp) != 0)
+			fprintf(stderr, "%s\n", "remote: audio thread at normal priority");
 	}
 
 	r->audio_running = true;
@@ -369,6 +390,31 @@ void x6100_remote_poll(x6100_remote_t *r, x6100_remote_status_t *st)
 	}
 
 	//
+	// Audio: the counters every 2 s while any of them moves (crackle hunt)
+	//
+	if (t - r->log_audio_ms >= 2000) {
+		uint32_t xr = atomic_load(&r->xruns);
+
+		if (info.audio_underruns != r->log_under || info.audio_overrun_frames != r->log_over
+			|| info.audio_dropped_late != r->log_late || info.audio_decode_errors != r->log_decode
+			|| xr != r->log_xrun) {
+			fprintf(stderr, "\nremote audio: underruns %u (+%u), overrun frames %u (+%u), late %u (+%u), "
+				"decode errors %u, playback xruns %u (+%u), latency %d ms, lateness %d ms\n",
+				info.audio_underruns, info.audio_underruns - r->log_under,
+				info.audio_overrun_frames, info.audio_overrun_frames - r->log_over,
+				info.audio_dropped_late, info.audio_dropped_late - r->log_late, info.audio_decode_errors,
+				xr, xr - r->log_xrun, info.audio_latency_ms, info.audio_lateness_ms);
+			r->log_under = info.audio_underruns;
+			r->log_over = info.audio_overrun_frames;
+			r->log_late = info.audio_dropped_late;
+			r->log_decode = info.audio_decode_errors;
+			r->log_xrun = xr;
+		}
+
+		r->log_audio_ms = t;
+	}
+
+	//
 	// Link down: everything is pushed again once it is back (a rig restart loses
 	// nothing of ours), no meter meanwhile
 	//
@@ -424,7 +470,9 @@ void x6100_remote_poll(x6100_remote_t *r, x6100_remote_status_t *st)
 	//
 	{
 		const uint64_t want = 2 * (uint64_t) C_SCOPE_HALF;
-		bool off = r->row_width == 0 ? r->scope_set_ms == 0
+		// No rows yet: again every 3 s (the first set is refused before the rig file
+		// is loaded, RIG_ERR_NO_CAPS)
+		bool off = r->row_width == 0 ? t - r->scope_set_ms >= 3000
 			: (r->row_width > want ? r->row_width - want : want - r->row_width) > 500;
 
 		if (off && t - r->scope_set_ms >= 1000) {
