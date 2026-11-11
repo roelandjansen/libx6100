@@ -1105,6 +1105,9 @@ static bool g_allow_oob;	/* --oob: skip the band check, enable TX in the baseban
 static bool g_remote_req;		/* --remote: control head for a remote Icom, receive only */
 static x6100_remote_cfg_t g_remote_cfg = { .rig_dir = "/opt/wfserver/share/wfview/rigs" };
 static x6100_remote_t *g_remote;
+#define REMOTE_ON	(g_remote_req)
+#else
+#define REMOTE_ON	false
 #endif
 
 //
@@ -1729,6 +1732,11 @@ static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 		x6100_set_txpwr(ctl, 0.0f);
 		x6100_atu_set_network(ctl, &none);
 		x6100_ctl_set(ctl, X6100_REG_RXVOL, rx->mute ? 0 : (uint32_t) rx->vol);
+
+		// No mic path to the speaker: monitor off, both mic gains 0 (a plugged-in mic
+		// fed the speaker back into itself, 2026-11-11); line levels kept
+		x6100_ctl_set(ctl, X6100_REG_MONILEVEL, 0);
+		x6100_ctl_set(ctl, X6100_REG_AUDIO_GAIN, X6100_R20(rx->line_in, rx->line_out, 0, 0));
 
 		if (g_remote != NULL) {
 			x6100_remote_rx_t r = {
@@ -4733,6 +4741,8 @@ static void fft(float (*v)[2], int n)
 	}
 }
 
+static void spectrum_feed(screen_t *scr, float *dbs);
+
 //
 // Windowed FFT of one flow frame, centred, exponentially averaged in dB
 //
@@ -4760,6 +4770,19 @@ static void spectrum_update(screen_t *scr, const x6100_flow_frame_t *f)
 		dbs[i] = p > 1e-20f ? 10.0f * log10f(p / (float) n) : -200.0f;
 		scr->pow[i] = p / (float) n;
 	}
+
+	spectrum_feed(scr, dbs);
+}
+
+//
+// One spectrum in dB, in flow bin order (centred, X6100_FLOW_IQ_MIRRORED): the
+// local FFT above, or with --remote a scope row of the rig (remote_scope_feed).
+// Averaging, max hold and the noise floor; the waterfall takes scr->spec from here
+//
+
+static void spectrum_feed(screen_t *scr, float *dbs)
+{
+	const int n = X6100_FLOW_SAMPLES;
 
 	if (g_scope_hold)
 		return;	/* HOLD: the picture stays, the S-meter (pow) goes on */
@@ -4836,6 +4859,58 @@ static void spectrum_update(screen_t *scr, const x6100_flow_frame_t *f)
 	scr->floor_db = scr->spec_valid ? scr->floor_db * 0.95f + fl * 0.05f : fl;
 	scr->spec_valid = true;
 }
+
+#ifdef X6100_REMOTE
+//
+// Remote head: a rig scope row (0-160 over low_hz..high_hz) resampled onto the flow
+// bins around the IQ centre, so the drawing, tap-to-tune and the waterfall stay as
+// they are. Icom amplitude to dB: RSCOPE_DB_STEP per step from RSCOPE_DB0 (to be
+// calibrated on the 7851; the waterfall scale follows the noise floor anyway).
+// Bins outside the row: the row's floor
+//
+
+#define RSCOPE_DB0	-130.0f
+#define RSCOPE_DB_STEP	0.5f
+
+static void remote_scope_feed(screen_t *scr, const rx_t *rx, const x6100_remote_scope_t *row)
+{
+	static float dbs[X6100_FLOW_SAMPLES];
+	const int n = X6100_FLOW_SAMPLES;
+	const double vfo = (double) iq_hz(rx);
+	const double width = (double) (row->high_hz - row->low_hz);
+	uint8_t vmin = 255;
+
+	// Outside the row (the rig span narrower than ours, a moment after a band change):
+	// the row's lowest value, as noise floor; -200 dB showed as a white band
+	for (size_t k = 0; k < row->len; k++)
+		vmin = row->bins[k] < vmin ? row->bins[k] : vmin;
+
+	for (int j = 0; j < n; j++) {
+		int i = X6100_FLOW_IQ_MIRRORED ? (n - j) % n : j;	/* storage j holds IQ bin i */
+		double f = vfo + ((double) i - n / 2 + 0.5) * SPAN_HZ / n;
+		double pos = (f - (double) row->low_hz) / width * (double) row->len;
+
+		if (pos < 0.0 || pos >= (double) row->len) {
+			dbs[j] = RSCOPE_DB0 + RSCOPE_DB_STEP * (float) vmin;
+		} else {
+			// Peak of the rig bins this flow bin covers (195 Hz here, ~145 Hz there)
+			double step = SPAN_HZ / n / width * (double) row->len;
+			size_t a = (size_t) pos;
+			size_t b = (size_t) (pos + step);
+			uint8_t v = row->bins[a];
+
+			for (size_t k = a + 1; k <= b && k < row->len; k++)
+				v = row->bins[k] > v ? row->bins[k] : v;
+
+			dbs[j] = RSCOPE_DB0 + RSCOPE_DB_STEP * (float) v;
+		}
+
+		scr->pow[j] = dbs[j] > -199.0f ? powf(10.0f, dbs[j] / 10.0f) : 0.0f;
+	}
+
+	spectrum_feed(scr, dbs);
+}
+#endif
 
 //
 // Birdie scan: windows BS_STEP_HZ apart over each band, so every frequency is in two
@@ -13442,7 +13517,8 @@ int main(int argc, char **argv)
 
 			// SCOPE DURING TX off: the scope and the waterfall keep the last RX picture.
 			// Without a display only for the squelch (it needs the passband level)
-			if ((scr.on || rx.sql > 0) && (g_sp[SP_TXSCOPE] || !scr.tx)) {
+			// Remote head: the scope is the rig's (below), the local IQ is not drawn
+			if (!REMOTE_ON && (scr.on || rx.sql > 0) && (g_sp[SP_TXSCOPE] || !scr.tx)) {
 				g_iq_hz = iq_hz(&rx);	/* max hold starts again when the IQ centre moves */
 				g_dc_hide = lo_shift(&rx) != 0 && g_keyed_hz == 0;	/* TX: the carrier is there */
 				spectrum_update(&scr, &frame);
@@ -13461,8 +13537,17 @@ int main(int argc, char **argv)
 		// Remote head: the S meter is the rig's, not the baseband's passband level
 		if (g_remote != NULL) {
 			double dbm;
+			x6100_remote_scope_t row;
 
 			scr.sig_dbm = x6100_remote_smeter(g_remote, &dbm) ? dbm : -127.0;
+
+			// The rig scope, one row per new one (its own rate, about 20-30 a second)
+			if (scr.on && x6100_remote_scope(g_remote, &row)) {
+				g_iq_hz = iq_hz(&rx);	/* max hold starts again when the centre moves */
+				g_dc_hide = false;	/* no local DC spike in the rig's picture */
+				remote_scope_feed(&scr, &rx, &row);
+				new_frame = true;
+			}
 		}
 #endif
 

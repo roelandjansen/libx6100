@@ -107,3 +107,18 @@ void x6100_remote_apply(x6100_remote_t *r, const x6100_remote_rx_t *rx);
 
 void x6100_remote_poll(x6100_remote_t *r, x6100_remote_status_t *st);
 bool x6100_remote_smeter(const x6100_remote_t *r, double *dbm);	/* as last polled, no side effects */
+
+//
+// Rig scope: one new row since the last call, else false. bins: len values 0-160
+// (Icom amplitude), low_hz to high_hz; valid until the next call
+//
+
+typedef struct
+{
+	uint64_t low_hz;
+	uint64_t high_hz;
+	size_t len;
+	const uint8_t *bins;
+} x6100_remote_scope_t;
+
+bool x6100_remote_scope(x6100_remote_t *r, x6100_remote_scope_t *out);

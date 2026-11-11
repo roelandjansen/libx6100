@@ -29,6 +29,7 @@
 #define C_PERIODS	4
 #define C_ECHO_MS	400		/* rig reports this soon after our own change: our echo */
 #define C_ATT_DB	12		/* ATT key on: the Icom attenuator step used (0 = off) */
+#define C_SCOPE_HALF	50000		/* the rig scope, centre mode +- 50 kHz: the X6100 IQ width (SPAN_HZ) */
 
 //
 // Icom CI-V mode numbers (wfview .rig Modes\N\Num)
@@ -62,6 +63,7 @@ struct x6100_remote
 	int log_state;
 	int log_reason;
 	int log_ctl;
+	uint32_t log_rejected;
 
 	//
 	// What the rig last reported
@@ -70,6 +72,10 @@ struct x6100_remote
 	int rig_mode_num;
 	int rig_mode_data;
 	int rig_filter;
+	uint32_t scope_seq;
+	bool scope_seen;
+	int64_t scope_set_ms;		/* last scope mode / span sent */
+	uint64_t row_width;		/* width of the last scope row, 0: none yet */
 	bool smeter_valid;
 	double smeter_dbm;
 
@@ -357,6 +363,11 @@ void x6100_remote_poll(x6100_remote_t *r, x6100_remote_status_t *st)
 		r->log_ctl = (int) info.control_state;
 	}
 
+	if (info.ctl_rejected != r->log_rejected) {
+		fprintf(stderr, "\nremote: %u control(s) refused, last error %d\n", info.ctl_rejected, info.ctl_last_error);
+		r->log_rejected = info.ctl_rejected;
+	}
+
 	//
 	// Link down: everything is pushed again once it is back (a rig restart loses
 	// nothing of ours), no meter meanwhile
@@ -405,6 +416,25 @@ void x6100_remote_poll(x6100_remote_t *r, x6100_remote_status_t *st)
 	}
 
 	//
+	// Rig scope: centre mode, +- 50 kHz, kept so. Judged by the width of the rows it
+	// sends: the core learns the span only from a reply to its own query, so a span
+	// changed at the rig (by hand, band change) does not show in its state. Sent
+	// right after connecting, then again at most once a second while the rows are
+	// another width (0.5 kHz slack for rounding at the edges)
+	//
+	{
+		const uint64_t want = 2 * (uint64_t) C_SCOPE_HALF;
+		bool off = r->row_width == 0 ? r->scope_set_ms == 0
+			: (r->row_width > want ? r->row_width - want : want - r->row_width) > 500;
+
+		if (off && t - r->scope_set_ms >= 1000) {
+			session_set_value(r->s, "Scope Mode", 0, 0);
+			session_set_span(r->s, 0, C_SCOPE_HALF);
+			r->scope_set_ms = t;
+		}
+	}
+
+	//
 	// S meter: the rig file calibration gives dB over S9
 	//
 	r->smeter_valid = rs.meter[RADIO_METER_S].valid;
@@ -422,4 +452,25 @@ bool x6100_remote_smeter(const x6100_remote_t *r, double *dbm)
 {
 	*dbm = r->smeter_dbm;
 	return r->smeter_valid;
+}
+
+bool x6100_remote_scope(x6100_remote_t *r, x6100_remote_scope_t *out)
+{
+	static struct radio_scope_row row;	/* one caller (the main loop) */
+
+	if (!session_get_scope_row(r->s, 0, &row) || (r->scope_seen && row.seq == r->scope_seq))
+		return false;
+
+	r->scope_seen = true;
+	r->scope_seq = row.seq;
+
+	if (row.oor || row.len == 0 || row.high_hz <= row.low_hz)
+		return false;
+
+	r->row_width = row.high_hz - row.low_hz;
+	out->low_hz = row.low_hz;
+	out->high_hz = row.high_hz;
+	out->len = row.len;
+	out->bins = row.bins;
+	return true;
 }
