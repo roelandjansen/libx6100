@@ -453,6 +453,15 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     wfserver / CAT, supply and battery, I2C retries) and a BACK line when the flow is back
     (how long, reset by bbreset from console / pipe / MFK push, or by itself). Tested on
     the PC; x6100_giveaway.sh removes it. To check: the lines at the next hang.
+47. Remote head (2026-11-11 / 12, another session; handover 2026-11-12): `x6100_trx --remote
+    <host> <udp port> <user> <password> [--rigs <dir>]` makes the X6100 a receive-only
+    control head for a remote Icom (IC-7851) through wfserver or its LAN port; code in
+    tools/x6100_remote.c / .h, libx6100_app core as the submodule third_party/libx6100_app
+    (out/libx6100_core.a, -DX6100_REMOTE). The baseband only plays the audio (play mode,
+    TX enable off, TX power 0). Verified on the radio 2026-11-11: frequency and VFO both
+    ways, mode / filter, S meter, RX audio (16 kHz stream, SCHED_FIFO audio thread: no
+    crackle), scope and waterfall from the 7851 (centre +- 50 kHz), the REMOTE RX note.
+    UDP in the port names (48bad70). Open points: TODO, Remote head.
 
 ## Next steps (suggested order)
 

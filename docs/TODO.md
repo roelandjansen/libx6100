@@ -342,6 +342,25 @@ under GEN until a better key turns up.
 - Icom LAN server (ports 50001-50003): faster scope, network audio; then RADE via
   network audio. Design: `x6100_netaudio_design.md`.
 
+## Remote head (x6100_trx --remote)
+
+Receive-only control head for a remote Icom (STATUS item 47). Open (handover 2026-11-12):
+
+- Scope amplitude: RSCOPE_DB_STEP 0.5 dB a step is a guess; calibrate on the 7851.
+- Untested from the X6100: AGC, PRE, ATT (sends 12 dB), RF gain, NR / NB.
+- On connect the X6100's saved state overwrites the 7851's: take the 7851's instead.
+- A send dropped from a full session queue is not tried again.
+- `--cat` and the built-in wfview server still describe the X6100 itself in remote mode.
+- USB audio (a USB-C OTG adapter): a USB headset with capture and playback would allow
+  voice TX and holding the baseband in reset (battery). Check `dmesg | tail -30`,
+  `cat /proc/asound/cards`, `cat /proc/asound/card*/stream0`.
+- CW: text CW over CI-V 0x17 is feasible; paddle keying over the network is not (the
+  paddles go to the baseband, Icom LAN has no real-time keying).
+- wfserver on OpenX6X00 with PulseAudio (their question): ship the Qt Pulse plugin and
+  libpulse, wfserver.sh sets PULSE_SERVER when /var/run/pulse/native exists, else plain
+  ALSA; ports stay UDP 50001-50003 (TCI is TCP 50001, no clash); TX policy (TCI and
+  wfserver into one sink) belongs in their layer. Not written yet.
+
 ## Image and distribution
 
 - Seen on the IU1WXY image (top, 2026-10-31): pulseaudio --system with btaudio-ctl and
