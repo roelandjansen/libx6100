@@ -471,7 +471,12 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     ID from the 7851 for 10 s, not seen since). AGC head -> 7851: SLOW slow, FAST fast,
     AUTO mid, OFF stays mid (Icom AGC Status has FAST / MID / SLOW only). REMOTE RX was
     drawn over the status page and panels: no longer while one is open. Short notes over
-    REMOTE RX come and go. To check: CW-R both ways, RF gain / NR / NB / ATT / PRE from
+    REMOTE RX come and go. CW / CW-R both ways verified. From the 7851 RF gain, NR, NB,
+    ATT (18 dB seen) and PRE (PRE2 seen) arrive (log lines "remote: rig ..."); NR / NB
+    and RF gain now polled by the head about once a second (the rig file: 10 s, NR / NB
+    for both receivers into one field, which flips them). The ID is now also asked at the
+    login address (0x8e): some runs had CI-V frames but no ID, so no rig file. To check:
+    the rig file loads every time, RF gain on the head follows within a second, from
     the 7851.
 
 ## Next steps (suggested order)

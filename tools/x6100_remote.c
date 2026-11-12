@@ -93,7 +93,7 @@ struct x6100_remote
 	bool log_idask;			/* "asking the ID directly" said */
 	int64_t id_sent_ms;		/* our own ID query to the login address, last sent */
 	int64_t ctl_poll_ms;		/* our own NR / NB poll, last sent */
-	bool ctl_poll_nb;		/* next one: NB (else NR) */
+	int ctl_poll_i;			/* next one of our poll: NR, NB, RF gain */
 	int64_t streams_ms;		/* when the streams opened (0: not yet), for those two */
 	uint32_t scope_seq;
 	bool scope_seen;
@@ -485,12 +485,15 @@ void x6100_remote_poll(x6100_remote_t *r, x6100_remote_status_t *st)
 		r->id_sent_ms = t;
 	}
 
-	// NR and NB of the main receiver, asked by us: the IC-785x file polls them Medium Low
-	// for both receivers into one field (about 10 s, and the sub's answer undoes the main's;
-	// 2026-11-12). One every 500 ms, by turns: each about once a second
-	if (rs.rig_valid && t - r->ctl_poll_ms >= 500) {
-		session_get_value(r->s, r->ctl_poll_nb ? "Noise Blanker" : "Noise Reduction", 0);
-		r->ctl_poll_nb = !r->ctl_poll_nb;
+	// NR, NB and RF gain of the main receiver, asked by us: the IC-785x file polls NR / NB
+	// Medium Low for both receivers into one field (about 10 s, and the sub's answer undoes
+	// the main's) and RF gain Medium (seconds; 2026-11-12: the number followed slowly).
+	// One every 333 ms, by turns: each about once a second
+	if (rs.rig_valid && t - r->ctl_poll_ms >= 333) {
+		static const char *const poll[3] = { "Noise Reduction", "Noise Blanker", "RF Gain" };
+
+		session_get_value(r->s, poll[r->ctl_poll_i], 0);
+		r->ctl_poll_i = (r->ctl_poll_i + 1) % 3;
 		r->ctl_poll_ms = t;
 	}
 
