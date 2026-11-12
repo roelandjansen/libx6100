@@ -478,6 +478,11 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     login address (0x8e): some runs had CI-V frames but no ID, so no rig file. To check:
     the rig file loads every time, RF gain on the head follows within a second, from
     the 7851.
+    Start soon after the last session (2026-11-12): the 7851 does not answer its CI-V
+    ID for about 90 s (its LAN indicator goes off in seconds, its CI-V frames do come;
+    the core closes every stream as wfview does); it heals by itself in the same session.
+    The scope note says REMOTE: WAIT FOR RIG meanwhile. To compare: wfview disconnect
+    and reconnect at once, does it wait too?
 48. CW decoder (2026-11-12): scope panel CW DECODER, `cwdec on|off`; in CW / CW-R the
     codec audio (as the F3 scope; codec busy: tried again every 10 s), Goertzel on the
     keyer PITCH in 8 ms blocks, noise floor and peak, dit length followed (5-50 WPM); the

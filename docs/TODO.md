@@ -359,6 +359,9 @@ Receive-only control head for a remote Icom (STATUS item 47). Open (handover 202
   7851 they now come back (to check).
 - On connect the X6100's saved state overwrites the 7851's: take the 7851's instead.
 - A send dropped from a full session queue is not tried again.
+- Started again within about 90 s of the last session, the 7851 does not answer its
+  CI-V ID until then (no rig file, no scope; REMOTE: WAIT FOR RIG shows). To find out:
+  wfview the same (then the 7851's way), else what our close does differently.
 - `--cat` and the built-in wfview server still describe the X6100 itself in remote mode.
 - USB audio (a USB-C OTG adapter): a USB headset with capture and playback would allow
   voice TX and holding the baseband in reset (battery). Check `dmesg | tail -30`,

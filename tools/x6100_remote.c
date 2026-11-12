@@ -500,6 +500,8 @@ void x6100_remote_poll(x6100_remote_t *r, x6100_remote_status_t *st)
 	// The rig file: loaded once the rig has answered its CI-V ID (19 00); until then every
 	// set is refused (RIG_ERR_NO_CAPS -1), so say when it is there, and when it is long
 	// in coming (2026-11-12: 20 refused in 10 s)
+	st->rig_ready = rs.rig_valid;
+
 	if (rs.rig_valid && !r->log_caps) {
 		fprintf(stderr, "\nremote: rig file for %s (CI-V 0x%02x) loaded, %lld ms after the streams\n", rs.model,
 			rs.model_id, (long long) (t - r->streams_ms));

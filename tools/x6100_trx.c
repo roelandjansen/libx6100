@@ -1100,6 +1100,7 @@ static void fil_default(fgroup_t g, int n)
 }
 
 static bool g_allow_oob;	/* --oob: skip the band check, enable TX in the baseband everywhere */
+static const char *g_remote_note = "REMOTE RX";	/* remote head: the note that stands on the scope */
 
 #ifdef X6100_REMOTE
 static bool g_remote_req;		/* --remote: control head for a remote Icom, receive only */
@@ -12983,7 +12984,7 @@ int main(int argc, char **argv)
 		}
 
 		fprintf(stderr, "remote: %s UDP %u, receive only\n", g_remote_cfg.host, g_remote_cfg.port);
-		rx.warn = "REMOTE RX";	/* stands while remote (see the note expiry in the loop) */
+		rx.warn = g_remote_note;	/* stands while remote (see the note expiry in the loop) */
 	}
 #endif
 
@@ -13350,8 +13351,8 @@ int main(int argc, char **argv)
 		if (rx.warn != warn_seen || rx.tot_cut) {
 			warn_seen = rx.warn;
 			warn_at = t;
-		} else if (rx.warn != NULL && t - warn_at >= WARN_MS && !(REMOTE_ON && strcmp(rx.warn, "REMOTE RX") == 0)) {
-			rx.warn = REMOTE_ON ? "REMOTE RX" : NULL;	/* remote head: back to the standing note */
+		} else if (rx.warn != NULL && t - warn_at >= WARN_MS && !(REMOTE_ON && rx.warn == g_remote_note)) {
+			rx.warn = REMOTE_ON ? g_remote_note : NULL;	/* remote head: back to the standing note */
 			warn_seen = rx.warn;
 			dirty = true;
 		}
@@ -13559,13 +13560,15 @@ int main(int argc, char **argv)
 			changed |= rs.ctl_changed != 0;
 
 			// Status line: only on a change, so other warnings are not overwritten
-			static int remote_shown = -1;	/* 0 link down, 1 up, 2 rig keyed */
-			int remote_now = !rs.connected ? 0 : rs.rig_tx ? 2 : 1;
+			static int remote_shown = -1;	/* 0 link down, 1 up, 2 rig keyed, 3 up but no rig file yet */
+			int remote_now = !rs.connected ? 0 : rs.rig_tx ? 2 : !rs.rig_ready ? 3 : 1;
 
 			if (remote_now != remote_shown) {
-				static const char *const msg[] = { "REMOTE LINK", "REMOTE RX", "REMOTE TX" };
+				// 3: the rig has not answered its ID yet (2026-11-12: up to some 90 s when
+				// started again soon after the last session; it heals by itself)
+				static const char *const msg[] = { "REMOTE LINK", "REMOTE RX", "REMOTE TX", "REMOTE: WAIT FOR RIG" };
 
-				rx.warn = msg[remote_now];
+				rx.warn = g_remote_note = msg[remote_now];
 
 				remote_shown = remote_now;
 				changed = true;

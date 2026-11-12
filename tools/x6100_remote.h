@@ -93,6 +93,7 @@ typedef struct
 	bool smeter_valid;
 	double smeter_dbm;
 	bool rig_tx;			/* the rig is keyed (another client) */
+	bool rig_ready;			/* the rig file is loaded (the rig answered its CI-V ID): controls work */
 } x6100_remote_status_t;
 
 typedef struct x6100_remote x6100_remote_t;
