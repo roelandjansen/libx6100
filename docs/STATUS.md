@@ -499,7 +499,7 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     PA3ME), stray E / T while it locks on at the start. To do: that start, QSB, a second
     signal nearby. As a remote head (2026-11-12): fed from the stream (the audio thread's
     left channel through a small ring) at the rig's CW pitch (CW Pitch in the head's own
-    poll): to check.
+    poll): works (2026-11-12).
 
 ## Next steps (suggested order)
 
