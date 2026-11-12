@@ -94,6 +94,7 @@ typedef struct
 	double smeter_dbm;
 	bool rig_tx;			/* the rig is keyed (another client) */
 	bool rig_ready;			/* the rig file is loaded (the rig answered its CI-V ID): controls work */
+	int cw_pitch;			/* the rig's CW pitch in Hz, 0 not known yet (the decoder listens there) */
 } x6100_remote_status_t;
 
 typedef struct x6100_remote x6100_remote_t;
@@ -132,3 +133,7 @@ typedef struct
 } x6100_remote_scope_t;
 
 bool x6100_remote_scope(x6100_remote_t *r, x6100_remote_scope_t *out);
+
+// The received audio (left channel, 48 kHz S16) since the last call, at most max
+// samples; for the CW decoder (main loop)
+size_t x6100_remote_audio_tap(x6100_remote_t *r, int16_t *out, size_t max);

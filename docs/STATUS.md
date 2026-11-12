@@ -494,7 +494,9 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     6-35 WPM decode (first letter while locking), 45 WPM after a few letters, noise only
     nothing. On the band 2026-11-12: decodes (PA3ME, 14 WPM, S9+10: CQ TEST ... DE
     PA3ME), stray E / T while it locks on at the start. To do: that start, QSB, a second
-    signal nearby, decoding the remote audio too.
+    signal nearby. As a remote head (2026-11-12): fed from the stream (the audio thread's
+    left channel through a small ring) at the rig's CW pitch (CW Pitch in the head's own
+    poll): to check.
 
 ## Next steps (suggested order)
 

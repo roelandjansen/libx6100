@@ -30,6 +30,7 @@
 #define C_NET_RATE	16000		/* the stream from the rig, resampled to C_RATE by the core */
 #define C_PERIOD	480		/* 10 ms */
 #define C_PERIODS	4
+#define C_TAP		16384		/* the decoder tap: about 340 ms at C_RATE (a power of 2) */
 #define C_ECHO_MS	400		/* rig reports this soon after our own change: our echo */
 #define C_ATT_DB	12		/* ATT key on: the Icom attenuator step used (0 = off) */
 
@@ -81,6 +82,14 @@ struct x6100_remote
 	atomic_uint xruns;		/* playback write failures (audio thread) */
 
 	//
+	// The received audio for the CW decoder (2026-11-12): the left channel at C_RATE, one
+	// writer (the audio thread), one reader (the main loop); full: the newest are dropped
+	//
+	int16_t tap[C_TAP];
+	atomic_size_t tap_w;		/* samples written, ever */
+	atomic_size_t tap_r;		/* samples read, ever */
+
+	//
 	// What the rig last reported
 	//
 	uint64_t rig_freq;
@@ -93,7 +102,7 @@ struct x6100_remote
 	bool log_idask;			/* "asking the ID directly" said */
 	int64_t id_sent_ms;		/* our own ID query to the login address, last sent */
 	int64_t ctl_poll_ms;		/* our own NR / NB poll, last sent */
-	int ctl_poll_i;			/* next one of our poll: NR, NB, RF gain */
+	int ctl_poll_i;			/* next one of our poll: NR, NB, RF gain, CW pitch */
 	int64_t streams_ms;		/* when the streams opened (0: not yet), for those two */
 	uint32_t scope_seq;
 	bool scope_seen;
@@ -227,6 +236,17 @@ static void *audio_main(void *arg)
 			out[i] = (int16_t) (v > 32767.0f ? 32767.0f : v < -32768.0f ? -32768.0f : v);
 		}
 
+		// The left channel into the decoder tap, while there is room
+		{
+			size_t w = atomic_load_explicit(&r->tap_w, memory_order_relaxed);
+			size_t rd = atomic_load_explicit(&r->tap_r, memory_order_acquire);
+
+			for (size_t i = 0; i < C_PERIOD && w - rd < C_TAP; i++, w++)
+				r->tap[w % C_TAP] = out[i * 2];
+
+			atomic_store_explicit(&r->tap_w, w, memory_order_release);
+		}
+
 		if (x6100_pcm_write(&r->pcm, out, C_PERIOD) < 0)
 			atomic_fetch_add(&r->xruns, 1);	/* counted, logged from the main loop; the pcm layer recovers */
 	}
@@ -253,6 +273,8 @@ int x6100_remote_open(x6100_remote_t **out, const x6100_remote_cfg_t *cfg)
 	r->log_state = -1;
 	atomic_init(&r->stop, false);
 	atomic_init(&r->xruns, 0);
+	atomic_init(&r->tap_w, 0);
+	atomic_init(&r->tap_r, 0);
 
 	memset(&p, 0, sizeof(p));
 	snprintf(p.host, sizeof(p.host), "%s", cfg->host);
@@ -488,12 +510,13 @@ void x6100_remote_poll(x6100_remote_t *r, x6100_remote_status_t *st)
 	// NR, NB and RF gain of the main receiver, asked by us: the IC-785x file polls NR / NB
 	// Medium Low for both receivers into one field (about 10 s, and the sub's answer undoes
 	// the main's) and RF gain Medium (seconds; 2026-11-12: the number followed slowly).
-	// One every 333 ms, by turns: each about once a second
+	// One every 333 ms, by turns: each about every 1.3 s. CW Pitch too (not in the file's
+	// poll): the CW decoder listens at the rig's pitch
 	if (rs.rig_valid && t - r->ctl_poll_ms >= 333) {
-		static const char *const poll[3] = { "Noise Reduction", "Noise Blanker", "RF Gain" };
+		static const char *const poll[4] = { "Noise Reduction", "Noise Blanker", "RF Gain", "CW Pitch" };
 
 		session_get_value(r->s, poll[r->ctl_poll_i], 0);
-		r->ctl_poll_i = (r->ctl_poll_i + 1) % 3;
+		r->ctl_poll_i = (r->ctl_poll_i + 1) % 4;
 		r->ctl_poll_ms = t;
 	}
 
@@ -501,6 +524,7 @@ void x6100_remote_poll(x6100_remote_t *r, x6100_remote_status_t *st)
 	// set is refused (RIG_ERR_NO_CAPS -1), so say when it is there, and when it is long
 	// in coming (2026-11-12: 20 refused in 10 s)
 	st->rig_ready = rs.rig_valid;
+	st->cw_pitch = rs.cw_pitch.valid ? rs.cw_pitch.value : 0;
 
 	if (rs.rig_valid && !r->log_caps) {
 		fprintf(stderr, "\nremote: rig file for %s (CI-V 0x%02x) loaded, %lld ms after the streams\n", rs.model,
@@ -672,4 +696,17 @@ bool x6100_remote_scope(x6100_remote_t *r, x6100_remote_scope_t *out)
 	out->len = row.len;
 	out->bins = row.bins;
 	return true;
+}
+
+size_t x6100_remote_audio_tap(x6100_remote_t *r, int16_t *out, size_t max)
+{
+	size_t rd = atomic_load_explicit(&r->tap_r, memory_order_relaxed);
+	size_t w = atomic_load_explicit(&r->tap_w, memory_order_acquire);
+	size_t n = w - rd < max ? w - rd : max;
+
+	for (size_t i = 0; i < n; i++)
+		out[i] = r->tap[(rd + i) % C_TAP];
+
+	atomic_store_explicit(&r->tap_r, rd + n, memory_order_release);
+	return n;
 }

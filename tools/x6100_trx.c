@@ -7785,10 +7785,11 @@ static int cwd_wpm(void)
 	return (int) lroundf(1200.0f / g_cwd.dit_ms);
 }
 
-// The decoder at work: switched on, in CW / CW-R, not as a remote head (no codec audio)
+// The decoder at work: switched on, in CW / CW-R (the audio: the codec, or as a remote head
+// the rig's audio from the stream, 2026-11-12)
 static bool cwd_active(const rx_t *rx)
 {
-	return g_sp[SP_CWDEC] && (rx->mode == X6100_MODE_CW || rx->mode == X6100_MODE_CWR) && !REMOTE_ON;
+	return g_sp[SP_CWDEC] && (rx->mode == X6100_MODE_CW || rx->mode == X6100_MODE_CWR);
 }
 
 // The decoder from the start: switched on, or into CW (the floor settles again)
@@ -13106,7 +13107,7 @@ int main(int argc, char **argv)
 				if (got > 0)
 					audio_feed(&scr, abuf, (unsigned) got, 2);
 
-				if (got > 0 && cwd_active(&rx))
+				if (got > 0 && cwd_active(&rx) && !REMOTE_ON)
 					cwd_feed(abuf, (unsigned) got, 2, rx.cwtone);	/* the CW decoder */
 
 				continue;
@@ -13154,7 +13155,8 @@ int main(int argc, char **argv)
 		static uint64_t cwd_busy_at;
 		const bool want_scope = rx.ascope || rx.asplit;
 		const uint64_t cap_now = now_ms();
-		const bool want_cwd = cwd_active(&rx) && (cwd_busy_at == 0 || cap_now - cwd_busy_at >= 10000);
+		const bool cwd_codec = cwd_active(&rx) && !REMOTE_ON;	/* remote: the stream feeds it */
+		const bool want_cwd = cwd_codec && (cwd_busy_at == 0 || cap_now - cwd_busy_at >= 10000);
 
 		if ((want_scope || want_cwd) && !apcm_open) {
 			int boost = rx.mode == X6100_MODE_AM || rx.mode == X6100_MODE_NFM ? 0 : 1;	/* as x6100_audio */
@@ -13183,7 +13185,7 @@ int main(int argc, char **argv)
 				cwd_busy_at = 0;
 				pfd[apcm_slot].fd = apcm.fd;
 			}
-		} else if (!want_scope && !cwd_active(&rx) && apcm_open) {
+		} else if (!want_scope && !cwd_codec && apcm_open) {
 			x6100_pcm_close(&apcm);
 			apcm_open = false;
 			pfd[apcm_slot].fd = -1;
@@ -13558,6 +13560,16 @@ int main(int argc, char **argv)
 				rx.nb = rs.ctl.nb;
 
 			changed |= rs.ctl_changed != 0;
+
+			// CW decoder: the rig's audio from the stream, at the rig's CW pitch (its tone
+			// comes from the rig's setting, not ours; ours until the rig's is known)
+			if (cwd_active(&rx)) {
+				int16_t tap[1024];
+				size_t n;
+
+				while ((n = x6100_remote_audio_tap(g_remote, tap, sizeof(tap) / sizeof(tap[0]))) > 0)
+					cwd_feed(tap, (unsigned) n, 1, rs.cw_pitch > 0 ? rs.cw_pitch : rx.cwtone);
+			}
 
 			// Status line: only on a change, so other warnings are not overwritten
 			static int remote_shown = -1;	/* 0 link down, 1 up, 2 rig keyed, 3 up but no rig file yet */
