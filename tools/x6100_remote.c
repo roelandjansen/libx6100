@@ -520,12 +520,18 @@ void x6100_remote_poll(x6100_remote_t *r, x6100_remote_status_t *st)
 			X6100_REMOTE_C_RFG, X6100_REMOTE_C_NR, X6100_REMOTE_C_NB };
 		const struct radio_value *val[6] = { &rs.agc, &rs.attenuator, &rs.preamp, &rs.rf_gain,
 			&rs.noise_reduction, &rs.noise_blanker };
+		static const char *const name[6] = { "AGC", "ATT", "PRE", "RF gain", "NR", "NB" };
 
 		for (int i = 0; i < 6; i++) {
 			if (!val[i]->valid || val[i]->value == r->rig_ctl[i])
 				continue;
 
 			r->rig_ctl[i] = val[i]->value;
+
+			// Each report that changed, for the log (2026-11-12: RF gain, NR, NB from the 7851
+			// did not show on the head; this says whether they come in at all)
+			fprintf(stderr, "\nremote: rig %s %d%s\n", name[i], val[i]->value,
+				!r->sent_valid ? " (before our first push)" : t - r->ctl_sent_ms[i] < C_ECHO_MS ? " (our echo)" : "");
 
 			if (!r->sent_valid || t - r->ctl_sent_ms[i] < C_ECHO_MS)
 				continue;
