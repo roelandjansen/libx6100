@@ -12746,6 +12746,7 @@ int main(int argc, char **argv)
 		}
 
 		fprintf(stderr, "remote: %s UDP %u, receive only\n", g_remote_cfg.host, g_remote_cfg.port);
+		rx.warn = "REMOTE RX";	/* stands while remote (see the note expiry in the loop) */
 	}
 #endif
 
@@ -13079,12 +13080,14 @@ int main(int argc, char **argv)
 		static const char *warn_seen;
 		static uint64_t warn_at;
 
+		// Remote head: REMOTE RX stands on the scope the whole time (receive only); other
+		// notes show over it for WARN_MS, then it comes back
 		if (rx.warn != warn_seen || rx.tot_cut) {
 			warn_seen = rx.warn;
 			warn_at = t;
-		} else if (rx.warn != NULL && t - warn_at >= WARN_MS) {
-			rx.warn = NULL;
-			warn_seen = NULL;
+		} else if (rx.warn != NULL && t - warn_at >= WARN_MS && !(REMOTE_ON && strcmp(rx.warn, "REMOTE RX") == 0)) {
+			rx.warn = REMOTE_ON ? "REMOTE RX" : NULL;	/* remote head: back to the standing note */
+			warn_seen = rx.warn;
 			dirty = true;
 		}
 
@@ -13272,10 +13275,9 @@ int main(int argc, char **argv)
 			int remote_now = !rs.connected ? 0 : rs.rig_tx ? 2 : 1;
 
 			if (remote_now != remote_shown) {
-				static const char *const msg[] = { "REMOTE LINK", NULL, "REMOTE TX" };
+				static const char *const msg[] = { "REMOTE LINK", "REMOTE RX", "REMOTE TX" };
 
-				if (msg[remote_now] != NULL || remote_shown != 1)
-					rx.warn = msg[remote_now];
+				rx.warn = msg[remote_now];
 
 				remote_shown = remote_now;
 				changed = true;
