@@ -6693,7 +6693,7 @@ static void gen_hint(int row, char *s, size_t n)
 		else if (!g_cat_pty)
 			snprintf(s, n, "NEEDS THE CI-V PTY: CATPTY OFF IN THE CONF");
 		else if (wfs_watching())
-			snprintf(s, n, "RUNNING, WFVIEW PORT %d", g_wfs_port[0]);
+			snprintf(s, n, "RUNNING, WFVIEW UDP %d", g_wfs_port[0]);
 		else
 			snprintf(s, n, "NOT RUNNING, HOLD MFK: START");
 		break;
@@ -9444,7 +9444,7 @@ static void help_options(FILE *fp, const char *argv0)
 		"  --oob             band check off (you are responsible for where you transmit)\n"
 		"  --no-limit        tune 10 kHz - 100 MHz (baseband probe)\n"
 #ifdef X6100_REMOTE
-		"  --remote <host> <port> <user> <password>\n"
+		"  --remote <host> <udp port> <user> <password>\n"
 		"                    control head for a remote Icom (wfserver or its LAN port), receive only\n"
 		"  --rigs <dir>      wfview .rig files for --remote (default /opt/wfserver/share/wfview/rigs)\n"
 #endif
@@ -12554,7 +12554,7 @@ int main(int argc, char **argv)
 			int port = i + 4 < argc ? atoi(argv[i + 2]) : 0;
 
 			if (port <= 0 || port > 65535) {
-				fprintf(stderr, "--remote <host> <port> <user> <password>\n");
+				fprintf(stderr, "--remote <host> <udp port> <user> <password>\n");
 				return 1;
 			}
 
@@ -12739,13 +12739,13 @@ int main(int argc, char **argv)
 		x6100_ctl_sync(&ctl);
 
 		if ((rc = x6100_remote_open(&g_remote, &g_remote_cfg)) < 0) {
-			fprintf(stderr, "remote: %s:%u: %s\n", g_remote_cfg.host, g_remote_cfg.port, strerror(-rc));
+			fprintf(stderr, "remote: %s UDP %u: %s\n", g_remote_cfg.host, g_remote_cfg.port, strerror(-rc));
 			x6100_ctl_set(&ctl, X6100_REG_FLAGS, 0);
 			x6100_ctl_sync(&ctl);
 			return 1;
 		}
 
-		fprintf(stderr, "remote: %s:%u, receive only\n", g_remote_cfg.host, g_remote_cfg.port);
+		fprintf(stderr, "remote: %s UDP %u, receive only\n", g_remote_cfg.host, g_remote_cfg.port);
 	}
 #endif
 
