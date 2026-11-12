@@ -87,6 +87,9 @@ struct x6100_remote
 	int rig_mode_data;
 	int rig_filter;
 	int rig_ctl[6];			/* the controls as the rig last reported them, -1 none yet */
+	bool log_caps;			/* "rig file loaded" said */
+	bool log_nocaps;		/* "no CI-V ID yet" said */
+	int64_t streams_ms;		/* when the streams opened (0: not yet), for those two */
 	uint32_t scope_seq;
 	bool scope_seen;
 	int64_t scope_set_ms;		/* last scope mode / span sent */
@@ -449,10 +452,28 @@ void x6100_remote_poll(x6100_remote_t *r, x6100_remote_status_t *st)
 	if (!st->connected) {
 		r->sent_valid = false;
 		r->smeter_valid = false;
+		r->streams_ms = 0;	/* the rig file notes again at the next connect */
+		r->log_caps = false;
+		r->log_nocaps = false;
 		return;
 	}
 
+	if (r->streams_ms == 0)
+		r->streams_ms = t;
+
 	session_get_state(r->s, &rs);
+
+	// The rig file: loaded once the rig has answered its CI-V ID (19 00); until then every
+	// set is refused (RIG_ERR_NO_CAPS -1), so say when it is there, and when it is long
+	// in coming (2026-11-12: 20 refused in 10 s)
+	if (rs.rig_valid && !r->log_caps) {
+		fprintf(stderr, "\nremote: rig file for %s (CI-V 0x%02x) loaded, %lld ms after the streams\n", rs.model,
+			rs.model_id, (long long) (t - r->streams_ms));
+		r->log_caps = true;
+	} else if (!rs.rig_valid && r->streams_ms != 0 && !r->log_nocaps && t - r->streams_ms >= 5000) {
+		fprintf(stderr, "\nremote: no CI-V ID (19 00) from the rig after 5 s: no rig file yet, controls refused\n");
+		r->log_nocaps = true;
+	}
 
 	//
 	// Frequency: a new report that differs from what we sent, and not just after
