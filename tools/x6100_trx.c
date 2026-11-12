@@ -9360,9 +9360,10 @@ overlays:
 	}
 
 	//
-	// Last TX refusal or trip, for WARN_MS or until the next TX
+	// Last TX refusal or trip, for WARN_MS or until the next TX (REMOTE RX stands); not over
+	// an open panel or the status page, which it covered top left (2026-11-12)
 	//
-	if (rx->warn != NULL) {
+	if (rx->warn != NULL && !panel_open(rx)) {
 		int tw = x6100_lcd_text_width(rx->warn, 2);
 
 		x6100_lcd_fill(lcd, LBL_W + 4, SPEC_Y + 22, tw + 8, 20, 0x000000);

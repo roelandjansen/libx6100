@@ -467,7 +467,12 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     Fixed then: CW-R from the head gave RTTY-R and the 7851's CW-R was not seen (wfview
     mode Num 6, not the CI-V 7); RF gain, NR, NB, ATT, PRE and AGC changed on the 7851 now
     come back to the head (AGC only once at connect: not in the IC-785x poll list).
-    To check: CW-R both ways, RF gain / NR / NB / ATT / PRE from the 7851.
+    Later that day the scope and controls worked again (the earlier failing run: no CI-V
+    ID from the 7851 for 10 s, not seen since). AGC head -> 7851: SLOW slow, FAST fast,
+    AUTO mid, OFF stays mid (Icom AGC Status has FAST / MID / SLOW only). REMOTE RX was
+    drawn over the status page and panels: no longer while one is open. Short notes over
+    REMOTE RX come and go. To check: CW-R both ways, RF gain / NR / NB / ATT / PRE from
+    the 7851.
 
 ## Next steps (suggested order)
 

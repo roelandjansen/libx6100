@@ -347,7 +347,9 @@ under GEN until a better key turns up.
 Receive-only control head for a remote Icom (STATUS item 47). Open (handover 2026-11-12):
 
 - Scope amplitude: RSCOPE_DB_STEP 0.5 dB a step is a guess; calibrate on the 7851.
-- AGC from the X6100: untested; from the 7851 only seen at connect (the IC-785x rig file
+- AGC from the X6100: SLOW / FAST / AUTO -> slow / fast / mid; OFF cannot be sent (AGC
+  Status has FAST / MID / SLOW; the 7851's AGC OFF would be 1A 04 time constant 0), so it
+  stays. From the 7851 only seen at connect (the IC-785x rig file
   does not poll it). PRE, ATT, RF gain, NR, NB work from the head (2026-11-12); from the
   7851 they now come back (to check).
 - On connect the X6100's saved state overwrites the 7851's: take the 7851's instead.
