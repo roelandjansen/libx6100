@@ -1,6 +1,6 @@
 # libx6100 / x6100_trx — to do
 
-Status: 2026-11-07 (v0.17.14). Summary and next steps: `STATUS.md`.
+Status: 2026-11-12 (v0.17.15). Summary and next steps: `STATUS.md`.
 
 ## Display
 

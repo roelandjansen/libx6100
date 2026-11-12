@@ -1,6 +1,10 @@
 # libx6100 / x6100_trx — status
 
-Snapshot: 2026-11-07. Last tag: v0.17.14 (2026-11-07; scope markers A / B / T as the
+Snapshot: 2026-11-12. Last tag: v0.17.15 (2026-11-12; CW decoder (scope panel CW
+DECODER, decodes on the band); remote head: REMOTE RX note, CW-R, the rig's RF gain /
+NR / NB / ATT / PRE back to the head, ID asked at the rig's address, own quick poll,
+REMOTE: WAIT FOR RIG; X6200.rig and CI-V 0x80 reserved; baseband hang log; notes not
+over panels), on v0.17.14 (2026-11-07; scope markers A / B / T as the
 IC-7851 (MARKERS choice, B and T through the waterfall, no T where TX is refused); the
 tune line in the waterfall and in 3D; the squelch mutes wfview too, SQL push; bbreset
 without a console (MFK push, the command pipe /tmp/x6100_trx.cmd); screenshots (shot,
@@ -488,7 +492,9 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     keyer PITCH in 8 ms blocks, noise floor and peak, dit length followed (5-50 WPM); the
     text and WPM at the foot of the RF scope, each word on the console / log. PC tests:
     6-35 WPM decode (first letter while locking), 45 WPM after a few letters, noise only
-    nothing. To check on the band: real signals, QSB, a second signal nearby.
+    nothing. On the band 2026-11-12: decodes (PA3ME, 14 WPM, S9+10: CQ TEST ... DE
+    PA3ME), stray E / T while it locks on at the start. To do: that start, QSB, a second
+    signal nearby, decoding the remote audio too.
 
 ## Next steps (suggested order)
 
