@@ -60,6 +60,10 @@ typedef struct
 	bool nb;
 } x6100_remote_rx_t;
 
+// The controls the rig reports back (bits of x6100_remote_status_t.ctl_changed)
+enum { X6100_REMOTE_C_AGC = 1, X6100_REMOTE_C_ATT = 2, X6100_REMOTE_C_PRE = 4, X6100_REMOTE_C_RFG = 8,
+	X6100_REMOTE_C_NR = 16, X6100_REMOTE_C_NB = 32 };
+
 typedef struct
 {
 	//
@@ -77,6 +81,11 @@ typedef struct
 	bool mode_changed;
 	x6100_mode_t mode;
 	int filter;
+
+	// The controls, in the same way: X6100_REMOTE_C_* bits for those changed at the rig,
+	// the new values in ctl (only those fields)
+	unsigned ctl_changed;
+	x6100_remote_rx_t ctl;
 
 	//
 	// Meter

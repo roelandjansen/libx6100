@@ -462,6 +462,12 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     ways, mode / filter, S meter, RX audio (16 kHz stream, SCHED_FIFO audio thread: no
     crackle), scope and waterfall from the 7851 (centre +- 50 kHz), the REMOTE RX note.
     UDP in the port names (48bad70). Open points: TODO, Remote head.
+    Tested 2026-11-12: REMOTE RX stands, VFO / A-B both ways, S meter, audio clean,
+    scope the same, PRE (PRE1), ATT (off / 12 dB), RF gain, NR, NB from the head work.
+    Fixed then: CW-R from the head gave RTTY-R and the 7851's CW-R was not seen (wfview
+    mode Num 6, not the CI-V 7); RF gain, NR, NB, ATT, PRE and AGC changed on the 7851 now
+    come back to the head (AGC only once at connect: not in the IC-785x poll list).
+    To check: CW-R both ways, RF gain / NR / NB / ATT / PRE from the 7851.
 
 ## Next steps (suggested order)
 

@@ -31,10 +31,14 @@
 #define C_PERIODS	4
 #define C_ECHO_MS	400		/* rig reports this soon after our own change: our echo */
 #define C_ATT_DB	12		/* ATT key on: the Icom attenuator step used (0 = off) */
+
+// The controls, as indices (send times, last rig values) and their X6100_REMOTE_C_* bits
+enum { C_AGC, C_ATT, C_PRE, C_RFG, C_NR, C_NB };
 #define C_SCOPE_HALF	50000		/* the rig scope, centre mode +- 50 kHz: the X6100 IQ width (SPAN_HZ) */
 
 //
-// Icom CI-V mode numbers (wfview .rig Modes\N\Num)
+// Mode numbers as wfview has them (.rig Modes\N\Num: its own list, not the CI-V Reg;
+// they part at CW-R: Num 6, Reg 7; Num 7 is RTTY-R, 2026-11-12: CW-R came out as RTTY-R)
 //
 
 #define C_ICOM_LSB	0
@@ -42,7 +46,7 @@
 #define C_ICOM_AM	2
 #define C_ICOM_CW	3
 #define C_ICOM_FM	5
-#define C_ICOM_CWR	7
+#define C_ICOM_CWR	6
 
 struct x6100_remote
 {
@@ -58,6 +62,7 @@ struct x6100_remote
 	x6100_remote_rx_t sent;
 	int64_t freq_sent_ms;
 	int64_t mode_sent_ms;
+	int64_t ctl_sent_ms[6];	/* per control (C_* below): last sent, for the echo guard */
 
 	//
 	// Logged on a change (stderr)
@@ -81,6 +86,7 @@ struct x6100_remote
 	int rig_mode_num;
 	int rig_mode_data;
 	int rig_filter;
+	int rig_ctl[6];			/* the controls as the rig last reported them, -1 none yet */
 	uint32_t scope_seq;
 	bool scope_seen;
 	int64_t scope_set_ms;		/* last scope mode / span sent */
@@ -187,6 +193,12 @@ static int agc_to_icom(x6100_agc_t a)
 	}
 }
 
+// Icom AGC (1 FAST, 2 MID, 3 SLOW) as the X6100 has it: MID as AUTO, as agc_to_icom
+static x6100_agc_t agc_from_icom(int v)
+{
+	return v == 1 ? X6100_AGC_FAST : v == 3 ? X6100_AGC_SLOW : X6100_AGC_AUTO;
+}
+
 //
 // Audio thread: session RX audio (float stereo) -> codec playback (S16 stereo).
 // x6100_pcm_write blocks: it paces the loop
@@ -227,6 +239,9 @@ int x6100_remote_open(x6100_remote_t **out, const x6100_remote_cfg_t *cfg)
 		return -ENOMEM;
 
 	r->rig_mode_num = -1;
+
+	for (int i = 0; i < 6; i++)
+		r->rig_ctl[i] = -1;
 	r->log_state = -1;
 	atomic_init(&r->stop, false);
 	atomic_init(&r->xruns, 0);
@@ -339,23 +354,36 @@ void x6100_remote_apply(x6100_remote_t *r, const x6100_remote_rx_t *rx)
 			r->mode_sent_ms = t;
 	}
 
-	if ((all || rx->agc != o->agc) && agc_to_icom(rx->agc) > 0)
+	// The controls; each send noted for the echo guard in poll
+	if ((all || rx->agc != o->agc) && agc_to_icom(rx->agc) > 0) {
 		session_set_value(r->s, "AGC Status", 0, agc_to_icom(rx->agc));
+		r->ctl_sent_ms[C_AGC] = t;
+	}
 
-	if (all || rx->att != o->att)
+	if (all || rx->att != o->att) {
 		session_set_value(r->s, "Attenuator Status", 0, rx->att ? C_ATT_DB : 0);
+		r->ctl_sent_ms[C_ATT] = t;
+	}
 
-	if (all || rx->pre != o->pre)
+	if (all || rx->pre != o->pre) {
 		session_set_value(r->s, "Preamp Status", 0, rx->pre ? 1 : 0);
+		r->ctl_sent_ms[C_PRE] = t;
+	}
 
-	if (all || rx->rfg != o->rfg)
+	if (all || rx->rfg != o->rfg) {
 		session_set_value(r->s, "RF Gain", 0, (rx->rfg * 255 + 50) / 100);
+		r->ctl_sent_ms[C_RFG] = t;
+	}
 
-	if (all || rx->nr != o->nr)
+	if (all || rx->nr != o->nr) {
 		session_set_value(r->s, "Noise Reduction", 0, rx->nr);
+		r->ctl_sent_ms[C_NR] = t;
+	}
 
-	if (all || rx->nb != o->nb)
+	if (all || rx->nb != o->nb) {
 		session_set_value(r->s, "Noise Blanker", 0, rx->nb);
+		r->ctl_sent_ms[C_NB] = t;
+	}
 
 	r->sent = *rx;
 	r->sent_valid = true;
@@ -461,6 +489,65 @@ void x6100_remote_poll(x6100_remote_t *r, x6100_remote_status_t *st)
 		}
 	}
 
+	//
+	// The controls, the same way (2026-11-12: AGC, ATT, PRE, RF gain, NR and NB only went
+	// out; changed on the rig they did not show): a new report that differs from what we
+	// sent, and not just after our own send of that control
+	//
+	{
+		static const unsigned bit[6] = { X6100_REMOTE_C_AGC, X6100_REMOTE_C_ATT, X6100_REMOTE_C_PRE,
+			X6100_REMOTE_C_RFG, X6100_REMOTE_C_NR, X6100_REMOTE_C_NB };
+		const struct radio_value *val[6] = { &rs.agc, &rs.attenuator, &rs.preamp, &rs.rf_gain,
+			&rs.noise_reduction, &rs.noise_blanker };
+
+		for (int i = 0; i < 6; i++) {
+			if (!val[i]->valid || val[i]->value == r->rig_ctl[i])
+				continue;
+
+			r->rig_ctl[i] = val[i]->value;
+
+			if (!r->sent_valid || t - r->ctl_sent_ms[i] < C_ECHO_MS)
+				continue;
+
+			int v = val[i]->value;
+			x6100_remote_rx_t *s = &r->sent, *c = &st->ctl;
+
+			switch (i) {
+			case C_AGC:
+				if (agc_from_icom(v) == s->agc)
+					continue;
+				c->agc = s->agc = agc_from_icom(v);
+				break;
+			case C_ATT:
+				if ((v != 0) == s->att)
+					continue;
+				c->att = s->att = v != 0;
+				break;
+			case C_PRE:
+				if ((v != 0) == s->pre)
+					continue;
+				c->pre = s->pre = v != 0;
+				break;
+			case C_RFG:
+				if ((v * 100 + 127) / 255 == s->rfg)
+					continue;
+				c->rfg = s->rfg = (v * 100 + 127) / 255;
+				break;
+			case C_NR:
+				if ((v != 0) == s->nr)
+					continue;
+				c->nr = s->nr = v != 0;
+				break;
+			default:
+				if ((v != 0) == s->nb)
+					continue;
+				c->nb = s->nb = v != 0;
+				break;
+			}
+
+			st->ctl_changed |= bit[i];	/* taken over by the UI: no resend */
+		}
+	}
 	//
 	// Rig scope: centre mode, +- 50 kHz, kept so. Judged by the width of the rows it
 	// sends: the core learns the span only from a reply to its own query, so a span

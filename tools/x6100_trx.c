@@ -13270,6 +13270,29 @@ int main(int argc, char **argv)
 				changed = true;
 			}
 
+			// The controls changed at the rig (AGC, ATT, PRE, RF gain, NR, NB)
+			if (rs.ctl_changed & X6100_REMOTE_C_AGC) {
+				rx.agc = rs.ctl.agc;
+				rx.agc_group[mode_group(rx.mode)] = rx.agc;	/* kept per mode group, as the AGC key */
+			}
+
+			if (rs.ctl_changed & X6100_REMOTE_C_ATT)
+				rx.att = rs.ctl.att;
+
+			if (rs.ctl_changed & X6100_REMOTE_C_PRE)
+				rx.pre = rs.ctl.pre;
+
+			if (rs.ctl_changed & X6100_REMOTE_C_RFG)
+				rx.rfg = rs.ctl.rfg;
+
+			if (rs.ctl_changed & X6100_REMOTE_C_NR)
+				rx.nr = rs.ctl.nr;
+
+			if (rs.ctl_changed & X6100_REMOTE_C_NB)
+				rx.nb = rs.ctl.nb;
+
+			changed |= rs.ctl_changed != 0;
+
 			// Status line: only on a change, so other warnings are not overwritten
 			static int remote_shown = -1;	/* 0 link down, 1 up, 2 rig keyed */
 			int remote_now = !rs.connected ? 0 : rs.rig_tx ? 2 : 1;
