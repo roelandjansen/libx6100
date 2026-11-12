@@ -22,7 +22,7 @@
 
 #define X6100_CIV_ADDR_IC705	0xA4
 #define X6100_CIV_ADDR_X6100	0x61	/* own identity: wfview rig file contrib/wfview/X6100.rig */
-#define X6100_CIV_ADDR_X6200	0x80	/* reserved for the X6200 (2026-11-12): contrib/wfview/X6200.rig, not used yet */
+#define X6100_CIV_ADDR_X6200	0x63	/* the X6200 (2026-11-12; first 0x80): contrib/wfview/X6200.rig, not answered yet */
 #define X6100_CIV_ADDR_CTRL	0xE0
 #define X6100_CIV_ADDR_ALL	0x00
 #define X6100_CIV_FRAME_MAX	128	/* 1A 00 memory contents, IC-705 layout: 121 bytes */

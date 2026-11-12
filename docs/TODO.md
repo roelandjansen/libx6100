@@ -312,9 +312,9 @@ under GEN until a better key turns up.
 ## CAT / network
 
 - X6200 reserved (2026-11-12): contrib/wfview/X6200.rig (mkrig.sh X6200: the X6100 file
-  with model X6200, CI-V address 0x80, free among wfview's rig files) and
+  with model X6200, CI-V address 0x63 (first 0x80), free among wfview's rig files) and
   X6100_CIV_ADDR_X6200 in x6100_civ.h; in the wfserver bundle and deployed. Later: answer
-  on 0x80 (civaddr 80, GEN CI-V ADDRESS) when there is an X6200 to support; its own
+  on 0x63 (civaddr 63, GEN CI-V ADDRESS) when there is an X6200 to support; its own
   hamlib model.
 - ATT / preamp from wfview: work (2026-10-27); with the IC-705 rig file wfview shows PRE
   1 / 2, X6100.rig has off / on only: check there.

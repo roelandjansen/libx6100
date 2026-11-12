@@ -4,7 +4,7 @@ Version=2.10
 [Rig]
 Manufacturer=0
 Model=X6200
-CIVAddress=128
+CIVAddress=99
 RigCtlDModel=3087
 NumberOfReceivers=1
 NumberOfVFOs=2

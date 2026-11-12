@@ -3,7 +3,7 @@
 Snapshot: 2026-11-12. Last tag: v0.17.15 (2026-11-12; CW decoder (scope panel CW
 DECODER, decodes on the band); remote head: REMOTE RX note, CW-R, the rig's RF gain /
 NR / NB / ATT / PRE back to the head, ID asked at the rig's address, own quick poll,
-REMOTE: WAIT FOR RIG; X6200.rig and CI-V 0x80 reserved; baseband hang log; notes not
+REMOTE: WAIT FOR RIG; X6200.rig and CI-V 0x63 reserved; baseband hang log; notes not
 over panels), on v0.17.14 (2026-11-07; scope markers A / B / T as the
 IC-7851 (MARKERS choice, B and T through the waterfall, no T where TX is refused); the
 tune line in the waterfall and in 3D; the squelch mutes wfview too, SQL push; bbreset

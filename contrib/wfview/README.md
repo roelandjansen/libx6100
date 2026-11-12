@@ -66,12 +66,13 @@ The bands, modes and changes are at the top of the awk program in `mkrig.sh`.
 ## X6200 (reserved)
 
 `X6200.rig` is reserved for the Xiegu X6200 (2026-11-12): for now the same file as
-`X6100.rig`, with model X6200 and its own CI-V address **0x80** (128), so wfview and
-wfserver can tell the two radios apart. 0x80 is free among the wfview rig files (on real
-Icoms it is the IC-7410, which wfview has no file for); 0x61 stays the X6100's. The hamlib
-model is still the X6100's (3087). Both files are made by `mkrig.sh`, both go into the
-wfserver bundle and onto the radio with `build.sh deploy`. x6100_trx does not answer on
-0x80 yet (`X6100_CIV_ADDR_X6200` in `include/x6100_civ.h` reserves it).
+`X6100.rig`, with model X6200 and its own CI-V address **0x63** (99), so wfview and
+wfserver can tell the two radios apart. 0x63 is free among the wfview rig files and odd,
+as the X6100's 0x61, so never a real Icom's (first 0x80 was taken, the IC-7410's on real
+Icoms; changed the same day). The hamlib model is still the X6100's (3087). Both files are
+made by `mkrig.sh`, both go into the wfserver bundle and onto the radio with `build.sh
+deploy`. x6100_trx does not answer on 0x63 yet (`X6100_CIV_ADDR_X6200` in
+`include/x6100_civ.h` reserves it).
 
 ## Status
 

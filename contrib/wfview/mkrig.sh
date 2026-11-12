@@ -10,7 +10,7 @@
 # next to this script.
 #
 # X6200 (reserved 2026-11-12): the same file for now, with its own name and CI-V address
-# 0x80 (free among the wfview rig files; on real Icoms the IC-7410), so wfview and
+# 0x63 (free among the wfview rig files, odd as the X6100's 0x61), so wfview and
 # wfserver tell the two apart. The hamlib model stays the X6100's until there is a reason.
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -19,7 +19,7 @@
 set -euo pipefail
 
 readonly C_CIV_X6100=97		# 0x61: odd, so never a real Icom; matches the 1D 19 ID 61 00
-readonly C_CIV_X6200=128		# 0x80: reserved for the X6200 (2026-11-12)
+readonly C_CIV_X6200=99		# 0x63: the X6200 (2026-11-12; first 0x80): odd as the X6100's, never a real Icom
 readonly C_HAMLIB=3087		# RIG_MODEL_X6100
 
 #
