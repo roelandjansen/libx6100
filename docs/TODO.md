@@ -17,6 +17,11 @@ Status: 2026-11-07 (v0.17.14). Summary and next steps: `STATUS.md`.
 
 ## Radio
 
+- CW decoder (idea 2026-11-12, after the 1KO125 apps): in CW / CW-R, a narrow tone
+  detector on the CW pitch with an automatic threshold, dit / dah timing that follows the
+  speed (about 5-50 WPM), the text on a line in the scope area and on the console / log;
+  `cwdec on|off`. Audio from the codec as the F3 scope (not while wfserver holds it). To
+  compare: the R1CBU GUI's CW decoder (LGPL-2.1).
 - Baseband hangs (2026-11-05 .. 11-09, several): bbreset by console, pipe and MFK push all
   verified. Open: what triggers them. 2026-11-09: just receiving, idle (no TX, no scan).
   Since 2026-11-09 x6100_trx logs every hang itself: /etc/x6100/bb_hangs.log (HANG and
