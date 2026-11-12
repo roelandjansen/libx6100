@@ -215,7 +215,7 @@ bundle_make() {
 	${C_TRIPLET}-strip --strip-unneeded "${L_OUT}"/lib/*.so* "${L_OUT}"/plugins/*/*.so 2> /dev/null || true	# loader and odd files: keep
 
 	cp -- "${L_SRC}"/rigs/*.rig "${L_OUT}/share/wfview/rigs/"
-	cp -- "${C_HERE}/../wfview/X6100.rig" "${L_OUT}/share/wfview/rigs/"
+	cp -- "${C_HERE}/../wfview/X6100.rig" "${C_HERE}/../wfview/X6200.rig" "${L_OUT}/share/wfview/rigs/"	# X6200: reserved (2026-11-12)
 	cp -- "${C_HERE}/wfserver.sh" "${C_HERE}/wfserver.ini.example" "${L_OUT}/"
 	chmod 755 -- "${L_OUT}/wfserver.sh"
 }

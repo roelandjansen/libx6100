@@ -296,8 +296,8 @@ deploy() {
 	# wfserver's own copy of the rig file: wfserver turns wfview's requests into CI-V with
 	# it, so an old copy loses what the new one adds (2026-11-07: WLAN sent as MIC)
 	if ssh -- "${G_HOST}" "test -d /opt/wfserver/share/wfview/rigs"; then
-		scp -q -- contrib/wfview/X6100.rig "${G_HOST}:/opt/wfserver/share/wfview/rigs/X6100.rig"
-		printf '%s\n' 'deployed /opt/wfserver/share/wfview/rigs/X6100.rig (wfserver reads it at its start)'
+		scp -q -- contrib/wfview/X6100.rig contrib/wfview/X6200.rig "${G_HOST}:/opt/wfserver/share/wfview/rigs/"
+		printf '%s\n' 'deployed X6100.rig and X6200.rig (reserved) to /opt/wfserver/share/wfview/rigs (wfserver reads them at its start)'
 	fi
 
 	# Built only with cmake present: copied when there

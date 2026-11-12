@@ -2,19 +2,24 @@
 #
 # mkrig.sh - make the wfview rig file for the X6100 (x6100_trx) from wfview's IC-705 one
 #
-# Usage: mkrig.sh <wfview>/rigs/IC-705.rig > X6100.rig
+# Usage: mkrig.sh <wfview>/rigs/IC-705.rig [X6100|X6200] > X6100.rig (or X6200.rig)
 #
 # Keeps the IC-705 commands and polls but those for functions the X6100 does not have
 # (they gave FA polls and dead controls), sets the X6100 identity (CI-V address 0x61,
 # hamlib model 3087) and its capabilities: spans, bands, modes, memories. See README.md
 # next to this script.
 #
+# X6200 (reserved 2026-11-12): the same file for now, with its own name and CI-V address
+# 0x80 (free among the wfview rig files; on real Icoms the IC-7410), so wfview and
+# wfserver tell the two apart. The hamlib model stays the X6100's until there is a reason.
+#
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 
 set -euo pipefail
 
-readonly C_CIV_ADDR=97		# 0x61: odd, so never a real Icom; matches the 1D 19 ID 61 00
+readonly C_CIV_X6100=97		# 0x61: odd, so never a real Icom; matches the 1D 19 ID 61 00
+readonly C_CIV_X6200=128		# 0x80: reserved for the X6200 (2026-11-12)
 readonly C_HAMLIB=3087		# RIG_MODEL_X6100
 
 #
@@ -22,17 +27,24 @@ readonly C_HAMLIB=3087		# RIG_MODEL_X6100
 #
 
 usage() {
-	printf '%s\n' "usage: mkrig.sh <wfview>/rigs/IC-705.rig > X6100.rig" >&2
+	printf '%s\n' "usage: mkrig.sh <wfview>/rigs/IC-705.rig [X6100|X6200] > <model>.rig" >&2
 	exit 1
 }
 
-if [[ $# -ne 1 || ! -r "${1}" ]]; then
+if [[ $# -lt 1 || $# -gt 2 || ! -r "${1}" ]]; then
 	usage
 fi
 
 G_SRC="${1}"
+G_MODEL="${2:-X6100}"
 
-awk -v CIV="${C_CIV_ADDR}" -v HAMLIB="${C_HAMLIB}" -f <(cat <<'EOF'
+case "${G_MODEL}" in
+	X6100) G_CIV="${C_CIV_X6100}" ;;
+	X6200) G_CIV="${C_CIV_X6200}" ;;
+	*) usage ;;
+esac
+
+awk -v CIV="${G_CIV}" -v HAMLIB="${C_HAMLIB}" -v MODEL="${G_MODEL}" -f <(cat <<'EOF'
 BEGIN {
 	# The IC-705 commands and polls are kept, except for functions the X6100 does not
 	# have: those wfview would poll for an FA (16 5D, 1B 00 .. every few seconds) or show
@@ -84,7 +96,7 @@ BEGIN {
 	set["Preamps", "1", "Name"] = "PREAMP"
 	set["Inputs", "WLAN", "Name"] = "LAN"	# wfview's inputLAN (4); the X6100 GEN rows say LAN
 	# Header
-	hdr["Model"] = "X6100"
+	hdr["Model"] = MODEL
 	hdr["CIVAddress"] = CIV
 	hdr["RigCtlDModel"] = HAMLIB
 	hdr["HasLAN"] = "false"

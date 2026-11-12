@@ -58,9 +58,20 @@ the IC-705 range code, which gives the same 12 HF ranges as x6100_trx.
 
 ```
 bash mkrig.sh <wfview>/rigs/IC-705.rig > X6100.rig
+bash mkrig.sh <wfview>/rigs/IC-705.rig X6200 > X6200.rig
 ```
 
 The bands, modes and changes are at the top of the awk program in `mkrig.sh`.
+
+## X6200 (reserved)
+
+`X6200.rig` is reserved for the Xiegu X6200 (2026-11-12): for now the same file as
+`X6100.rig`, with model X6200 and its own CI-V address **0x80** (128), so wfview and
+wfserver can tell the two radios apart. 0x80 is free among the wfview rig files (on real
+Icoms it is the IC-7410, which wfview has no file for); 0x61 stays the X6100's. The hamlib
+model is still the X6100's (3087). Both files are made by `mkrig.sh`, both go into the
+wfserver bundle and onto the radio with `build.sh deploy`. x6100_trx does not answer on
+0x80 yet (`X6100_CIV_ADDR_X6200` in `include/x6100_civ.h` reserves it).
 
 ## Status
 
