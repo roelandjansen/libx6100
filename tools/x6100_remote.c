@@ -471,7 +471,8 @@ void x6100_remote_poll(x6100_remote_t *r, x6100_remote_status_t *st)
 			rs.model_id, (long long) (t - r->streams_ms));
 		r->log_caps = true;
 	} else if (!rs.rig_valid && r->streams_ms != 0 && !r->log_nocaps && t - r->streams_ms >= 5000) {
-		fprintf(stderr, "\nremote: no CI-V ID (19 00) from the rig after 5 s: no rig file yet, controls refused\n");
+		fprintf(stderr, "\nremote: no CI-V ID (19 00) from the rig after 5 s: no rig file yet, controls refused; "
+			"CI-V frames in so far %u (0: the CI-V stream does not flow)\n", info.civ_frames);
 		r->log_nocaps = true;
 	}
 
