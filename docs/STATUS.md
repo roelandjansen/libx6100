@@ -487,6 +487,9 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     the core closes every stream as wfview does); it heals by itself in the same session.
     The scope note says REMOTE: WAIT FOR RIG meanwhile. To compare: wfview disconnect
     and reconnect at once, does it wait too?
+    Once (2026-11-12, after many quick restarts): only white noise on the head's speaker,
+    the stream running (no xruns, overruns climbing); a power cycle fixed it. Next time
+    first: x6100_mixer list (playback / DAC / mixer routes) to compare.
 48. CW decoder (2026-11-12): scope panel CW DECODER, `cwdec on|off`; in CW / CW-R the
     codec audio (as the F3 scope; codec busy: tried again every 10 s), Goertzel on the
     keyer PITCH in 8 ms blocks, noise floor and peak, dit length followed (5-50 WPM); the
