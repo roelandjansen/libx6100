@@ -478,6 +478,12 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     login address (0x8e): some runs had CI-V frames but no ID, so no rig file. To check:
     the rig file loads every time, RF gain on the head follows within a second, from
     the 7851.
+48. CW decoder (2026-11-12): scope panel CW DECODER, `cwdec on|off`; in CW / CW-R the
+    codec audio (as the F3 scope; codec busy: tried again every 10 s), Goertzel on the
+    keyer PITCH in 8 ms blocks, noise floor and peak, dit length followed (5-50 WPM); the
+    text and WPM at the foot of the RF scope, each word on the console / log. PC tests:
+    6-35 WPM decode (first letter while locking), 45 WPM after a few letters, noise only
+    nothing. To check on the band: real signals, QSB, a second signal nearby.
 
 ## Next steps (suggested order)
 

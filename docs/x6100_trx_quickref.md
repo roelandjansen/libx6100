@@ -148,6 +148,7 @@ trace, AF colours).
 | WATERFALL SIZE | SMALL, MID, LARGE (MID): the scope above takes or gives the rows | `wfsize small\|mid\|large` |
 | WF PEAK LEVEL | 30-80 dB in steps of 10 (50): the range from the noise to the top colour | `wflevel 50` |
 | WATERFALL 3D | OFF, ON (OFF): the gimmick, Yaesu style: the last 32 waterfall lines as spectra in perspective, the newest in front, the VFO a red tick on the front edge; the waterfall speed sets how fast they move back (as the 3D view in the OpenX6X00 GUI) | `wf3d on\|off` |
+| CW DECODER | OFF, ON (OFF): in CW / CW-R the decoded text at the foot of the RF scope, with the speed (5-50 WPM, followed), each word also on the console / log; audio from the codec as the F3 scope (not while wfserver holds it, not as a remote head) (2026-11-12) | `cwdec on\|off` |
 | MARKERS | A, A B, A T, A B T (A B T): which scope markers show (A VFO A, B VFO B, T TX), as the IC-7851 MARKER key (M, S, T there); B and T also through the waterfall | `markers a\|ab\|at\|abt` |
 | SCOPE DURING TX | ON, OFF (ON): off keeps the last RX picture while transmitting | `txscope on\|off`; CI-V 27 1B |
 | AF REF LEVEL | -30 to +30 dB (0): the audio scope reference level | `aref` |

@@ -2560,7 +2560,7 @@ static void edge_adjust(rx_t *rx, int steps)
 
 enum { SP_MODE, SP_CTYPE, SP_REF, SP_VBW, SP_AVG, SP_WAVE, SP_HOLD, SP_FILL_R, SP_FILL_G, SP_FILL_B,
 	SP_LINE_R, SP_LINE_G, SP_LINE_B, SP_HOLD_R, SP_HOLD_G, SP_HOLD_B, SP_WF, SP_WF_SPEED, SP_WF_SIZE,
-	SP_WF_LEVEL, SP_WF_3D, SP_MARKERS, SP_TXSCOPE, SP_AF_REF, SP_AF_WAVE, SP_AF_AVG, SP_AF_HOLD, SP_AF_FILL_R, SP_AF_FILL_G,
+	SP_WF_LEVEL, SP_WF_3D, SP_MARKERS, SP_CWDEC, SP_TXSCOPE, SP_AF_REF, SP_AF_WAVE, SP_AF_AVG, SP_AF_HOLD, SP_AF_FILL_R, SP_AF_FILL_G,
 	SP_AF_FILL_B, SP_AF_LINE_R, SP_AF_LINE_G, SP_AF_LINE_B, SP_AF_HOLD_R, SP_AF_HOLD_G, SP_AF_HOLD_B, SPARS };
 
 enum { WAVE_FILL, WAVE_LINE, WAVE_FILL_LINE };
@@ -2589,6 +2589,7 @@ static const kpar_t g_spar[SPARS] = {
 	[SP_WF_LEVEL] = { "WF PEAK LEVEL", "wflevel", 30, 80, 10, 50 },
 	[SP_WF_3D] = { "WATERFALL 3D", "wf3d", 0, 1, 1, 0 },
 	[SP_MARKERS] = { "MARKERS", "markers", 0, 3, 1, 3 },	/* A, A B, A T, A B T (the IC-7851 MARKER: M, M S, M T, M S T) */
+	[SP_CWDEC] = { "CW DECODER", "cwdec", 0, 1, 1, 0 },	/* in CW / CW-R: the text at the foot of the scope */
 	[SP_TXSCOPE] = { "SCOPE DURING TX", "txscope", 0, 1, 1, 1 },
 	[SP_AF_REF] = { "AF REF LEVEL", "", -30, 30, 1, 0 },	/* rx->aref: aref on the scope line */
 	[SP_AF_WAVE] = { "AF WAVEFORM TYPE", "afwave", 0, 2, 1, WAVE_FILL_LINE },
@@ -2628,6 +2629,7 @@ static const char *const g_sp_words[SPARS][4] = {
 	[SP_WF_SIZE] = { "small", "mid", "large" },
 	[SP_WF_3D] = { "off", "on" },
 	[SP_MARKERS] = { "a", "ab", "at", "abt" },
+	[SP_CWDEC] = { "off", "on" },
 	[SP_TXSCOPE] = { "off", "on" },
 	[SP_AF_WAVE] = { "fill", "line", "fill+line" },
 	[SP_AF_HOLD] = { "off", "decay", "10s", "on" },
@@ -2635,7 +2637,7 @@ static const char *const g_sp_words[SPARS][4] = {
 
 static bool spar_onoff(int i)
 {
-	return i == SP_WF || i == SP_WF_3D || i == SP_TXSCOPE;
+	return i == SP_WF || i == SP_WF_3D || i == SP_CWDEC || i == SP_TXSCOPE;
 }
 
 static bool spar_colour(int i)
@@ -7575,6 +7577,227 @@ static void draw_tune_panel(x6100_lcd_t *lcd, const rx_t *rx, const screen_t *sc
 }
 
 //
+// CW decoder (2026-11-12; scope panel CW DECODER, cwdec on|off): in CW / CW-R, from the
+// codec capture (as the F3 audio scope, so not while wfserver holds the codec, nor in
+// remote mode). 48 kHz down to 8 kHz; a Goertzel tone detector on the CW pitch in 8 ms
+// blocks; noise floor and peak followed, the key on above 60 % of the way between them,
+// off below 40 %, a change taken after two blocks (16 ms: no clicks); the dit length
+// follows the speed (5-50 WPM); a letter after 2 dits of silence, a word after 5. The
+// text on a line at the foot of the RF scope, each word on the console / log as well.
+//
+
+#define CWD_DECIM	6		/* 48 kHz -> 8 kHz */
+#define CWD_RATE	8000
+#define CWD_N		64		/* Goertzel block: 8 ms at 8 kHz */
+#define CWD_BLOCK_MS	8
+#define CWD_TEXT	60		/* characters kept for the line */
+#define CWD_DIT_MIN	24.0f		/* 50 WPM */
+#define CWD_DIT_MAX	240.0f		/* 5 WPM */
+
+static struct
+{
+	int dec_n;			/* samples summed for the next 8 kHz one */
+	float dec_acc;
+	float blk[CWD_N];
+	int nblk;
+	float floor, peak;		/* tone level: noise floor and peak, followed */
+	bool key;			/* tone on (after the debounce) */
+	int pend;			/* blocks the other state has lasted (debounce) */
+	int run;			/* blocks the present state has lasted */
+	int settle;			/* blocks since the start, up to 40: the floor settles first */
+	float dit_ms;			/* the dit length, followed */
+	char sym[8];			/* dits and dahs of the letter being received */
+	int nsym;
+	bool word_done;			/* the word space after the last letter is out */
+	char word[32];			/* the word being received, for the console */
+	int nword;
+	char text[CWD_TEXT + 1];	/* the line on the screen */
+	int len;
+} g_cwd = { .dit_ms = 80.0f };	/* 15 WPM to start with */
+
+static const char *const g_morse[][2] = {
+	{ ".-", "A" }, { "-...", "B" }, { "-.-.", "C" }, { "-..", "D" }, { ".", "E" }, { "..-.", "F" },
+	{ "--.", "G" }, { "....", "H" }, { "..", "I" }, { ".---", "J" }, { "-.-", "K" }, { ".-..", "L" },
+	{ "--", "M" }, { "-.", "N" }, { "---", "O" }, { ".--.", "P" }, { "--.-", "Q" }, { ".-.", "R" },
+	{ "...", "S" }, { "-", "T" }, { "..-", "U" }, { "...-", "V" }, { ".--", "W" }, { "-..-", "X" },
+	{ "-.--", "Y" }, { "--..", "Z" }, { "-----", "0" }, { ".----", "1" }, { "..---", "2" },
+	{ "...--", "3" }, { "....-", "4" }, { ".....", "5" }, { "-....", "6" }, { "--...", "7" },
+	{ "---..", "8" }, { "----.", "9" }, { ".-.-.-", "." }, { "--..--", "," }, { "..--..", "?" },
+	{ "-..-.", "/" }, { "-...-", "=" }, { ".-.-.", "+" }, { "-....-", "-" }, { ".--.-.", "@" },
+	{ "---...", ":" }, { ".----.", "'" }, { "-.--.", "(" }, { "-.--.-", ")" }, { "...-.-", "<SK>" },
+	{ ".-...", "<AS>" }, { "-.-.-", "<KA>" }, { "........", "<HH>" },
+};
+
+static void cwd_put(const char *s)
+{
+	for (; *s != '\0'; s++) {
+		if (g_cwd.len == CWD_TEXT) {	/* full: the oldest goes */
+			memmove(g_cwd.text, g_cwd.text + 1, CWD_TEXT - 1);
+			g_cwd.len--;
+		}
+
+		g_cwd.text[g_cwd.len++] = *s;
+		g_cwd.text[g_cwd.len] = '\0';
+	}
+}
+
+// The letter received: into the line and the word; unknown: *
+static void cwd_letter(void)
+{
+	const char *c = "*";
+
+	if (g_cwd.nsym == 0)
+		return;
+
+	g_cwd.sym[g_cwd.nsym] = '\0';
+
+	for (size_t i = 0; i < sizeof(g_morse) / sizeof(g_morse[0]); i++)
+		if (strcmp(g_morse[i][0], g_cwd.sym) == 0)
+			c = g_morse[i][1];
+
+	cwd_put(c);
+
+	if (g_cwd.nword + (int) strlen(c) < (int) sizeof(g_cwd.word) - 1) {
+		strcpy(g_cwd.word + g_cwd.nword, c);
+		g_cwd.nword += (int) strlen(c);
+	}
+
+	g_cwd.nsym = 0;
+	g_cwd.word_done = false;
+}
+
+// A word space: into the line, the word to the console
+static void cwd_space(void)
+{
+	if (g_cwd.word_done || g_cwd.len == 0)
+		return;
+
+	cwd_put(" ");
+
+	if (g_cwd.nword > 0) {
+		printf("\ncw: %s\n", g_cwd.word);
+		g_cwd.nword = 0;
+		g_cwd.word[0] = '\0';
+	}
+
+	g_cwd.word_done = true;
+}
+
+// One 8 ms block: the tone level, the key, the timing
+static void cwd_block(int pitch)
+{
+	const float w = 2.0f * (float) M_PI * (float) pitch / CWD_RATE, coeff = 2.0f * cosf(w);
+	float s1 = 0.0f, s2 = 0.0f, m;
+	bool on;
+
+	for (int i = 0; i < CWD_N; i++) {
+		float s0 = g_cwd.blk[i] + coeff * s1 - s2;
+
+		s2 = s1;
+		s1 = s0;
+	}
+
+	m = sqrtf(fmaxf(s1 * s1 + s2 * s2 - coeff * s1 * s2, 0.0f));
+
+	// Floor: the average noise level, followed only while no tone is keyed (the lowest
+	// noise readings made noise peaks look like a tone), and only on blocks that are
+	// clearly noise, not the start of a tone (it crept up to the tone); peak: up at once,
+	// down slowly
+	if (!g_cwd.key && (m < g_cwd.floor + 0.3f * (g_cwd.peak - g_cwd.floor) || g_cwd.peak < 5.0f * g_cwd.floor))
+		g_cwd.floor = fmaxf(g_cwd.floor + (m - g_cwd.floor) * 0.02f, 1e-4f);	/* never 0 */
+	g_cwd.peak = m > g_cwd.peak ? m : g_cwd.peak - (g_cwd.peak - g_cwd.floor) * 0.003f;
+
+	float span = g_cwd.peak - g_cwd.floor;
+
+	if (g_cwd.peak < g_cwd.floor * 5.0f || g_cwd.settle < 40)	/* < 14 dB, or settling (0.3 s) */
+		on = false;
+	else
+		on = g_cwd.key ? m > g_cwd.floor + 0.4f * span : m > g_cwd.floor + 0.6f * span;
+
+	g_cwd.run++;
+	g_cwd.settle += g_cwd.settle < 40;
+
+	if (on == g_cwd.key) {
+		g_cwd.pend = 0;
+	} else if (++g_cwd.pend >= 2) {
+		float ms = (float) ((g_cwd.run - g_cwd.pend) * CWD_BLOCK_MS);	/* the state that ends */
+
+		if (g_cwd.key && ms < 0.3f * g_cwd.dit_ms) {
+			// Far shorter than a dit: a noise blip, not a symbol
+		} else if (g_cwd.key) {
+			// A mark ended: under 2 dits a dit, else a dah. The dit length follows: down at
+			// once for a dit shorter than it (a faster sender), up at once for a mark too
+			// long to be a dah at this speed (a slower one), else slowly
+			if (ms < 2.0f * g_cwd.dit_ms) {
+				if (g_cwd.nsym < (int) sizeof(g_cwd.sym) - 1)
+					g_cwd.sym[g_cwd.nsym++] = '.';
+				g_cwd.dit_ms = ms < g_cwd.dit_ms ? 0.5f * (g_cwd.dit_ms + ms) : 0.8f * g_cwd.dit_ms + 0.2f * ms;
+			} else {
+				if (g_cwd.nsym < (int) sizeof(g_cwd.sym) - 1)
+					g_cwd.sym[g_cwd.nsym++] = '-';
+				g_cwd.dit_ms = ms > 4.5f * g_cwd.dit_ms ? ms / 3.0f : 0.8f * g_cwd.dit_ms + 0.2f * ms / 3.0f;
+			}
+
+			g_cwd.dit_ms = fminf(fmaxf(g_cwd.dit_ms, CWD_DIT_MIN), CWD_DIT_MAX);
+		}
+
+		g_cwd.key = on;
+		g_cwd.run = g_cwd.pend;
+		g_cwd.pend = 0;
+	}
+
+	// Silence: a letter after 2 dits, a word after 5
+	if (!g_cwd.key) {
+		float gap = (float) (g_cwd.run * CWD_BLOCK_MS);
+
+		if (gap > 2.0f * g_cwd.dit_ms)
+			cwd_letter();
+
+		if (gap > 5.0f * g_cwd.dit_ms)
+			cwd_space();
+	}
+}
+
+// Codec samples (S16, interleaved): the first channel to 8 kHz, in blocks
+static void cwd_feed(const int16_t *buf, unsigned frames, unsigned channels, int pitch)
+{
+	for (unsigned i = 0; i < frames; i++) {
+		g_cwd.dec_acc += (float) buf[i * channels] / 32768.0f;
+
+		if (++g_cwd.dec_n < CWD_DECIM)
+			continue;
+
+		g_cwd.blk[g_cwd.nblk++] = g_cwd.dec_acc / CWD_DECIM;
+		g_cwd.dec_acc = 0.0f;
+		g_cwd.dec_n = 0;
+
+		if (g_cwd.nblk == CWD_N) {
+			cwd_block(pitch);
+			g_cwd.nblk = 0;
+		}
+	}
+}
+
+// The WPM the dit length gives (PARIS: 1200 / dit ms)
+static int cwd_wpm(void)
+{
+	return (int) lroundf(1200.0f / g_cwd.dit_ms);
+}
+
+// The decoder at work: switched on, in CW / CW-R, not as a remote head (no codec audio)
+static bool cwd_active(const rx_t *rx)
+{
+	return g_sp[SP_CWDEC] && (rx->mode == X6100_MODE_CW || rx->mode == X6100_MODE_CWR) && !REMOTE_ON;
+}
+
+// The decoder from the start: switched on, or into CW (the floor settles again)
+static void cwd_reset(void)
+{
+	memset(&g_cwd, 0, sizeof(g_cwd));
+	g_cwd.dit_ms = 80.0f;	/* 15 WPM to start with */
+}
+
+//
 // Audio scope (F3): the demodulated RX audio from the codec capture (48 kHz,
 // left channel), FFT over AS_N samples every AS_N / 2 new ones (Hann window,
 // 50 % overlap), smoothed like the RF spectrum.
@@ -9000,6 +9223,19 @@ scope:
 	// view an arrow at the edge
 	//
 	draw_markers(lcd, rx, &v, SW);
+
+	//
+	// CW decoder: the speed and the last of the text at the foot of the RF scope
+	//
+	if (cwd_active(rx)) {
+		char line[CWD_TEXT + 16];
+		int room = (SW - LBL_W - 20) / x6100_lcd_text_width("W", 2), n = snprintf(line, sizeof(line), "%2d WPM ", cwd_wpm());
+		const char *tail = g_cwd.text + (g_cwd.len > room - n ? g_cwd.len - (room - n) : 0);
+
+		snprintf(line + n, sizeof(line) - (size_t) n, "%s", room > n ? tail : "");
+		x6100_lcd_fill(lcd, LBL_W + 4, SPEC_Y + SPEC_H - 22, x6100_lcd_text_width(line, 2) + 8, 20, 0x000000);
+		x6100_lcd_text(lcd, LBL_W + 8, SPEC_Y + SPEC_H - 19, 2, line, SCR_ACCENT);
+	}
 
 	//
 	// Birdies in view (BIRDIE MARKS): a short yellow tick at the top of the RF scope
@@ -12869,6 +13105,9 @@ int main(int argc, char **argv)
 				if (got > 0)
 					audio_feed(&scr, abuf, (unsigned) got, 2);
 
+				if (got > 0 && cwd_active(&rx))
+					cwd_feed(abuf, (unsigned) got, 2, rx.cwtone);	/* the CW decoder */
+
 				continue;
 			}
 
@@ -12907,10 +13146,16 @@ int main(int argc, char **argv)
 		}
 
 		//
-		// Audio scope capture: open while F3 shows it, closed otherwise (the codec
-		// is left alone when the audio scope is not used)
+		// Audio scope capture: open while F3 shows it or the CW decoder runs, closed
+		// otherwise (the codec is left alone when neither is used). The decoder alone
+		// tries again 10 s after the codec was busy (wfserver), not on every pass
 		//
-		if ((rx.ascope || rx.asplit) && !apcm_open) {
+		static uint64_t cwd_busy_at;
+		const bool want_scope = rx.ascope || rx.asplit;
+		const uint64_t cap_now = now_ms();
+		const bool want_cwd = cwd_active(&rx) && (cwd_busy_at == 0 || cap_now - cwd_busy_at >= 10000);
+
+		if ((want_scope || want_cwd) && !apcm_open) {
 			int boost = rx.mode == X6100_MODE_AM || rx.mode == X6100_MODE_NFM ? 0 : 1;	/* as x6100_audio */
 
 			g_sql_cap = -1;	/* rx_setup turns the capture on: the squelch sets it again */
@@ -12920,20 +13165,39 @@ int main(int argc, char **argv)
 			if (prc < 0) {
 				// Busy: another program has the codec capture (wfserver, pulseaudio's
 				// Bluetooth loopback); the open no longer waits for it
-				fprintf(stderr, "\naudio scope: codec capture not available: %s\n", strerror(-prc));
-				toast(prc == -EBUSY ? "AUDIO SCOPE: CODEC BUSY" : "AUDIO SCOPE: NO CAPTURE");
-				rx.ascope = rx.asplit = false;
+				fprintf(stderr, "\n%s: codec capture not available: %s\n", want_scope ? "audio scope" : "CW decoder",
+					strerror(-prc));
+
+				if (want_scope) {
+					toast(prc == -EBUSY ? "AUDIO SCOPE: CODEC BUSY" : "AUDIO SCOPE: NO CAPTURE");
+					rx.ascope = rx.asplit = false;
+				} else if (cwd_busy_at == 0) {	/* said once; tried again every 10 s */
+					toast(prc == -EBUSY ? "CW DECODER: CODEC BUSY" : "CW DECODER: NO CAPTURE");
+				}
+
+				cwd_busy_at = cap_now;
 				changed = true;
 			} else {
 				apcm_open = true;
+				cwd_busy_at = 0;
 				pfd[apcm_slot].fd = apcm.fd;
 			}
-		} else if (!rx.ascope && !rx.asplit && apcm_open) {
+		} else if (!want_scope && !cwd_active(&rx) && apcm_open) {
 			x6100_pcm_close(&apcm);
 			apcm_open = false;
 			pfd[apcm_slot].fd = -1;
 			scr.aspec_valid = false;
 		}
+
+		static bool cwd_was;	/* the decoder starts afresh each time it becomes active */
+
+		if (cwd_active(&rx) && !cwd_was)
+			cwd_reset();
+
+		cwd_was = cwd_active(&rx);
+
+		if (!cwd_active(&rx))
+			cwd_busy_at = 0;	/* switched off or another mode: the next start says it again */
 
 		//
 		// PWR held: from 1.5 s the screen says what releasing will do; at 4 s the
