@@ -22,6 +22,7 @@
 #include "x6100_pcm.h"
 
 #include "core/audio_decode.h"
+#include "core/rig.h"		/* RIG_CONTROLLER_ADDR, for our own ID query */
 #include "core/session.h"
 #include "model/radio_state.h"
 
@@ -89,6 +90,10 @@ struct x6100_remote
 	int rig_ctl[6];			/* the controls as the rig last reported them, -1 none yet */
 	bool log_caps;			/* "rig file loaded" said */
 	bool log_nocaps;		/* "no CI-V ID yet" said */
+	bool log_idask;			/* "asking the ID directly" said */
+	int64_t id_sent_ms;		/* our own ID query to the login address, last sent */
+	int64_t ctl_poll_ms;		/* our own NR / NB poll, last sent */
+	bool ctl_poll_nb;		/* next one: NB (else NR) */
 	int64_t streams_ms;		/* when the streams opened (0: not yet), for those two */
 	uint32_t scope_seq;
 	bool scope_seen;
@@ -455,6 +460,7 @@ void x6100_remote_poll(x6100_remote_t *r, x6100_remote_status_t *st)
 		r->streams_ms = 0;	/* the rig file notes again at the next connect */
 		r->log_caps = false;
 		r->log_nocaps = false;
+		r->log_idask = false;
 		return;
 	}
 
@@ -462,6 +468,31 @@ void x6100_remote_poll(x6100_remote_t *r, x6100_remote_status_t *st)
 		r->streams_ms = t;
 
 	session_get_state(r->s, &rs);
+
+	// The core asks the ID at the broadcast address 00 until it knows the rig; the 7851
+	// at times does not answer that while its CI-V stream does flow (2026-11-12: 138
+	// frames in, no ID, no rig file). The login gave its address: ask there as well,
+	// once a second, from the core's controller address, so the answer takes the usual
+	// way (and loads the rig file)
+	if (!rs.rig_valid && info.civ_addr != 0x00 && t - r->streams_ms >= 1500 && t - r->id_sent_ms >= 1000) {
+		const uint8_t q[] = { 0xFE, 0xFE, info.civ_addr, RIG_CONTROLLER_ADDR, 0x19, 0x00, 0xFD };
+
+		if (session_civ_send(r->s, q, sizeof(q)) == 0 && !r->log_idask) {
+			fprintf(stderr, "\nremote: asking the CI-V ID at 0x%02x directly\n", info.civ_addr);
+			r->log_idask = true;
+		}
+
+		r->id_sent_ms = t;
+	}
+
+	// NR and NB of the main receiver, asked by us: the IC-785x file polls them Medium Low
+	// for both receivers into one field (about 10 s, and the sub's answer undoes the main's;
+	// 2026-11-12). One every 500 ms, by turns: each about once a second
+	if (rs.rig_valid && t - r->ctl_poll_ms >= 500) {
+		session_get_value(r->s, r->ctl_poll_nb ? "Noise Blanker" : "Noise Reduction", 0);
+		r->ctl_poll_nb = !r->ctl_poll_nb;
+		r->ctl_poll_ms = t;
+	}
 
 	// The rig file: loaded once the rig has answered its CI-V ID (19 00); until then every
 	// set is refused (RIG_ERR_NO_CAPS -1), so say when it is there, and when it is long
