@@ -57,7 +57,7 @@ the IC-705 range code, which gives the same 12 HF ranges as x6100_trx.
 ## Make it again
 
 ```
-bash mkrig.sh <wfview>/rigs/IC-705.rig > X6100.rig
+bash mkrig.sh <wfview>/rigs/IC-705.rig > X6100.rig	# <wfview>: GitLab eliggett/wfview at cd18ea5 (2.x)
 bash mkrig.sh <wfview>/rigs/IC-705.rig X6200 > X6200.rig
 ```
 
