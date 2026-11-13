@@ -46,7 +46,7 @@ data are the IC-705's. Only the identity and what the radio can do differ:
 | Preamp | off, 1, 2 | off, on (Preamp Status max 1) |
 | Inputs | MIC, USB, M/U, WLAN | MIC, USB, LAN (the IC-705 WLAN, wfview type 4; x6100_trx LAN: the network audio when wfview keys, the mic for the PTT key; 2026-11-07) |
 | Memories | 100 groups, 1A 00 gg gg cc cc | one bank, channels 1-99, 1A 00 cc cc (MemGroups=0, MemFormat without the group: wfview then sends no group, as for an IC-7300; with the group field it timed out, 2026-11-02) |
-| Memory Contents string | `\\x1a\\00` (the x missing: wfview sends 1A 5C 30 30, answered FA; an upstream bug, 2026-11-02; fix for wfview: `patches/0001-IC-705.rig-fix-Memory-Contents-command-string.patch`, `git am` in a wfview checkout) | `\\x1a\\x00` |
+| Memory Contents string | `\\x1a\\00` (the x missing: wfview sends 1A 5C 30 30, answered FA; an upstream bug, 2026-11-02; fix for wfview: `patches/0001-IC-705.rig-fix-Memory-Contents-command-string.patch`, `git am` in a wfview checkout; in wfview v3 (main) upstream, so only for 2.x) | `\\x1a\\x00` |
 | AGC (16 12) | as AGC Time Constant (that is 1A 04, 0-13) | as AGC Status, as wfview's IC-7300 file (01 fast, 02 mid, 03 slow; 2026-11-03). The wfview GUI uses neither; its rigctld `AGC` level maps to AGC Time Constant with a x2 scaling that fits neither 16 12 nor hamlib's values: a wfview issue, not one for the rig file |
 | Voice TX | 28 (data 0-8) | 28 00 (then 0-8), as the IC-705 CI-V reference: x6100_trx sends message M1-M8, 00 stops (2026-11-03; hamlib `send_voice_mem`; the wfview GUI does not use it) |
 | System Date, Time, UTC Offset | 1A 05 0165 / 0166 / 0170 | the same, kept since 2026-11-03: wfview Set Clock / set radio time on connect sets the X6100 clock while NTP does not keep it (x6100_trx `cattime`) |
@@ -57,7 +57,7 @@ the IC-705 range code, which gives the same 12 HF ranges as x6100_trx.
 ## Make it again
 
 ```
-bash mkrig.sh <wfview>/rigs/IC-705.rig > X6100.rig	# <wfview>: GitLab eliggett/wfview at cd18ea5 (2.x)
+bash mkrig.sh <wfview>/rigs/IC-705.rig > X6100.rig	# <wfview>: GitHub wf-group/wfview main (v3; 6d745b7)
 bash mkrig.sh <wfview>/rigs/IC-705.rig X6200 > X6200.rig
 ```
 

@@ -25,18 +25,18 @@ and cannot link against it safely. So the build uses Ubuntu's cross g++.
 On any other host (openSUSE), run it in a container, as a normal user:
 
 ```
-git clone https://gitlab.com/eliggett/wfview.git
-git -C wfview checkout cd18ea5
+git clone https://github.com/wf-group/wfview.git
 contrib/wfserver/container.sh <wfview source tree>
 ```
 
-**Which wfview (2026-11-13):** the bundle and `contrib/wfview/X6100.rig` are made from
-the GitLab `eliggett/wfview` master at **cd18ea5** (wfview 2.x, rig file format 2.10).
-Check that commit out as above. On GitHub `wf-group/wfview` the default branch is now
-`main`, which is the v3 line (v3-initial, v3-server, ...), and there is no `master`
-there any more: a plain GitHub clone gives v3, untried here (its rig file format, the
-patches in `contrib/wfview/patches` and this build may need changes). The GitLab
-master went on as well (e2235b2): newer than cd18ea5, also untried.
+**Which wfview (2026-11-13):** we follow `main` of GitHub `wf-group/wfview`, the v3 line
+(its default branch since 2026-11-13; there is no `master` there any more). Checked at
+**6d745b7**: the rig files are still format 2.10, `mkrig.sh` works unchanged on them,
+and `contrib/wfview/X6100.rig` / `X6200.rig` are made from that IC-705.rig; our IC-705
+Memory Contents patch is in v3. `wfserver.pro` needs Qt 5 core, serialport, network,
+multimedia and xml (no widgets any more), all in the package list above; the version
+comes from `git describe` (`version.pri`), so build from a clone, not an export.
+Not built from v3 yet. Before: GitLab `eliggett/wfview` master at cd18ea5 (2.x).
 
 - Engine: podman (rootless, no daemon: `zypper install podman`), else docker (needs
   access to the docker socket); `X6100_ENGINE=docker` picks one.

@@ -311,11 +311,12 @@ under GEN until a better key turns up.
 
 ## CAT / network
 
-- wfview v3 (2026-11-13): GitHub wf-group/wfview has `main` (the v3 line) as default and
-  no `master` any more; GitLab eliggett/wfview master goes on (e2235b2). Our wfserver
-  bundle and X6100.rig are from GitLab master cd18ea5 (2.x, rig format 2.10), now pinned
-  in contrib/wfserver/README.md. To try: v3's rig format, the patches, the wfserver build,
-  and whether libx6100_app's core (which follows wfview) has to follow it.
+- wfview: we follow GitHub wf-group/wfview `main` (v3) from 2026-11-13 (was GitLab master
+  cd18ea5, 2.x). Checked at 6d745b7: rig format 2.10, mkrig.sh unchanged, X6100.rig /
+  X6200.rig remade from v3 (they gain SpectrumDbPerDN 0.5 and the AGC Status poll), our
+  IC-705 patch is in v3. To do: build wfserver from v3 (contrib/wfserver), and see what
+  v3 means for libx6100_app's core (v3's IC-785x polls AGC and CW Pitch, has
+  SpectrumDbPerDN 0.5: the head's scope guess).
 - X6200 reserved (2026-11-12): contrib/wfview/X6200.rig (mkrig.sh X6200: the X6100 file
   with model X6200, CI-V address 0x63 (first 0x80), free among wfview's rig files) and
   X6100_CIV_ADDR_X6200 in x6100_civ.h; in the wfserver bundle and deployed. Later: answer
@@ -356,7 +357,8 @@ under GEN until a better key turns up.
 
 Receive-only control head for a remote Icom (STATUS item 47). Open (handover 2026-11-12):
 
-- Scope amplitude: RSCOPE_DB_STEP 0.5 dB a step is a guess; calibrate on the 7851.
+- Scope amplitude: RSCOPE_DB_STEP 0.5 dB a step was a guess; wfview v3's IC-785x.rig has
+  SpectrumDbPerDN=0.5 (2026-11-13), so it holds; later: read it from the rig file.
 - AGC from the X6100: SLOW / FAST / AUTO -> slow / fast / mid; OFF cannot be sent (AGC
   Status has FAST / MID / SLOW; the 7851's AGC OFF would be 1A 04 time constant 0), so it
   stays. From the 7851 only seen at connect (the IC-785x rig file
