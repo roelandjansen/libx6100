@@ -5029,7 +5029,9 @@ static bool on_long_key(rx_t *rx, int key)
 		return true;
 	}
 
-	if (rx->rigedit) {	/* RIG panel open: a long press only closes it */
+	// RIG panel open: a long press only closes it; LOCK long goes on to the screenshot,
+	// with the panel in it (2026-11-14: it closed the panel and took no shot)
+	if (rx->rigedit && key != X6100_KEY_LOCK) {
 		rx->rigedit = false;
 		return true;
 	}
