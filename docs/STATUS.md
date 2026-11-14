@@ -522,8 +522,11 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
        it: see what happens). Hand mic PTT: nothing should key (TX enable off unkeyed).
     i. Hold over 180 s: the rig's time-out; the X6100's TOT.
     j. Without --remote-tx-dummy: receive only as before, PTT refused (REMOTE RX).
-    Blind spots: the monitor (level 70) also plays on the X6100 speaker while keyed
-    (feedback with the internal mic: headphones, or a mute to add); CW is not handled;
+    k. Speaker muted while keyed (added 2026-11-14): no monitor on the X6100 speaker, no
+       feedback with the internal mic, and the TX audio to the rig still there (the
+       capture sits before the RX volume: to confirm); the RX audio back after release.
+    Blind spots: the monitor (level 70) also played on the X6100 speaker while keyed
+    (now muted, k); CW is not handled;
     the hand mic PTT is not used; a real antenna instead of the dummy radiates 0.1 W on
     the rig's frequency (with oob anywhere); the audio level path is fixed (TXD_MONI).
 
