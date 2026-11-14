@@ -13727,6 +13727,14 @@ int main(int argc, char **argv)
 
 		// Remote head: REMOTE RX stands on the scope the whole time (receive only); other
 		// notes show over it for WARN_MS, then it comes back
+		// Cleared (PTT, tune, a message clear the note: right for a local refusal note): on
+		// the remote head the standing note comes back at once, also while keyed (2026-11-14:
+		// REMOTE TRX gone after PTT until a link change set it again)
+		if (REMOTE_ON && rx.warn == NULL) {
+			rx.warn = g_remote_note;
+			dirty = true;
+		}
+
 		if (rx.warn != warn_seen || rx.tot_cut) {
 			warn_seen = rx.warn;
 			warn_at = t;
