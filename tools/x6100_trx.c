@@ -1108,6 +1108,8 @@ static x6100_remote_cfg_t g_remote_cfg = { .rig_dir = "/opt/wfserver/share/wfvie
 static x6100_remote_t *g_remote;
 static bool g_remote_up;		/* link up and the rig file loaded (main loop, from the poll) */
 static bool g_txd_keyed;		/* --remote-tx-dummy: the rig keyed by us */
+static int g_remote_pwr = -1;		/* the rig's RF power setting (0-255), -1 not known: shown under the TX box */
+static uint32_t g_txd_flow = ~0u;	/* --remote-tx-dummy: last flow TX flag + hand mic key code logged */
 
 // --remote-tx-dummy: the X6100 keys itself at 0.1 W into a dummy load, its monitor
 // (the mic) goes to the rig as TX audio, then the rig keys. TXD_MONI: the monitor level
@@ -8868,6 +8870,16 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 		// TX power setting under the box
 		//
 		snprintf(s, sizeof(s), "%d.%dW", rx->txpwr / 10, rx->txpwr % 10);
+#ifdef X6100_REMOTE
+		// Remote head: the rig's RF power setting in percent (Icom 0-255), the X6100's
+		// own setting is not used there
+		if (g_remote_req) {
+			if (g_remote_pwr >= 0)
+				snprintf(s, sizeof(s), "%d%%", (g_remote_pwr * 100 + 127) / 255);
+			else
+				snprintf(s, sizeof(s), "--%%");
+		}
+#endif
 		x6100_lcd_text(lcd, bx + (bw - x6100_lcd_text_width(s, 2)) / 2, by + bh + 6, 2, s, SCR_FG);
 	}
 
@@ -13647,6 +13659,13 @@ int main(int argc, char **argv)
 
 			g_remote_up = rs.connected && rs.rig_ready;
 
+			// The rig's RF power setting under the TX box (the X6100's own 0.1 W into
+			// the dummy is not what goes on the air)
+			if (rs.rf_power != g_remote_pwr) {
+				g_remote_pwr = rs.rf_power;
+				dirty = true;
+			}
+
 			//
 			// --remote-tx-dummy: the rig keys TXD_LEAD_MS after the X6100 (its monitor is
 			// flowing by then) and is released in the same pass the X6100's PTT goes, before
@@ -13798,6 +13817,15 @@ int main(int argc, char **argv)
 
 			scr.tx = tx;
 			rx.bb_tx = tx;	/* hand mic PTT too: apply() then moves to the TX side */
+
+#ifdef X6100_REMOTE
+			// --remote-tx-dummy, finding out (2026-11-14): does the baseband report the
+			// hand mic's PTT while its TX enable is off (TX flag or key code)? Every change
+			if (TXD_ON && (frame.hkey | (tx ? 0x80000000u : 0)) != g_txd_flow) {
+				g_txd_flow = frame.hkey | (tx ? 0x80000000u : 0);
+				fprintf(stderr, "\ntxd: flow tx %d hkey %02X (ptt %d)\n", tx, frame.hkey, rx.ptt);
+			}
+#endif
 			scr.pwr = frame.tx_power * 0.1;
 			scr.swr = swr < 1.0 ? 1.0 : swr;
 			scr.alc = frame.alc_level;

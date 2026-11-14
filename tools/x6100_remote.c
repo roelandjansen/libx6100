@@ -530,6 +530,7 @@ void x6100_remote_poll(x6100_remote_t *r, x6100_remote_status_t *st)
 	// in coming (2026-11-12: 20 refused in 10 s)
 	st->rig_ready = rs.rig_valid;
 	st->cw_pitch = rs.cw_pitch.valid ? rs.cw_pitch.value : 0;
+	st->rf_power = rs.rf_power.valid ? rs.rf_power.value : -1;
 
 	if (rs.rig_valid && !r->log_caps) {
 		fprintf(stderr, "\nremote: rig file for %s (CI-V 0x%02x) loaded, %lld ms after the streams\n", rs.model,

@@ -43,7 +43,7 @@ x6100_trx --oob 5450000 usb slow
 | `--probe` | print the flow flag word on change, and every second the IQ peak and all flag bits seen (overflow hunt) |
 | `--bbreset` | reset the baseband first (GPIO 204 on gpiochip1, as X6100Control), for a baseband that does not answer on I2C (2026-11-05) |
 | `--remote <host> <udp port> <user> <password>` | control head for a remote Icom (IC-7851; wfserver or its LAN port): the rig's frequency, mode, controls, S meter, scope and audio, receive only (2026-11-11; STATUS item 47). `--rigs <dir>`: the wfview .rig files (default /opt/wfserver/share/wfview/rigs) |
-| `--remote-tx-dummy` | with `--remote`: voice TX on the rig with the X6100 mic. The X6100 keys itself at 0.1 W, so **a dummy load on its antenna port**; its monitor goes to the rig as TX audio, the rig keys 150 ms later. The rig's SSB mod input must be LAN (2026-11-14; STATUS item 49) |
+| `--remote-tx-dummy` | with `--remote`: voice TX on the rig with the X6100 mic. The X6100 keys itself at 0.1 W, so **a dummy load on its antenna port**; its monitor goes to the rig as TX audio, the rig keys 150 ms later. The rig's SSB mod input must be LAN. Under the TX box: the rig's RF power in % (any --remote). The hand mic PTT does not key yet (2026-11-14; STATUS item 49) |
 | `--help`, `-h`, `help`, `?` | the options in short, and exit (2026-11-05) |
 
 Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
