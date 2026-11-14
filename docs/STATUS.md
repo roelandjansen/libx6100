@@ -700,6 +700,9 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     second, each one putting the rig back on its scope screen. wfview deletes it once
     scope data came (receiverwidget: queue->del(funcScopeOnOff, 0)); the core does so
     now too (libx6100_app 5eb8dd8, test_rig checks it and fails without). Pin updated.
+    Verified (2026-11-14): the screen no longer jumps on the 7851, the 9700 and the 7760.
+    The note names the rig (REMOTE TRX IC9700, verified); the screenshot with the RIG
+    panel open works and its SCREENSHOT note now shows over the panel.
     Also 2026-11-14: wfserver built from wfview v3 (main) works; the CW decoder holds
     up in a contest.
 
