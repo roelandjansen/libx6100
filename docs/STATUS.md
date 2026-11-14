@@ -590,6 +590,9 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
        at -20 dB, about -69 dBFS, and the 7851 takes our level some 30 dB hot (txdgain 100
        in that test). The gate now mutes (-60 dB; pauses -118 dBFS on the recording) and
        the log shows the loudest sample sent each second (after gain).
+       Verified 2026-11-14: works. Pauses -133..-146 dBFS sent, the voice -44..-48 dBFS
+       after txdgain 3, the 250 ms tail -70..-75. Defaults since: txdmoni 100, txdgain 3
+       (the 7851, LAN input 50 %); the log line only with console txdlog.
     Blind spots: the monitor (level 70) also played on the X6100 speaker while keyed
     (now muted, k); CW is not handled;
     the hand mic PTT cannot key (m: not reported); a real antenna instead of the dummy radiates 0.1 W on

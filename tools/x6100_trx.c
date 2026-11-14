@@ -1113,9 +1113,10 @@ static bool g_txd_mute = true;		/* --remote-tx-dummy: speaker muted while keyed 
 static double g_txd_cap_sq;		/* --remote-tx-dummy keyed: capture sum of squares (left) ... */
 static uint32_t g_txd_cap_n;		/* ... and frames, since the last log line */
 static uint64_t g_txd_log_at;		/* last TX log line (ms) */
-static int g_txd_moni = 70;		/* --remote-tx-dummy: monitor level while keyed, 0-100 (console txdmoni) */
+static bool g_txd_log;			/* the TX log line once a second while keyed (console txdlog toggles) */
+static int g_txd_moni = 100;		/* --remote-tx-dummy: monitor level while keyed, 0-100 (console txdmoni; 100 the best voice over the crackle, 2026-11-14) */
 static int g_txd_boost = -1;		/* ... codec Mic1 boost 0-7 for the capture, -1 as for RX (console txdboost) */
-static int g_txd_gain = 100;		/* ... the session's TX gain in %, 0-400 (console txdgain) */
+static int g_txd_gain = 3;		/* ... the session's TX gain in %, 0-400 (console txdgain; 3 drives the 7851 with its LAN input at 50 %, 2026-11-14) */
 static int g_txd_boost_set = -1;	/* the Mic1 boost as last set on the codec, -1 not known */
 
 // --remote-tx-dummy: the X6100 keys itself at 0.1 W into a dummy load, its monitor
@@ -10109,6 +10110,13 @@ static bool console_token(rx_t *rx, const char *t)
 	// txdmute / notxdmute (2026-11-14, a test aid, not saved): --remote-tx-dummy mutes the
 	// speaker while keyed, or not; to find out whether the mute also silences the monitor
 	// on the capture (the rig's TX audio)
+	// txdlog: the remote TX log line once a second while keyed, on / off
+	if (strcasecmp(t, "txdlog") == 0) {
+		g_txd_log = !g_txd_log;
+		fprintf(stderr, "\nremote TX: log line %s\n", g_txd_log ? "on" : "off");
+		return true;
+	}
+
 	// txdbp on|off: the 300-2700 Hz band-pass on the TX audio (see txd_clean)
 	if (strcasecmp(t, "txdbp") == 0) {
 		g_txd_bp = !g_txd_bp;
@@ -14024,21 +14032,24 @@ int main(int argc, char **argv)
 
 				// Keyed: once a second what goes to the rig (2026-11-14: the 7851 keyed,
 				// no audio): the capture level here, what the session sent. Capture flat:
-				// the X6100 side (mute, monitor); packets with level: the rig's input
+				// the X6100 side (mute, monitor); packets with level: the rig's input.
+				// Printed only with console txdlog (it works since 2026-11-14)
 				if (g_txd_keyed && t - g_txd_log_at >= 1000) {
 					x6100_remote_tx_stats_t ts;
 					double rms = g_txd_cap_n > 0 ? sqrt(g_txd_cap_sq / g_txd_cap_n) / 32768.0 : 0.0;
 
 					x6100_remote_tx_stats(g_remote, &ts);
-					fprintf(stderr, "\nremote TX: capture %u frames %.1f dBFS, sent peak %.1f dBFS (after gain), %u packets %u blocks, "
-						"last block peak %.1f rms %.1f dBFS, overruns %u, tx %s, speaker %s, moni %d boost %d gain %d%%, band-pass %s gate %d dBFS, codec 0x%02x %u Hz\n",
-						g_txd_cap_n, rms > 0.0 ? 20.0 * log10(rms) : -120.0,
-						g_txd_out_pk > 0.0 && g_txd_gain > 0 ? 20.0 * log10(g_txd_out_pk * g_txd_gain / 100.0) : -120.0,
-						ts.packets, ts.blocks,
-						ts.peak > 0.0f ? 20.0 * log10(ts.peak) : -120.0,
-						ts.rms > 0.0f ? 20.0 * log10(ts.rms) : -120.0, ts.overruns,
-						ts.available ? "available" : "NOT available", g_txd_mute ? "muted" : "on", g_txd_moni,
-						g_txd_boost_set, g_txd_gain, g_txd_bp ? "on" : "off", g_txd_gate_db, ts.codec, ts.rate);
+
+					if (g_txd_log)
+						fprintf(stderr, "\nremote TX: capture %u frames %.1f dBFS, sent peak %.1f dBFS (after gain), %u packets %u blocks, "
+							"last block peak %.1f rms %.1f dBFS, overruns %u, tx %s, speaker %s, moni %d boost %d gain %d%%, band-pass %s gate %d dBFS, codec 0x%02x %u Hz\n",
+							g_txd_cap_n, rms > 0.0 ? 20.0 * log10(rms) : -120.0,
+							g_txd_out_pk > 0.0 && g_txd_gain > 0 ? 20.0 * log10(g_txd_out_pk * g_txd_gain / 100.0) : -120.0,
+							ts.packets, ts.blocks,
+							ts.peak > 0.0f ? 20.0 * log10(ts.peak) : -120.0,
+							ts.rms > 0.0f ? 20.0 * log10(ts.rms) : -120.0, ts.overruns,
+							ts.available ? "available" : "NOT available", g_txd_mute ? "muted" : "on", g_txd_moni,
+							g_txd_boost_set, g_txd_gain, g_txd_bp ? "on" : "off", g_txd_gate_db, ts.codec, ts.rate);
 					g_txd_cap_sq = 0.0;
 					g_txd_cap_n = 0;
 					g_txd_out_pk = 0.0;
