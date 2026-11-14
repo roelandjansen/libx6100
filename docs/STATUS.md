@@ -693,6 +693,19 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     then left alone: a span or menu chosen on the rig stays (the rows are placed by
     their own edges, any span shows right).
 
+53. `build.sh dist` (2026-11-14): out/x6100_trx-<rev>.tar.gz for freshly flashed
+    OpenX6X00 images: payload/ with the files at their places on the radio
+    (/root/x6100_trx, x6100_ui.sh, x6100_giveaway.sh, the quick reference,
+    /root/x6100_dist/ with the examples and post_install.sh, /etc/init.d/S96x6100_trx,
+    /opt/wfserver with X6100.rig / X6200.rig when the bundle is built), install.sh
+    (PC, bash: files and links only as one tar over ssh, owner root, then
+    post_install.sh in the same session: the root password once) and README.md.
+    post_install.sh (busybox): owners, modes, /etc/x6100 with the examples where a file
+    is missing (existing settings kept), wfserver.ini likewise; never remote.conf, never
+    the boot choice. Checked here with a stand-in binary and the wfserver bundle: 194
+    files, x6100_trx.conf kept, the others seeded, modes right. Not yet on a real image
+    (zig not here: the archive comes from build.sh dist on the build PC).
+
 ## Next steps (suggested order)
 
 1. Radio checks above; the 2026-10-27 evening checklist (scope panel, fixed edges, wfview

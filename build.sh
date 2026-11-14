@@ -531,12 +531,57 @@ settings_restore() {
 }
 
 #
+# Distribution archive for OpenX6X00 images: out/x6100_trx-<rev>.tar.gz with the files
+# at their places on the radio (payload/), install.sh (run on the PC: one tar over ssh,
+# one password) and README.md. The wfserver bundle and its rig files go in when built
+# (out/wfserver-armhf.tar.gz). Settings, a remote.conf or the boot choice: never
+#
+
+make_dist() {
+	local L_REV
+	local L_NAME
+	local L_DIR
+	local L_PAY
+
+	L_REV="$(git rev-parse --short HEAD 2>/dev/null || printf '%s' dev)"	# not a checkout: dev
+	L_NAME="x6100_trx-${L_REV}"
+	L_DIR="${C_OUT}/dist/${L_NAME}"
+	L_PAY="${L_DIR}/payload"
+
+	rm -rf -- "${C_OUT}/dist"
+	mkdir -p -- "${L_PAY}/root/x6100_dist" "${L_PAY}/etc/init.d"
+
+	install -m 755 -- "${C_OUT}/x6100_trx" scripts/x6100_ui.sh scripts/x6100_giveaway.sh "${L_PAY}/root/"
+	install -m 644 -- docs/x6100_trx_quickref.md "${L_PAY}/root/"
+	install -m 755 -- scripts/S96x6100_trx "${L_PAY}/etc/init.d/"
+	install -m 755 -- scripts/dist/post_install.sh "${L_PAY}/root/x6100_dist/"
+	install -m 644 -- docs/x6100_trx.conf.example docs/x6100_memories.conf.example docs/x6100_messages.conf.example \
+		docs/x6100_remote.conf.example "${L_PAY}/root/x6100_dist/"
+	install -m 755 -- scripts/dist/install.sh "${L_DIR}/"
+	install -m 644 -- scripts/dist/README.md "${L_DIR}/"
+
+	if [[ -f "${G_WFSERVER}" ]]; then
+		mkdir -p -- "${L_PAY}/opt"
+		tar -xzf "${G_WFSERVER}" -C "${L_PAY}/opt"
+		mv -- "${L_PAY}/opt/wfserver-armhf" "${L_PAY}/opt/wfserver"
+		install -m 644 -- contrib/wfview/X6100.rig contrib/wfview/X6200.rig "${L_PAY}/opt/wfserver/share/wfview/rigs/"
+		printf 'dist: with wfserver (%s)\n' "${G_WFSERVER}"
+	else
+		printf 'dist: without wfserver (%s not built)\n' "${G_WFSERVER}"
+	fi
+
+	tar -C "${C_OUT}/dist" --owner=0 --group=0 --numeric-owner -czf "${C_OUT}/${L_NAME}.tar.gz" -- "${L_NAME}"
+	printf 'dist: %s (%s); install: tar -xzf, cd %s, ./install.sh <address of the radio>\n' \
+		"${C_OUT}/${L_NAME}.tar.gz" "$(du -h -- "${C_OUT}/${L_NAME}.tar.gz" | cut -f 1)" "${L_NAME}"
+}
+
+#
 # Usage
 #
 
 usage() {
 	printf '%s\n' \
-		'usage: build.sh [options] [deploy]' \
+		'usage: build.sh [options] [deploy] [dist]' \
 		'       build.sh backup | restore' \
 		'' \
 		'  (none)       git pull, then build only if a source changed' \
@@ -546,6 +591,10 @@ usage() {
 		'               and settings missing on the radio from $X6100_CONFIG (or the example);' \
 		'               the wfserver bundle $X6100_WFSERVER (default out/wfserver-armhf.tar.gz,' \
 		'               from contrib/wfserver/build.sh) to /opt/wfserver when there and changed' \
+		'  dist         the same build, then out/x6100_trx-<rev>.tar.gz for OpenX6X00 images:' \
+		'               the files at their places on the radio, install.sh (run on the PC:' \
+		'               ./install.sh <address>, the root password once) and README.md;' \
+		'               the wfserver bundle when built; no settings or passwords' \
 		'  backup       copy the radio settings (/etc/x6100) to $X6100_CONFIG' \
 		'               (default ~/.config/x6100); no build' \
 		'  restore      copy $X6100_CONFIG to the radio, overwriting; no build' \
@@ -570,6 +619,7 @@ G_SETTINGS=""
 G_FORCE=0
 G_PULL=1
 G_DEPLOY=0
+G_DIST=0
 
 while [[ $# -gt 0 ]]; do
 	case "$1" in
@@ -584,6 +634,9 @@ while [[ $# -gt 0 ]]; do
 			;;
 		deploy)
 			G_DEPLOY=1
+			;;
+		dist)
+			G_DIST=1
 			;;
 		-h|--help)
 			usage
@@ -639,4 +692,8 @@ fi
 
 if [[ "${G_DEPLOY}" -eq 1 ]]; then
 	deploy
+fi
+
+if [[ "${G_DIST}" -eq 1 ]]; then
+	make_dist
 fi
