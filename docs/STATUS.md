@@ -671,6 +671,22 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     b, c, e). Also connected: an IC-7760. Not tested yet: TX via the dummy (d), on the
     9700 and the 7760.
 
+52. The rig's DATA OFF MOD set and restored (2026-11-14; not on the radio yet): TX via
+    the dummy needs the rig's voice input on LAN, which left the rig's own mic off for
+    local use after every session. Now for a txdummy rig, once its rig file is loaded:
+    its Data Off Mod Input (the rig file's command, 1A 05 ..) is asked for (the answer
+    picked out of the CI-V stream by its command bytes; the core keeps no value for
+    it), set to the rig file's LAN input when it is not LAN already, and the old value
+    is sent back when the head lets go (switch to LOCAL or another rig, quit). The set
+    is a CI-V frame of our own (one BCD byte): the core does not encode values for that
+    command. In all three rig files (IC-785x, IC-9700, IC-7760). Log lines: "DATA OFF
+    MOD was MIC, now LAN", "DATA OFF MOD back to MIC"; no command / no LAN in the rig
+    file or no answer: a note to set it by hand. A kill -9 or a crash leaves LAN on the
+    rig. Test: a. the 7851 on MIC, switch to it: the log says MIC -> LAN, the rig's menu
+    shows LAN, TX via the dummy works; b. switch to LOCAL: the menu shows MIC again,
+    the 7851's own mic works; c. quit while on the 7851: MIC again; d. the rig already
+    on LAN: left as it is, nothing put back; e. the same on the 9700 and the 7760.
+
 ## Next steps (suggested order)
 
 1. Radio checks above; the 2026-10-27 evening checklist (scope panel, fixed edges, wfview

@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 
 #include "x6100_pcm.h"
 
@@ -56,6 +57,20 @@ struct x6100_remote
 	// Link
 	//
 	struct session *s;
+
+	//
+	// The rig's DATA OFF MOD (2026-11-14), TX via the dummy only: read when the rig file
+	// is there, set to LAN, the old value back at the close (lanmod_*)
+	//
+	bool lan_mod;			/* cfg.tx_dummy */
+	int lan_state;			/* LANMOD_* */
+	int lan_reg;			/* the value of LAN (the rig file's Inputs) */
+	int lan_old;			/* what the rig had */
+	int lan_tries;
+	int64_t lan_ask_ms;
+	uint8_t lan_cmd[8];		/* the command bytes, to know its answer */
+	size_t lan_cmd_n;
+	atomic_int lan_seen;		/* its value from the rig (CI-V hook), -1 none yet */
 
 	//
 	// What we last sent (valid after the first apply)
@@ -255,6 +270,149 @@ static void *audio_main(void *arg)
 	return NULL;
 }
 
+//
+// DATA OFF MOD on the rig (2026-11-14): TX via the dummy needs the rig's voice input on
+// LAN, so the rig's own mic was off for local use after every session. Now set on the
+// way in and put back on the way out: when the rig file is loaded, its Data Off Mod
+// Input is asked for (the answer is picked out of the CI-V stream by its command bytes,
+// the core keeps no value for it), set to the rig file's LAN input when it is not
+// already, and the old value is sent again at the close. Without that command or a LAN
+// input in the rig file: set it on the rig by hand. A kill -9 leaves LAN on the rig
+//
+
+#define LANMOD_TYPE	"Data Off Mod Input"
+#define LANMOD_TRIES	3
+
+enum { LANMOD_IDLE, LANMOD_ASKED, LANMOD_SET, LANMOD_DONE };
+
+// Network thread: an answer to our ask is FE FE E1 <rig> <command> <value> FD
+static void lanmod_hook(void *ctx, const uint8_t *civ, size_t len)
+{
+	x6100_remote_t *r = ctx;
+	size_t n = r->lan_cmd_n;
+
+	if (n == 0 || len != 6 + n || civ[0] != 0xFE || civ[1] != 0xFE || civ[2] != RIG_CONTROLLER_ADDR
+		|| civ[len - 1] != 0xFD || memcmp(civ + 4, r->lan_cmd, n) != 0)
+		return;
+
+	atomic_store(&r->lan_seen, (civ[4 + n] >> 4) * 10 + (civ[4 + n] & 0x0F));	/* BCD */
+}
+
+// The set as a CI-V frame of our own: the core encodes values only for the kinds it
+// knows, not this one (RIG_ERR_UNSUPPORTED). One BCD byte, as the rigs take it
+static int lanmod_send(x6100_remote_t *r, int value)
+{
+	struct session_info info;
+	uint8_t f[16];
+	size_t n = 0;
+
+	session_get_info(r->s, &info);
+
+	if (info.civ_addr == 0x00 || value < 0 || value > 99 || r->lan_cmd_n + 6 > sizeof(f))
+		return -1;
+
+	f[n++] = 0xFE;
+	f[n++] = 0xFE;
+	f[n++] = info.civ_addr;
+	f[n++] = RIG_CONTROLLER_ADDR;
+	memcpy(f + n, r->lan_cmd, r->lan_cmd_n);
+	n += r->lan_cmd_n;
+	f[n++] = (uint8_t) ((value / 10) << 4 | value % 10);
+	f[n++] = 0xFD;
+	return session_civ_send(r->s, f, n);
+}
+
+static const char *lanmod_name(const struct rig_def *def, int reg)
+{
+	for (size_t i = 0; i < def->n_inputs; i++)
+		if (def->inputs[i].reg == reg)
+			return def->inputs[i].name;
+
+	return "?";
+}
+
+// From the poll, once the rig file is there
+static void lanmod_poll(x6100_remote_t *r, int64_t t)
+{
+	const struct rig_def *def = session_rig_def(r->s);
+	const struct rig_cmd *c;
+	int v;
+
+	if (!r->lan_mod || def == NULL || r->lan_state == LANMOD_SET || r->lan_state == LANMOD_DONE)
+		return;
+
+	if (r->lan_state == LANMOD_IDLE) {
+		r->lan_reg = -1;
+
+		for (size_t i = 0; i < def->n_inputs; i++)
+			if (strcmp(def->inputs[i].name, "LAN") == 0)
+				r->lan_reg = def->inputs[i].reg;
+
+		c = rigfile_cmd(def, LANMOD_TYPE);
+
+		if (c == NULL || !c->get || !c->set || r->lan_reg < 0 || c->n == 0 || c->n > sizeof(r->lan_cmd)) {
+			fprintf(stderr, "\nremote: the rig file has no %s with LAN: set DATA OFF MOD to LAN on the rig by hand\n",
+				LANMOD_TYPE);
+			r->lan_state = LANMOD_DONE;
+			return;
+		}
+
+		memcpy(r->lan_cmd, c->bytes, c->n);
+		r->lan_cmd_n = c->n;
+		atomic_store(&r->lan_seen, -1);
+		r->lan_tries = 0;
+		r->lan_state = LANMOD_ASKED;
+		r->lan_ask_ms = 0;
+	}
+
+	if ((v = atomic_load(&r->lan_seen)) >= 0) {
+		r->lan_old = v;
+
+		if (v == r->lan_reg) {
+			fprintf(stderr, "\nremote: DATA OFF MOD already LAN on the rig: left as it is\n");
+			r->lan_state = LANMOD_DONE;
+		} else if (lanmod_send(r, r->lan_reg) == 0) {
+			fprintf(stderr, "\nremote: DATA OFF MOD was %s, now LAN; %s again when the head lets go\n",
+				lanmod_name(def, v), lanmod_name(def, v));
+			r->lan_state = LANMOD_SET;
+		} else {
+			fprintf(stderr, "\nremote: DATA OFF MOD could not be set: set it to LAN on the rig by hand\n");
+			r->lan_state = LANMOD_DONE;
+		}
+
+		return;
+	}
+
+	if (t - r->lan_ask_ms >= 1500) {
+		if (r->lan_tries++ >= LANMOD_TRIES) {
+			fprintf(stderr, "\nremote: no answer for DATA OFF MOD: not changed, set it to LAN on the rig by hand\n");
+			r->lan_state = LANMOD_DONE;
+			return;
+		}
+
+		session_get_value(r->s, LANMOD_TYPE, 0);
+		r->lan_ask_ms = t;
+	}
+}
+
+// At the close: the rig's own value back, sent before the link goes
+static void lanmod_restore(x6100_remote_t *r)
+{
+	const struct rig_def *def = session_rig_def(r->s);
+
+	if (r->lan_state != LANMOD_SET)
+		return;
+
+	if (lanmod_send(r, r->lan_old) == 0) {
+		fprintf(stderr, "\nremote: DATA OFF MOD back to %s\n", def != NULL ? lanmod_name(def, r->lan_old) : "as it was");
+		usleep(300000);	/* on its way before the link goes */
+	} else {
+		fprintf(stderr, "\nremote: DATA OFF MOD could not be put back: LAN stays on the rig\n");
+	}
+
+	r->lan_state = LANMOD_DONE;
+}
+
 int x6100_remote_open(x6100_remote_t **out, const x6100_remote_cfg_t *cfg)
 {
 	struct profile p;
@@ -309,6 +467,10 @@ int x6100_remote_open(x6100_remote_t **out, const x6100_remote_cfg_t *cfg)
 	p.ptt_timeout_s = 180;
 
 	memset(&h, 0, sizeof(h));
+	h.civ_data = lanmod_hook;	/* the rig's answer to our DATA OFF MOD ask */
+	h.ctx = r;
+	r->lan_mod = cfg->tx_dummy;
+	atomic_init(&r->lan_seen, -1);
 
 	if ((rc = x6100_mixer_tx_setup(X6100_PCM_CARD)) < 0
 		|| (rc = x6100_pcm_open(&r->pcm, X6100_PCM_CARD, X6100_PCM_DEVICE, false, C_RATE, 2, C_PERIOD,
@@ -352,6 +514,7 @@ void x6100_remote_close(x6100_remote_t *r)
 	if (r == NULL)
 		return;
 
+	lanmod_restore(r);	/* the rig's own DATA OFF MOD, while the link is still up */
 	atomic_store(&r->stop, true);
 
 	if (r->audio_running)
@@ -533,6 +696,9 @@ void x6100_remote_poll(x6100_remote_t *r, x6100_remote_status_t *st)
 	// set is refused (RIG_ERR_NO_CAPS -1), so say when it is there, and when it is long
 	// in coming (2026-11-12: 20 refused in 10 s)
 	st->rig_ready = rs.rig_valid;
+
+	if (rs.rig_valid)
+		lanmod_poll(r, t);	/* DATA OFF MOD to LAN for TX via the dummy */
 	st->cw_pitch = rs.cw_pitch.valid ? rs.cw_pitch.value : 0;
 	st->rf_power = rs.rf_power.valid ? rs.rf_power.value : -1;
 

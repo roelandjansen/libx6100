@@ -366,6 +366,9 @@ power under the TX box, wfserver held off automatically). Open for TX (2026-11-1
 - The levels are set for the 7851 with its LAN input at 50 % (txdgain 3): another rig
   or level needs `txdgain` in the conf. Why the rig takes our level some 30 dB hot
   (voice peaks about -14 dBFS before the gain) is not known.
+- Done another way (STATUS 52, 2026-11-14): x6100_trx sets the rig's DATA OFF MOD to LAN
+  on the way in and puts the rig's own value back on the way out. The data mode idea
+  below stays as the alternative (it would also survive a kill -9):
 - The rig's own mic (2026-11-14, after v0.17.16): now the 7851's DATA OFF MOD is set to
   LAN, so its own hand mic is off for normal (local) SSB every time the head is used.
   Instead: the head transmits in one of the rig's data modes (DATA1, 2 or 3, which one

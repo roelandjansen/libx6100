@@ -19,8 +19,9 @@
 #   user       a user of the rig's network settings (or of wfserver)
 #   password   its password; no spaces, as the Icom LAN protocol itself has none
 #   txdummy    transmit too: the X6100 keys itself at 0.1 W into a DUMMY LOAD on its
-#              antenna port, its mic goes to the rig as LAN audio (set the rig's
-#              DATA OFF MOD to LAN). Without it: receive only
+#              antenna port, its mic goes to the rig as LAN audio (the rig's DATA
+#              OFF MOD: x6100_trx sets it to LAN on the way in and puts the rig's
+#              own value back on the way out). Without it: receive only
 #   txdgain=N  the TX audio level to this rig in %, 0-400 (default 3: an IC-7851 with
 #              its LAN input at 50 %)
 #
