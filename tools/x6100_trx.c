@@ -4994,7 +4994,7 @@ static bool on_key(rx_t *rx, int key)
 
 		// Remote: the rig's tuner on / off (apply sends it, 2026-11-14), not ours
 		if (REMOTE_ON) {
-			toast(rx->atu_on ? "RIG ATU ON " : "RIG ATU OFF");	/* the same width: the box stays */
+			toast(rx->atu_on ? "RIG TUNER  ON" : "RIG TUNER OFF");	/* one width, right-aligned with RIG    TUNING */
 			break;
 		}
 
@@ -5233,7 +5233,7 @@ static bool on_long_key(rx_t *rx, int key)
 			if (g_remote == NULL || x6100_remote_tune(g_remote) != 0)
 				toast("RIG TUNE REFUSED");
 			else
-				toast("RIG TUNING");
+				toast("RIG    TUNING");	/* as wide as RIG TUNER OFF */
 
 			return true;
 		}

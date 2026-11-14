@@ -722,7 +722,7 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     now each rig width seen is kept per mode group and FIL while on that rig, shown at
     once on a later change (only a first visit can still flash the table value);
     verified on the 7760 (2026-11-14).
-    Tuner (2026-11-14; not on the radio yet): remote, the ATU key works on the rig's
+    Tuner (2026-11-14): remote, the ATU key works on the rig's
     tuner, not the X6100's. Short: on / off (Tuner/ATU Status 0 / 1; only a change on
     the head goes out, at connect the head takes the rig's state; kept per rig like
     the place). Long: the rig tunes (Tuner/ATU Status 2, as wfview; TX rigs only,
@@ -731,6 +731,9 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     during a tune, else in our poll, about every 2.3 s). Test: ATU short on the head
     and on the rig both ways; ATU long on the 7851 / 7760: TUNE, the rig tunes, TUNE
     goes when done; on a receive-only rig: RIG TUNE REFUSED.
+    Notes RIG TUNER OFF / RIG TUNER  ON / RIG    TUNING, one width. The app
+    (libx6100_app) got its own ATU button: state in its text (ATU ?, ATU OFF, ATU ON
+    green, TUNING amber), short in / out, long tune; verified on Android with the 7851.
     To test further: the label shows 3.00k / 2.60k / 1.80k on the 7851's FIL1-3,
     follows a width changed on the rig within about 2 s, and a FIL change at once.
     Also 2026-11-14: wfserver built from wfview v3 (main) works; the CW decoder holds
