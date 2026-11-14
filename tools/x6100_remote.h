@@ -103,6 +103,7 @@ typedef struct
 	bool rig_ready;			/* the rig file is loaded (the rig answered its CI-V ID): controls work */
 	int cw_pitch;			/* the rig's CW pitch in Hz, 0 not known yet (the decoder listens there) */
 	int rf_power;			/* the rig's RF power setting, Icom 0-255, -1 not known yet (the TX box shows it) */
+	int filter_hz;			/* the rig's filter width in Hz for its mode and filter (Filter Width), 0 not known */
 } x6100_remote_status_t;
 
 typedef struct x6100_remote x6100_remote_t;

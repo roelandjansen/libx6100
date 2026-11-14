@@ -1019,11 +1019,36 @@ static bool pbt_active(const rx_t *rx)
 	return mode_group(rx->mode) != FG_FM && (rx->pbt_in != 0 || rx->pbt_out != 0);
 }
 
+// Remote head: the rig's own filter width for its mode and filter (Hz; its Filter Width,
+// polled), 0 locally or not known yet (2026-11-14: the head showed its own table, 2.8 /
+// 2.4 / 1.8 k, with the 7851 on 3.0 / 2.6 / 1.8 k)
+static int g_remote_fil_hz;
+
 static void rx_filter(const rx_t *rx, uint32_t *low, uint32_t *high)
 {
 	int lo, hi;
 
 	mode_filter(rx->mode, rx->fil, low, high);
+
+	// Remote: the rig's width, placed as ours: SSB / data from the same low edge, CW round
+	// the same centre, AM as the half width (as stored here); FM as ours (Icom's FM
+	// filters are fixed and give no width)
+	if (g_remote_fil_hz > 0) {
+		const fgroup_t g = mode_group(rx->mode);
+		const uint32_t w = (uint32_t) g_remote_fil_hz;
+
+		if (g == FG_AM) {
+			*low = 0;
+			*high = w / 2;
+		} else if (g == FG_CW) {
+			const uint32_t c = (*low + *high) / 2;
+
+			*low = c > w / 2 ? c - w / 2 : 0;
+			*high = *low + w;
+		} else if (g != FG_FM) {
+			*high = *low + w;
+		}
+	}
 
 	if (!pbt_active(rx))
 		return;
@@ -1736,6 +1761,7 @@ static void rig_leave(x6100_ctl_t *ctl, rx_t *rx)
 	g_remote_up = false;
 	g_txd_keyed = false;
 	g_remote_pwr = -1;
+	g_remote_fil_hz = 0;	/* the head's own filter widths until the rig says */
 	g_remote_shown = -1;
 	g_remote_try_at = 0;
 	x6100_ctl_set(ctl, X6100_REG_FLAGS, 0);
@@ -1772,6 +1798,7 @@ static void rig_enter(rx_t *rx, int i)
 	g_remote_req = true;
 	g_remote_up = false;
 	g_remote_pwr = -1;
+	g_remote_fil_hz = 0;	/* the head's own filter widths until the rig says */
 	g_remote_shown = -1;
 	g_txd_gain_set = -1;
 	g_remote_tries = RIG_OPEN_TRIES;
@@ -14894,6 +14921,12 @@ int main(int argc, char **argv)
 			if (rs.rf_power != g_remote_pwr) {
 				g_remote_pwr = rs.rf_power;
 				dirty = true;
+			}
+
+			// The rig's filter width: the label and the passband on the scope (rx_filter)
+			if (rs.filter_hz != g_remote_fil_hz) {
+				g_remote_fil_hz = rs.filter_hz;
+				changed = true;
 			}
 
 			//

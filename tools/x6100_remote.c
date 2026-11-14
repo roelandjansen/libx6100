@@ -39,6 +39,7 @@
 enum { C_AGC, C_ATT, C_PRE, C_RFG, C_NR, C_NB };
 #define C_SCOPE_HALF	50000		/* the rig scope, centre mode +- 50 kHz: the X6100 IQ width (SPAN_HZ) */
 #define C_SCOPE_TRIES	5		/* scope mode / span sent so often after connecting at most, then left alone */
+#define C_FIL_HOLD_MS	700		/* after a mode / filter change: the old Filter Width answer not shown so long */
 
 //
 // Mode numbers as wfview has them (.rig Modes\N\Num: its own list, not the CI-V Reg;
@@ -125,6 +126,7 @@ struct x6100_remote
 	bool scope_seen;
 	int64_t scope_set_ms;		/* last scope mode / span sent */
 	int scope_tries;		/* scope mode / span sends so far (C_SCOPE_TRIES, then left alone) */
+	int64_t fil_hold_ms;		/* mode / filter changed then: the Filter Width before it not used for C_FIL_HOLD_MS */
 	uint64_t row_width;		/* width of the last scope row, 0: none yet */
 	bool smeter_valid;
 	double smeter_dbm;
@@ -574,6 +576,10 @@ void x6100_remote_apply(x6100_remote_t *r, const x6100_remote_rx_t *rx)
 
 		if (session_set_mode(r->s, 0, num, data, rx->filter + 1) == 0)
 			r->mode_sent_ms = t;
+
+		// The width of the new filter at once; the old answer not shown meanwhile
+		r->fil_hold_ms = t;
+		session_get_value(r->s, "Filter Width", 0);
 	}
 
 	// The controls; each send noted for the echo guard in poll
@@ -706,10 +712,13 @@ void x6100_remote_poll(x6100_remote_t *r, x6100_remote_status_t *st)
 	// poll): the CW decoder listens at the rig's pitch. RF Power too (2026-11-14: 0 % shown
 	// with the 7851 at 200 W; the file polls it Medium): under the TX box
 	if (rs.rig_valid && t - r->ctl_poll_ms >= 333) {
-		static const char *const poll[5] = { "Noise Reduction", "Noise Blanker", "RF Gain", "CW Pitch", "RF Power" };
+		// Filter Width too (2026-11-14: the head showed its own widths, 2.8 / 2.4 / 1.8 k,
+		// with the 7851 on 3.0 / 2.6 / 1.8 k); each now about every 2 s
+		static const char *const poll[6] = { "Noise Reduction", "Noise Blanker", "RF Gain", "CW Pitch", "RF Power",
+			"Filter Width" };
 
 		session_get_value(r->s, poll[r->ctl_poll_i], 0);
-		r->ctl_poll_i = (r->ctl_poll_i + 1) % 5;
+		r->ctl_poll_i = (r->ctl_poll_i + 1) % 6;
 		r->ctl_poll_ms = t;
 	}
 
@@ -722,6 +731,7 @@ void x6100_remote_poll(x6100_remote_t *r, x6100_remote_status_t *st)
 		lanmod_poll(r, t);	/* DATA OFF MOD to LAN for TX via the dummy */
 	st->cw_pitch = rs.cw_pitch.valid ? rs.cw_pitch.value : 0;
 	st->rf_power = rs.rf_power.valid ? rs.rf_power.value : -1;
+	st->filter_hz = rs.filter_width.valid && t - r->fil_hold_ms >= C_FIL_HOLD_MS ? rs.filter_width.value : 0;
 
 	// RF power each change, for the log (2026-11-14: 0 % shown with the 7851 at 200 W)
 	if (st->rf_power != r->log_rfpwr) {
@@ -763,6 +773,10 @@ void x6100_remote_poll(x6100_remote_t *r, x6100_remote_status_t *st)
 		r->rig_mode_num = rs.rx[0].mode[0].num;
 		r->rig_mode_data = rs.rx[0].mode[0].data;
 		r->rig_filter = rs.rx[0].mode[0].filter;
+
+		// Its filter width anew (also when the change was ours: the rig confirms it)
+		r->fil_hold_ms = t;
+		session_get_value(r->s, "Filter Width", 0);
 
 		if (r->sent_valid && t - r->mode_sent_ms >= C_ECHO_MS && mode_from_icom(r->rig_mode_num, r->rig_mode_data, &m)
 			&& (m != r->sent.mode || r->rig_filter - 1 != r->sent.filter)) {

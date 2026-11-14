@@ -710,6 +710,15 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     Verified (2026-11-14): the screen no longer jumps on the 7851, the 9700 and the 7760.
     The note names the rig (REMOTE TRX IC9700, verified); the screenshot with the RIG
     panel open works and its SCREENSHOT note now shows over the panel.
+    Filter widths (2026-11-14): only FIL1-3 went between head and rig; the head showed
+    its own widths (2.8 / 2.4 / 1.8 k) with the 7851 on 3.0 / 2.6 / 1.8 k. Now the rig's
+    Filter Width is in our poll (about every 2 s) and asked at once after a mode or
+    filter change (the old answer not used for 0.7 s); while remote the filter label and
+    the passband on the scope use it (SSB / data from the same low edge, CW round the
+    same centre, AM as the half width; FM as the head's: Icom's FM filters give no
+    width). Setting a width from the head's filter panel still changes only the head's
+    table (TODO). To test: the label shows 3.00k / 2.60k / 1.80k on the 7851's FIL1-3,
+    follows a width changed on the rig within about 2 s, and a FIL change at once.
     Also 2026-11-14: wfserver built from wfview v3 (main) works; the CW decoder holds
     up in a contest.
 
