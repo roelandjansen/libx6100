@@ -528,13 +528,13 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     l. Under the TX box (added 2026-11-14, after "5W shown"): the rig's RF power setting
        in percent (Icom 0-255, polled by the rig file), -- until known; changing it on
        the 7851 changes it here within a few seconds. Not the X6100's 5.0 W.
-    m. Hand mic PTT (2026-11-14: does not key, the PTT key on top does): logged to find
-       out whether the baseband reports it with TX enable off; press it a few times and
-       send the `txd: flow tx .. hkey ..` lines. With a usable signal it becomes a PTT
-       source; with none it stays unused.
+    m. Hand mic PTT (2026-11-14): does not key, the PTT key on top does. Logged: the
+       baseband reports nothing for it with TX enable off (flow TX flag and hand mic key
+       code stay 0), so it cannot be a PTT source here; the log is removed again. The
+       hand mic as microphone works (meter follows) when keyed with the PTT key.
     Blind spots: the monitor (level 70) also played on the X6100 speaker while keyed
     (now muted, k); CW is not handled;
-    the hand mic PTT is not used yet (m); a real antenna instead of the dummy radiates 0.1 W on
+    the hand mic PTT cannot key (m: not reported); a real antenna instead of the dummy radiates 0.1 W on
     the rig's frequency (with oob anywhere); the audio level path is fixed (TXD_MONI).
 
 ## Next steps (suggested order)

@@ -1109,7 +1109,6 @@ static x6100_remote_t *g_remote;
 static bool g_remote_up;		/* link up and the rig file loaded (main loop, from the poll) */
 static bool g_txd_keyed;		/* --remote-tx-dummy: the rig keyed by us */
 static int g_remote_pwr = -1;		/* the rig's RF power setting (0-255), -1 not known: shown under the TX box */
-static uint32_t g_txd_flow = ~0u;	/* --remote-tx-dummy: last flow TX flag + hand mic key code logged */
 
 // --remote-tx-dummy: the X6100 keys itself at 0.1 W into a dummy load, its monitor
 // (the mic) goes to the rig as TX audio, then the rig keys. TXD_MONI: the monitor level
@@ -13817,15 +13816,6 @@ int main(int argc, char **argv)
 
 			scr.tx = tx;
 			rx.bb_tx = tx;	/* hand mic PTT too: apply() then moves to the TX side */
-
-#ifdef X6100_REMOTE
-			// --remote-tx-dummy, finding out (2026-11-14): does the baseband report the
-			// hand mic's PTT while its TX enable is off (TX flag or key code)? Every change
-			if (TXD_ON && (frame.hkey | (tx ? 0x80000000u : 0)) != g_txd_flow) {
-				g_txd_flow = frame.hkey | (tx ? 0x80000000u : 0);
-				fprintf(stderr, "\ntxd: flow tx %d hkey %02X (ptt %d)\n", tx, frame.hkey, rx.ptt);
-			}
-#endif
 			scr.pwr = frame.tx_power * 0.1;
 			scr.swr = swr < 1.0 ? 1.0 : swr;
 			scr.alc = frame.alc_level;
