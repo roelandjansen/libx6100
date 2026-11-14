@@ -473,6 +473,9 @@ typedef struct
 	uint64_t gedit_since;
 	bool ginfo;		/* GEN long: status page */
 	uint64_t ginfo_since;
+	bool rigedit;		/* GEN held RIG_PRESS_MS: RIG panel (LOCAL or a remote rig) */
+	int rigedit_par;	/* selected line: 0 LOCAL, then the rigs of remote.conf, then CMDLINE */
+	uint64_t rigedit_since;
 
 	//
 	// Meter shown on the dial during TX (F4): 0 Po, 1 SWR, 2 ALC
@@ -1126,7 +1129,6 @@ static int g_txd_boost_set = -1;	/* the Mic1 boost as last set on the codec, -1 
 #define TXD_LEAD_MS	150
 #define REMOTE_ON	(g_remote_req)
 #define REMOTE_MARK	"/tmp/x6100_trx.remote"	/* our PID while remote: x6100_ui.sh keeps wfserver off */
-#define REMOTE_CODEC_WAIT_S 10			/* the codec busy at start (wfserver ending): wait so long */
 
 //
 // --remote-tx-dummy recording (2026-11-14, a test aid; console txdrec): the capture as it
@@ -1305,6 +1307,502 @@ static void txd_clean(int16_t *stereo, size_t frames)
 		v = v > 32767 ? 32767 : v < -32768 ? -32768 : v;
 		stereo[i * 2] = stereo[i * 2 + 1] = (int16_t) v;
 	}
+}
+
+//
+// Rig profiles (2026-11-14): RIG_CONF lists the remote Icoms, one a line:
+//   <name> <host> <udp port> <user> <password> [txdummy] [txdgain=N]
+// '#' starts a comment. Mode 0600 (passwords in plain text): readable by others and
+// x6100_trx leaves the whole file unused. LOCAL (the X6100 itself) is always there,
+// first; the RIG panel (GEN held RIG_PRESS_MS) and console `rig` switch at run time,
+// without a restart, and the choice is in the state (`rig <name>`): the next start
+// comes up as left. --remote <name> picks one at the start; --remote <host> <port>
+// <user> <password> is a profile of its own (slot RIG_CLI, "CMDLINE"), not saved.
+//
+// What the rig changes in rx (frequencies, modes, band memories, VFO B, AGC, ATT, PRE,
+// RF gain, NR / NB, split, RIT / XIT, memory mode) is the place: LOCAL keeps its own,
+// each rig its own while x6100_trx runs, so back on LOCAL the X6100 is where it was, and
+// the state file only ever holds LOCAL's. Settings (volume, keyer, mic, panels) are shared.
+//
+
+static void upcase(char *s);
+
+#define RIG_CONF	"/etc/x6100/remote.conf"
+#define RIG_MAX		16
+#define RIG_CLI		RIG_MAX		/* the slot of --remote <host> <port> <user> <password> */
+#define RIG_LOCAL	(-1)
+#define RIG_NONE	(-2)
+#define RIG_PRESS_MS	1500		/* GEN held this long: the RIG panel (600 ms: the status page) */
+#define RIG_OPEN_TRIES	10		/* the codec busy (wfserver ending): tried once a second so often */
+
+typedef struct
+{
+	char name[24];
+	char host[96];
+	uint16_t port;
+	char user[48];
+	char pass[64];
+	bool tx_dummy;
+	int txdgain;			/* -1: as it is */
+	char err[48];			/* not usable: why ("" usable) */
+} rig_prof_t;
+
+typedef struct
+{
+	uint32_t freq;
+	x6100_mode_t mode;
+	int fil;
+	int band;
+	uint32_t band_freq[BAND_MAX];
+	uint32_t gen_freq;
+	x6100_mode_t gen_mode;
+	uint32_t b_freq;
+	x6100_mode_t b_mode;
+	int b_fil;
+	bool on_b;
+	x6100_agc_t agc;
+	x6100_agc_t agc_group[FG_COUNT];
+	int agc_last_group;
+	bool att;
+	bool pre;
+	int rfg;
+	bool nr;
+	bool nb;
+	bool split;
+	int rit_hz;
+	bool rit;
+	bool xit;
+	bool mem_mode;
+	vfo_keep_t mem_vfo;
+} rig_place_t;
+
+static rig_prof_t g_rigs[RIG_MAX + 1];
+static int g_nrigs;				/* from RIG_CONF */
+static int g_rig_cur = RIG_LOCAL;		/* in use */
+static char g_rig_ask[sizeof(g_rigs[0].name)];	/* asked (console, state, panel, --remote): "" nothing */
+static char g_rig_state[sizeof(g_rigs[0].name)] = "local";	/* what the state holds (kept with CMDLINE) */
+static rig_place_t g_place_local;
+static rig_place_t g_place_rig[RIG_MAX + 1];
+static bool g_place_rig_ok[RIG_MAX + 1];
+static int g_remote_tries;			/* open attempts left while the codec is busy */
+static uint64_t g_remote_try_at;		/* next open attempt (ms), 0 = none */
+static int g_remote_shown = -1;			/* the standing note as last set: 0 link, 1 up, 2 rig keyed, 3 no rig file */
+static int g_txd_gain_set = -1;			/* txdgain as last given to the session */
+static bool g_rig_cli_txd;			/* --remote-tx-dummy: TX via the dummy for the rig of the command line */
+
+static void place_get(const rx_t *rx, rig_place_t *p)
+{
+	p->freq = rx->freq;
+	p->mode = rx->mode;
+	p->fil = rx->fil;
+	p->band = rx->band;
+	memcpy(p->band_freq, rx->band_freq, sizeof(p->band_freq));
+	p->gen_freq = rx->gen_freq;
+	p->gen_mode = rx->gen_mode;
+	p->b_freq = rx->b_freq;
+	p->b_mode = rx->b_mode;
+	p->b_fil = rx->b_fil;
+	p->on_b = rx->on_b;
+	p->agc = rx->agc;
+	memcpy(p->agc_group, rx->agc_group, sizeof(p->agc_group));
+	p->agc_last_group = rx->agc_last_group;
+	p->att = rx->att;
+	p->pre = rx->pre;
+	p->rfg = rx->rfg;
+	p->nr = rx->nr;
+	p->nb = rx->nb;
+	p->split = rx->split;
+	p->rit_hz = rx->rit_hz;
+	p->rit = rx->rit;
+	p->xit = rx->xit;
+	p->mem_mode = rx->mem_mode;
+	p->mem_vfo = rx->mem_vfo;
+}
+
+static void place_put(rx_t *rx, const rig_place_t *p)
+{
+	rx->freq = p->freq;
+	rx->mode = p->mode;
+	rx->fil = p->fil;
+	rx->band = p->band;
+	memcpy(rx->band_freq, p->band_freq, sizeof(rx->band_freq));
+	rx->gen_freq = p->gen_freq;
+	rx->gen_mode = p->gen_mode;
+	rx->b_freq = p->b_freq;
+	rx->b_mode = p->b_mode;
+	rx->b_fil = p->b_fil;
+	rx->on_b = p->on_b;
+	rx->agc = p->agc;
+	memcpy(rx->agc_group, p->agc_group, sizeof(rx->agc_group));
+	rx->agc_last_group = p->agc_last_group;
+	rx->att = p->att;
+	rx->pre = p->pre;
+	rx->rfg = p->rfg;
+	rx->nr = p->nr;
+	rx->nb = p->nb;
+	rx->split = p->split;
+	rx->rit_hz = p->rit_hz;
+	rx->rit = p->rit;
+	rx->xit = p->xit;
+	rx->mem_mode = p->mem_mode;
+	rx->mem_vfo = p->mem_vfo;
+}
+
+// The state file holds LOCAL's place: while remote, a copy of rx with it put back
+static const rx_t *state_view(const rx_t *rx)
+{
+	static rx_t v;
+
+	if (g_rig_cur == RIG_LOCAL)
+		return rx;
+
+	v = *rx;
+	place_put(&v, &g_place_local);
+	return &v;
+}
+
+static int rig_find(const char *name)
+{
+	if (strcasecmp(name, "local") == 0)
+		return RIG_LOCAL;
+
+	for (int i = 0; i < g_nrigs; i++)
+		if (strcasecmp(g_rigs[i].name, name) == 0)
+			return i;
+
+	if (g_rigs[RIG_CLI].host[0] != '\0' && strcasecmp(g_rigs[RIG_CLI].name, name) == 0)
+		return RIG_CLI;
+
+	return RIG_NONE;
+}
+
+static const char *rig_name(int i)
+{
+	return i == RIG_LOCAL ? "LOCAL" : g_rigs[i].name;
+}
+
+// A bounded copy; false when it does not fit
+static bool rig_copy(char *dst, size_t n, const char *src)
+{
+	if (strlen(src) >= n)
+		return false;
+
+	memcpy(dst, src, strlen(src) + 1);
+	return true;
+}
+
+// One line of RIG_CONF into p (p->err says why it cannot be used)
+static void rig_parse(rig_prof_t *p, char *line)
+{
+	char *save = NULL;
+	char *f[5];
+	int n = 0;
+
+	memset(p, 0, sizeof(*p));
+	p->txdgain = -1;
+
+	for (char *t = strtok_r(line, " \t\r\n", &save); t != NULL; t = strtok_r(NULL, " \t\r\n", &save)) {
+		if (n < 5) {
+			f[n++] = t;
+			continue;
+		}
+
+		if (strcasecmp(t, "txdummy") == 0) {
+			p->tx_dummy = true;
+		} else if (strncasecmp(t, "txdgain=", 8) == 0 && atoi(t + 8) >= 0 && atoi(t + 8) <= 400) {
+			p->txdgain = atoi(t + 8);
+		} else {
+			snprintf(p->err, sizeof(p->err), "UNKNOWN OPTION %.20s", t);
+			upcase(p->err);
+		}
+	}
+
+	if (n < 1)
+		return;
+
+	snprintf(p->name, sizeof(p->name), "%.*s", (int) sizeof(p->name) - 1, f[0]);
+	upcase(p->name);
+
+	if (p->err[0] != '\0')
+		return;
+
+	int port = n >= 3 ? atoi(f[2]) : 0;
+
+	if (n < 5)
+		snprintf(p->err, sizeof(p->err), "NEEDS HOST PORT USER PASSWORD");
+	else if (strlen(f[0]) >= sizeof(p->name))
+		snprintf(p->err, sizeof(p->err), "NAME TOO LONG");
+	else if (strcasecmp(f[0], "local") == 0)
+		snprintf(p->err, sizeof(p->err), "LOCAL IS TAKEN");
+	else if (port <= 0 || port > 65535)
+		snprintf(p->err, sizeof(p->err), "BAD PORT");
+	else if (!rig_copy(p->host, sizeof(p->host), f[1]) || !rig_copy(p->user, sizeof(p->user), f[3])
+		|| !rig_copy(p->pass, sizeof(p->pass), f[4]))
+		snprintf(p->err, sizeof(p->err), "HOST, USER OR PASSWORD TOO LONG");
+	else
+		p->port = (uint16_t) port;
+}
+
+// RIG_CONF into g_rigs, at the start (a missing file: LOCAL only)
+static void rig_conf_load(void)
+{
+	struct stat st;
+	char line[512];
+	FILE *fp;
+
+	g_nrigs = 0;
+
+	if (stat(RIG_CONF, &st) != 0)
+		return;
+
+	if ((st.st_mode & 077) != 0) {
+		fprintf(stderr, "warning: %s can be read by others (passwords): not used; chmod 600 %s\n", RIG_CONF, RIG_CONF);
+		return;
+	}
+
+	if ((fp = fopen(RIG_CONF, "r")) == NULL) {
+		fprintf(stderr, "warning: %s: %s\n", RIG_CONF, strerror(errno));
+		return;
+	}
+
+	while (fgets(line, sizeof(line), fp) != NULL) {
+		char *h = strchr(line, '#');
+		char *s = line;
+
+		if (h != NULL)
+			*h = '\0';
+
+		while (*s == ' ' || *s == '\t')
+			s++;
+
+		if (*s == '\0' || *s == '\n' || *s == '\r')
+			continue;
+
+		if (g_nrigs >= RIG_MAX) {
+			fprintf(stderr, "warning: %s: more than %d rigs, the rest left out\n", RIG_CONF, RIG_MAX);
+			break;
+		}
+
+		rig_prof_t *p = &g_rigs[g_nrigs];
+
+		rig_parse(p, s);
+
+		for (int i = 0; i < g_nrigs && p->err[0] == '\0'; i++)
+			if (strcasecmp(g_rigs[i].name, p->name) == 0)
+				snprintf(p->err, sizeof(p->err), "NAME TWICE");
+
+		if (p->err[0] != '\0')
+			fprintf(stderr, "%s: %s: %s\n", RIG_CONF, p->name, p->err);
+
+		g_nrigs++;
+	}
+
+	fclose(fp);
+	fprintf(stderr, "rigs: %d in %s\n", g_nrigs, RIG_CONF);
+}
+
+// Leave the rig in use for LOCAL: its PTT first, the session, the marker, then the
+// place as LOCAL left it. The baseband follows with the next apply (local again)
+static void rig_leave(x6100_ctl_t *ctl, rx_t *rx)
+{
+	if (g_rig_cur == RIG_LOCAL)
+		return;
+
+	if (g_remote != NULL) {
+		if (g_txd_keyed)
+			x6100_remote_ptt(g_remote, false);
+
+		txd_rec_close();
+		x6100_remote_close(g_remote);
+		g_remote = NULL;
+	}
+
+	place_get(rx, &g_place_rig[g_rig_cur]);
+	g_place_rig_ok[g_rig_cur] = true;
+	place_put(rx, &g_place_local);
+
+	fprintf(stderr, "\nrig: %s left, LOCAL\n", rig_name(g_rig_cur));
+	g_rig_cur = RIG_LOCAL;
+	g_remote_req = false;
+	g_remote_up = false;
+	g_txd_keyed = false;
+	g_remote_pwr = -1;
+	g_remote_shown = -1;
+	g_remote_try_at = 0;
+	x6100_ctl_set(ctl, X6100_REG_FLAGS, 0);
+	unlink(REMOTE_MARK);	/* the codec is free: wfserver may run again */
+
+	if (rx->warn == g_remote_note)
+		rx->warn = NULL;
+
+	g_remote_note = "REMOTE RX";
+}
+
+// Take rig i: the place it had (else LOCAL's goes to it), the marker for the wfserver
+// watcher; the session opens in the loop (rig_open_poll), so the UI keeps going
+static void rig_enter(rx_t *rx, int i)
+{
+	const rig_prof_t *p = &g_rigs[i];
+
+	place_get(rx, &g_place_local);
+
+	if (g_place_rig_ok[i])
+		place_put(rx, &g_place_rig[i]);
+
+	g_remote_cfg.host = p->host;
+	g_remote_cfg.port = p->port;
+	g_remote_cfg.user = p->user;
+	g_remote_cfg.pass = p->pass;
+	g_remote_cfg.tx_dummy = p->tx_dummy;
+
+	if (p->txdgain >= 0)
+		g_txd_gain = p->txdgain;
+
+	g_rig_cur = i;
+	g_remote_req = true;
+	g_remote_up = false;
+	g_remote_pwr = -1;
+	g_remote_shown = -1;
+	g_txd_gain_set = -1;
+	g_remote_tries = RIG_OPEN_TRIES;
+	g_remote_try_at = 1;	/* at once */
+	g_remote_note = "REMOTE LINK";
+	rx->warn = g_remote_note;
+
+	// wfserver off while we are remote: the marker with our PID tells the wfserver
+	// watcher (x6100_ui.sh) to stop it and to start it again once we are gone
+	FILE *mk = fopen(REMOTE_MARK, "w");
+
+	if (mk != NULL) {
+		fprintf(mk, "%ld\n", (long) getpid());
+		fclose(mk);
+	}
+
+	fprintf(stderr, "\nrig: %s, %s UDP %u, %s\n", p->name, p->host, p->port,
+		p->tx_dummy ? "TX via the dummy load" : "receive only");
+}
+
+// The session for the rig in use, when due: the codec may still be wfserver's for a
+// few seconds (tried again once a second), else back to LOCAL with a note
+static bool rig_open_poll(x6100_ctl_t *ctl, rx_t *rx, uint64_t t)
+{
+	int rc;
+
+	if (g_rig_cur == RIG_LOCAL || g_remote != NULL || g_remote_try_at == 0 || t < g_remote_try_at)
+		return false;
+
+	if ((rc = x6100_remote_open(&g_remote, &g_remote_cfg)) == 0) {
+		g_remote_try_at = 0;
+		fprintf(stderr, "\nremote: %s UDP %u, %s\n", g_remote_cfg.host, g_remote_cfg.port,
+			g_remote_cfg.tx_dummy ? "TX via the dummy load" : "receive only");
+		return true;
+	}
+
+	if (rc == -EBUSY && --g_remote_tries > 0) {
+		if (g_remote_tries == RIG_OPEN_TRIES - 1)
+			fprintf(stderr, "\nremote: codec busy (wfserver?), waiting up to %d s\n", RIG_OPEN_TRIES);
+
+		g_remote_try_at = t + 1000;
+		return false;
+	}
+
+	fprintf(stderr, "\nremote: %s UDP %u: %s\n", g_remote_cfg.host, g_remote_cfg.port, strerror(-rc));
+	rig_leave(ctl, rx);
+	rx->warn = rc == -EBUSY ? "REMOTE: CODEC BUSY" : "REMOTE: NO SESSION";
+	return true;
+}
+
+// The switch asked by name (g_rig_ask), when x6100_trx may: not while keyed, tuning or
+// sending. Unknown name: a note, nothing else
+static bool rig_switch_poll(x6100_ctl_t *ctl, rx_t *rx)
+{
+	int to;
+
+	if (g_rig_ask[0] == '\0' || g_conf_loading)
+		return false;
+
+	if (rx->ptt || rx->tuning || rx->send != SEND_NONE || g_txd_keyed) {
+		toast("RIG: NOT WHILE TRANSMITTING");
+		g_rig_ask[0] = '\0';
+		return true;
+	}
+
+	to = rig_find(g_rig_ask);
+	g_rig_ask[0] = '\0';
+
+	if (to == RIG_NONE) {
+		toast("RIG: NOT IN REMOTE.CONF");
+		return true;
+	}
+
+	if (to != RIG_LOCAL && g_rigs[to].err[0] != '\0') {
+		toast("RIG: SEE REMOTE.CONF");
+		return true;
+	}
+
+	if (to == g_rig_cur)
+		return false;
+
+	rig_leave(ctl, rx);
+
+	if (to != RIG_LOCAL)
+		rig_enter(rx, to);
+
+	if (to != RIG_CLI) {
+		snprintf(g_rig_state, sizeof(g_rig_state), "%s", to == RIG_LOCAL ? "local" : g_rigs[to].name);
+		g_gen_save_at = now_ms() + GEN_SAVE_MS;	/* into the state soon */
+	}
+
+	toast(to == RIG_LOCAL ? "RIG: LOCAL" : "RIG: REMOTE");
+	return true;
+}
+
+// Console `rig` without a name: the list
+static void rig_list(void)
+{
+	fprintf(stderr, "\nrigs (%s):%s LOCAL\n", RIG_CONF, g_rig_cur == RIG_LOCAL ? " *" : "  ");
+
+	for (int i = 0; i <= RIG_MAX; i++) {
+		const rig_prof_t *p = &g_rigs[i];
+
+		if ((i >= g_nrigs && i != RIG_CLI) || (i == RIG_CLI && p->host[0] == '\0'))
+			continue;
+
+		if (p->err[0] != '\0')
+			fprintf(stderr, "    %s  -- %s\n", p->name, p->err);
+		else
+			fprintf(stderr, " %s %s  %s:%u %s%s\n", i == g_rig_cur ? "*" : " ", p->name, p->host, p->port,
+				p->tx_dummy ? "TRX" : "RX", i == RIG_CLI ? " (command line)" : "");
+	}
+}
+
+//
+// RIG panel lines: 0 LOCAL, 1..g_nrigs the rigs of RIG_CONF, then CMDLINE when given
+//
+
+static int rig_lines(void)
+{
+	return 1 + g_nrigs + (g_rigs[RIG_CLI].host[0] != '\0' ? 1 : 0);
+}
+
+static int rig_of_line(int line)
+{
+	return line == 0 ? RIG_LOCAL : line <= g_nrigs ? line - 1 : RIG_CLI;
+}
+
+static int rig_line_of(int rig)
+{
+	return rig == RIG_LOCAL ? 0 : rig == RIG_CLI ? g_nrigs + 1 : rig + 1;
+}
+
+// GEN held RIG_PRESS_MS: the panel, on the rig in use
+static void rig_panel_open(rx_t *rx)
+{
+	rx->ginfo = false;
+	rx->gedit = false;
+	rx->rigedit = true;
+	rx->rigedit_par = rig_line_of(g_rig_cur);
+	rx->rigedit_since = now_ms();
 }
 #else
 #define REMOTE_ON	false
@@ -4042,6 +4540,29 @@ static bool on_key(rx_t *rx, int key)
 			return true;
 	}
 
+#ifdef X6100_REMOTE
+	//
+	// RIG panel open: MFK push switches to the line chosen (done in the loop; the panel
+	// stays open and shows the link); GEN closes it, any other key closes it and does
+	// its normal job
+	//
+	if (rx->rigedit) {
+		rx->rigedit_since = now_ms();
+
+		if (key == X6100_KEY_MFK_PUSH) {
+			int r = rig_of_line(rx->rigedit_par);
+
+			snprintf(g_rig_ask, sizeof(g_rig_ask), "%s", r == RIG_LOCAL ? "local" : g_rigs[r].name);
+			return true;
+		}
+
+		rx->rigedit = false;
+
+		if (key == X6100_KEY_GEN)
+			return true;
+	}
+#endif
+
 	//
 	// Filter panel open: F5 cycles FIL1-3, MFK turn picks BW / SFT / PBT (AM no SFT, FM
 	// BW only: row_valid), push edits it (row_push); any other key closes the panel
@@ -4258,6 +4779,11 @@ static bool on_long_key(rx_t *rx, int key)
 {
 	if (bscan_running()) {
 		g_bscan_req = -1;	/* any key stops a birdie scan */
+		return true;
+	}
+
+	if (rx->rigedit) {	/* RIG panel open: a long press only closes it */
+		rx->rigedit = false;
 		return true;
 	}
 
@@ -4616,6 +5142,17 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 		g_vol_fn_ms = now_ms();
 		return true;
 	case IN_MFK:
+#ifdef X6100_REMOTE
+		// RIG panel: MFK chooses the line (round)
+		if (rx->rigedit) {
+			const int n = rig_lines();
+
+			rx->rigedit_par = (rx->rigedit_par + (value * X6100_DIR_MFK > 0 ? 1 : -1) + n) % n;
+			rx->rigedit_since = now_ms();
+			return true;
+		}
+#endif
+
 		// A panel with rows, not editing: MFK selects the row (row_push starts the edit)
 		{
 			int n;
@@ -7274,6 +7811,69 @@ static void draw_gen_info(x6100_lcd_t *lcd, const screen_t *scr)
 	}
 }
 
+#ifdef X6100_REMOTE
+//
+// RIG panel (GEN held RIG_PRESS_MS, 2026-11-14): LOCAL and the rigs of remote.conf, each
+// with RX or TRX and, for the one in use, its link. No host, user or password on the
+// screen (a screenshot shows nothing of them); console `rig` lists the hosts
+//
+
+static void draw_rig_panel(x6100_lcd_t *lcd, const rx_t *rx)
+{
+	const int n = rig_lines(), vis = n < 6 ? n : 6, top = clampi(rx->rigedit_par - 2, 0, n - vis);
+	const int px = LBL_W + 8, py = SPEC_Y + 14, pw = 560, ph = 30 + vis * 21;
+	const uint32_t sel = 0x2E2348, dim = 0x8A82A0, white = 0xF0F0F0, violet = 0xB080FF, green = 0x3CC83C,
+		amber = 0xFFB020, red = 0xFF5050;
+
+	gen_frame(lcd, px, py, pw, ph, "RIG", g_nrigs == 0 ? "NO /ETC/X6100/REMOTE.CONF (OR NOT MODE 600)"
+		: "MFK: CHOOSE  PUSH: SWITCH  GEN: CLOSE");
+
+	for (int i = top; i < top + vis; i++) {
+		const int y = py + 30 + (i - top) * 21, r = rig_of_line(i);
+		const rig_prof_t *p = r == RIG_LOCAL ? NULL : &g_rigs[r];
+		const char *kind, *st = "";
+		uint32_t stc = dim;
+
+		if (i == rx->rigedit_par)
+			x6100_lcd_fill(lcd, px + 6, y - 3, pw - 12, 19, sel);
+
+		x6100_lcd_text(lcd, px + 14, y, 2, rig_name(r), p != NULL && p->err[0] != '\0' ? dim
+			: i == rx->rigedit_par ? white : dim);
+
+		if (p == NULL)
+			kind = "THE X6100 ITSELF";
+		else if (p->err[0] != '\0')
+			kind = p->err;
+		else
+			kind = p->tx_dummy ? "TRX VIA DUMMY LOAD" : "RX";	/* the font has no brackets */
+
+		x6100_lcd_text(lcd, px + 196, y + 4, 1, kind, p != NULL && p->err[0] != '\0' ? red : dim);
+
+		if (r == g_rig_cur) {
+			if (r == RIG_LOCAL) {
+				st = "IN USE";
+				stc = green;
+			} else if (g_remote_up) {
+				st = "LINK UP";
+				stc = green;
+			} else {
+				st = g_remote == NULL ? "OPENING" : "CONNECTING";
+				stc = amber;
+			}
+		}
+
+		x6100_lcd_text(lcd, px + pw - 12 - x6100_lcd_text_width(st, 2), y, 2, st, stc);
+	}
+
+	{
+		char pos[24];
+
+		snprintf(pos, sizeof(pos), "%d/%d", rx->rigedit_par + 1, n);
+		x6100_lcd_text(lcd, px + pw - 12 - x6100_lcd_text_width(pos, 1), py + 11, 1, pos, violet);
+	}
+}
+#endif
+
 //
 // Keyer panel (KEY long): five of the keyer values around the selected one.
 // Orange. MFK turn: adjust; push: next value; hold: default; KEY long, another key
@@ -8741,7 +9341,7 @@ static void shot_take(const x6100_lcd_t *lcd)
 static bool panel_open(const rx_t *rx)
 {
 	return rx->fedit || rx->dedit || rx->tedit || rx->eedit || rx->medit || rx->kedit || rx->xedit || rx->sedit
-		|| rx->msedit || rx->apedit || rx->gedit || rx->ginfo || rx->redit;
+		|| rx->msedit || rx->apedit || rx->gedit || rx->ginfo || rx->redit || rx->rigedit;
 }
 
 //
@@ -9772,6 +10372,11 @@ overlays:
 	if (rx->ginfo)
 		draw_gen_info(lcd, scr);
 
+#ifdef X6100_REMOTE
+	if (rx->rigedit)
+		draw_rig_panel(lcd, rx);
+#endif
+
 	if (!portrait && (rx->tuning || (rx->tune_done && now_ms() - rx->tune_done < TUNE_SHOW_MS)))	/* portrait: TUNE in the bar */
 		draw_tune_panel(lcd, rx, scr);
 
@@ -10231,8 +10836,31 @@ static bool console_line(rx_t *rx, char *line)
 	int lvl_min = 0, lvl_max = 0;
 	int want_band = -1;	/* band <name> <Hz>: -2 = name next, >= 0 = that band's Hz next */
 	bool want_span = false;
+#ifdef X6100_REMOTE
+	bool want_rig = false;	/* rig <name>: the name next; rig alone: the list */
+#endif
 
 	for (char *t = strtok(line, " \t\r\n"); t != NULL; t = strtok(NULL, " \t\r\n")) {
+#ifdef X6100_REMOTE
+		// rig <name>: switch to LOCAL or a rig of remote.conf (done in the loop, when not
+		// keyed); from the state at the start: the rig as left
+		if (want_rig) {
+			want_rig = false;
+			snprintf(g_rig_ask, sizeof(g_rig_ask), "%s", t);
+
+			if (g_conf_loading)
+				snprintf(g_rig_state, sizeof(g_rig_state), "%s", t);
+
+			changed = true;
+			continue;
+		}
+
+		if (strcasecmp(t, "rig") == 0) {
+			want_rig = true;
+			continue;
+		}
+#endif
+
 		if (want_step) {
 			int st = atoi(t);
 
@@ -11288,6 +11916,11 @@ static bool console_line(rx_t *rx, char *line)
 			fprintf(stderr, "\nunknown: %s\n", t);
 	}
 
+#ifdef X6100_REMOTE
+	if (want_rig && !g_conf_loading)
+		rig_list();	/* rig alone: the list */
+#endif
+
 	return changed;
 }
 
@@ -11340,6 +11973,10 @@ static void state_write(const rx_t *rx)
 		[SCOPE_FIX] = "fix", [SCOPE_FIX_S] = "scrollf" };
 	char tmp[] = STATE_PATH ".tmp";
 	FILE *fp;
+
+#ifdef X6100_REMOTE
+	rx = state_view(rx);	/* while remote: LOCAL's frequencies and modes, not the rig's */
+#endif
 
 	if ((fp = fopen(tmp, "w")) == NULL) {
 		fprintf(stderr, "\nstate: cannot write %s: %s\n", tmp, strerror(errno));
@@ -11410,6 +12047,9 @@ static void state_write(const rx_t *rx)
 	fprintf(fp, "layout %s ", g_layout_portrait ? "portrait" : "landscape");
 	fprintf(fp, "vfofast %s ", g_vfo_fast ? "on" : "off");
 	fprintf(fp, "%s ", g_allow_oob ? "oob" : "nooob");	/* the band check as last set (2026-11-07); a conf line wins */
+#ifdef X6100_REMOTE
+	fprintf(fp, "rig %s ", g_rig_state);	/* LOCAL or a rig of remote.conf: the next start comes up as left */
+#endif
 	fprintf(fp, "cattime %s ", g_cat_time == CT_OFF ? "off" : g_cat_time == CT_ON ? "on" : "unsynced");
 	fprintf(fp, "modin %s %s ", g_modin_word[g_modin[0]], g_modin_word[g_modin[1]]);
 	fprintf(fp, "ntp %s", strcmp(g_ntp_server, "off") == 0 ? "off" : "on");
@@ -13107,25 +13747,41 @@ int main(int argc, char **argv)
 		}
 
 #ifdef X6100_REMOTE
+		// --remote <name>: a rig of RIG_CONF (or local); --remote <host> <udp port> <user>
+		// <password>: a rig of its own (CMDLINE, not saved). Either wins over the state
 		if (strcmp(argv[i], "--remote") == 0) {
 			int port = i + 4 < argc ? atoi(argv[i + 2]) : 0;
 
-			if (port <= 0 || port > 65535) {
-				fprintf(stderr, "--remote <host> <udp port> <user> <password>\n");
+			if (i + 1 >= argc || argv[i + 1][0] == '-') {
+				fprintf(stderr, "--remote <name> or --remote <host> <udp port> <user> <password>\n");
 				return 1;
 			}
 
-			g_remote_req = true;
-			g_remote_cfg.host = argv[i + 1];
-			g_remote_cfg.port = (uint16_t) port;
-			g_remote_cfg.user = argv[i + 3];
-			g_remote_cfg.pass = argv[i + 4];
-			i += 4;
+			if (port > 0 && port <= 65535) {
+				rig_prof_t *p = &g_rigs[RIG_CLI];
+
+				memset(p, 0, sizeof(*p));
+				p->txdgain = -1;
+				snprintf(p->name, sizeof(p->name), "CMDLINE");
+
+				if (!rig_copy(p->host, sizeof(p->host), argv[i + 1]) || !rig_copy(p->user, sizeof(p->user), argv[i + 3])
+					|| !rig_copy(p->pass, sizeof(p->pass), argv[i + 4])) {
+					fprintf(stderr, "--remote: host, user or password too long\n");
+					return 1;
+				}
+
+				p->port = (uint16_t) port;
+				snprintf(g_rig_ask, sizeof(g_rig_ask), "%s", p->name);
+				i += 4;
+			} else {
+				snprintf(g_rig_ask, sizeof(g_rig_ask), "%s", argv[++i]);
+			}
+
 			continue;
 		}
 
 		if (strcmp(argv[i], "--remote-tx-dummy") == 0) {
-			g_remote_cfg.tx_dummy = true;
+			g_rig_cli_txd = true;
 			continue;
 		}
 
@@ -13293,47 +13949,18 @@ int main(int argc, char **argv)
 
 #ifdef X6100_REMOTE
 	//
-	// Remote head: the head state is on the baseband (first apply above), now the
-	// session; it connects in its own thread, the UI starts right away
+	// Remote head: the rigs of RIG_CONF; which one comes from the state (`rig <name>`,
+	// as left) or the command line (--remote). The session opens in the loop
+	// (rig_switch_poll, rig_open_poll): the UI starts right away, also while the codec
+	// is still wfserver's
 	//
-	if (g_remote_req) {
-		apply_flags(&ctl, &rx);
-		x6100_ctl_sync(&ctl);
+	rig_conf_load();
 
-		// wfserver off while we are remote (2026-11-14): the marker with our PID tells the
-		// wfserver watcher (x6100_ui.sh) to stop it and to start it again once we are gone.
-		// It may still hold the codec for a few seconds: the playback open waits up to
-		// REMOTE_CODEC_WAIT_S for it
-		FILE *mk = fopen(REMOTE_MARK, "w");
+	if (g_rig_cli_txd) {
+		int i = rig_find(g_rig_ask);
 
-		if (mk != NULL) {
-			fprintf(mk, "%ld\n", (long) getpid());
-			fclose(mk);
-		}
-
-		for (int w = 0;; w++) {
-			rc = x6100_remote_open(&g_remote, &g_remote_cfg);
-
-			if (rc != -EBUSY || w >= REMOTE_CODEC_WAIT_S)
-				break;
-
-			if (w == 0)
-				fprintf(stderr, "remote: codec busy (wfserver?), waiting up to %d s\n", REMOTE_CODEC_WAIT_S);
-
-			sleep(1);
-		}
-
-		if (rc < 0) {
-			fprintf(stderr, "remote: %s UDP %u: %s\n", g_remote_cfg.host, g_remote_cfg.port, strerror(-rc));
-			x6100_ctl_set(&ctl, X6100_REG_FLAGS, 0);
-			x6100_ctl_sync(&ctl);
-			unlink(REMOTE_MARK);
-			return 1;
-		}
-
-		fprintf(stderr, "remote: %s UDP %u, %s\n", g_remote_cfg.host, g_remote_cfg.port,
-			g_remote_cfg.tx_dummy ? "TX via the dummy load" : "receive only");
-		rx.warn = g_remote_note;	/* stands while remote (see the note expiry in the loop) */
+		if (i >= 0)
+			g_rigs[i].tx_dummy = true;	/* --remote-tx-dummy: for the rig asked for */
 	}
 #endif
 
@@ -13607,6 +14234,17 @@ int main(int argc, char **argv)
 			changed |= on_long_key(&rx, hold.key);
 		}
 
+#ifdef X6100_REMOTE
+		// GEN held on (2026-11-14): the status page of the long press gives way to the
+		// RIG panel at RIG_PRESS_MS. Only when this press opened the status page, so a
+		// long press that closed a panel does not open this one
+		if (hold.key == X6100_KEY_GEN && hold.fired && rx.ginfo && !rx.rigedit
+			&& now_ms() - hold.since >= RIG_PRESS_MS) {
+			rig_panel_open(&rx);
+			changed = true;
+		}
+#endif
+
 		if (changed) {
 			//
 			// Mode group changed: recall its AGC; otherwise remember the current one
@@ -13660,8 +14298,9 @@ int main(int argc, char **argv)
 		}
 
 		// GEN panel after 10 s, status page after 30 s
-		if ((rx.gedit && t - rx.gedit_since >= 10000) || (rx.ginfo && t - rx.ginfo_since >= 30000)) {
-			rx.gedit = rx.ginfo = false;
+		if ((rx.gedit && t - rx.gedit_since >= 10000) || (rx.ginfo && t - rx.ginfo_since >= 30000)
+			|| (rx.rigedit && t - rx.rigedit_since >= 30000)) {
+			rx.gedit = rx.ginfo = rx.rigedit = false;
 			dirty = true;
 		}
 
@@ -13908,6 +14547,13 @@ int main(int argc, char **argv)
 
 #ifdef X6100_REMOTE
 		//
+		// Rig switch (console `rig`, the RIG panel, the state or --remote at the start),
+		// then the session of the rig in use when it is due
+		//
+		changed |= rig_switch_poll(&ctl, &rx);
+		changed |= rig_open_poll(&ctl, &rx, t);
+
+		//
 		// Remote head: what the rig changed itself (its own knob, another client) is
 		// taken over; our own changes go out with apply below
 		//
@@ -13961,12 +14607,11 @@ int main(int argc, char **argv)
 			}
 
 			// Status line: only on a change, so other warnings are not overwritten
-			static int remote_shown = -1;	/* 0 link down, 1 up, 2 rig keyed, 3 up but no rig file yet */
 			// The rig keyed by us (--remote-tx-dummy) stays 1, REMOTE TRX: the TX LED says it
 			// (2026-11-14); REMOTE TX only when another client keys the rig
 			int remote_now = !rs.connected ? 0 : rs.rig_tx && !g_txd_keyed ? 2 : !rs.rig_ready ? 3 : 1;
 
-			if (remote_now != remote_shown) {
+			if (remote_now != g_remote_shown) {
 				// 3: the rig has not answered its ID yet (2026-11-12: up to some 90 s when
 				// started again soon after the last session; it heals by itself)
 				// With --remote-tx-dummy the standing note says this head transmits too: REMOTE TRX
@@ -13976,7 +14621,7 @@ int main(int argc, char **argv)
 
 				rx.warn = g_remote_note = m;
 
-				remote_shown = remote_now;
+				g_remote_shown = remote_now;
 				changed = true;
 			}
 
@@ -14018,12 +14663,11 @@ int main(int argc, char **argv)
 				if (g_txd_keyed)
 					x6100_remote_ptt_alive(g_remote);
 
-				// Console txdgain / txdboost, live (txdmoni goes with apply)
-				static int gain_set = -1;
-
-				if (g_txd_gain != gain_set) {
+				// Console txdgain / txdboost, live (txdmoni goes with apply); a new
+				// session gets it again (g_txd_gain_set -1 at the switch)
+				if (g_txd_gain != g_txd_gain_set) {
 					x6100_remote_tx_gain(g_remote, g_txd_gain);
-					gain_set = g_txd_gain;
+					g_txd_gain_set = g_txd_gain;
 				}
 
 				if (apcm_open) {

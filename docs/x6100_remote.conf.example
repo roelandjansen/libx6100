@@ -1,0 +1,30 @@
+# /etc/x6100/remote.conf - the remote Icoms x6100_trx can be a control head for
+#
+# Mode 600 (it holds passwords in plain text): chmod 600 /etc/x6100/remote.conf.
+# Readable by others and x6100_trx leaves the whole file unused (with a warning).
+# Never put your own copy in a repository; build.sh backup keeps it in
+# ~/.config/x6100 at mode 600, x6100_giveaway.sh removes it.
+#
+# One rig a line, at most 16:
+#   <name> <host> <udp port> <user> <password> [txdummy] [txdgain=N]
+#
+#   name       shown on the RIG panel and used by `rig <name>` / `--remote <name>`;
+#              no spaces, at most 23 characters, not LOCAL (the X6100 itself)
+#   host       name or IP address of the rig (its LAN port, or wfserver)
+#   udp port   the control port, 50001 on an Icom
+#   user       a user of the rig's network settings (or of wfserver)
+#   password   its password, no spaces
+#   txdummy    transmit too: the X6100 keys itself at 0.1 W into a DUMMY LOAD on its
+#              antenna port, its mic goes to the rig as LAN audio (set the rig's
+#              DATA OFF MOD to LAN). Without it: receive only
+#   txdgain=N  the TX audio level to this rig in %, 0-400 (default 3: an IC-7851 with
+#              its LAN input at 50 %)
+#
+# Switch on the radio: hold GEN (status page at 0.6 s, the RIG panel at 1.5 s), MFK
+# turn chooses, push switches. Console: `rig` lists, `rig <name>` / `rig local`
+# switches. x6100_trx starts on the rig (or LOCAL) it was left on.
+#
+# Placeholders below: replace them, or start from an empty file.
+
+#IC7851   rig.example.org   50001   operator   secret   txdummy txdgain=3
+#IC705    192.168.1.50      50001   operator   secret

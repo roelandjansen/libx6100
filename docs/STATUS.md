@@ -604,6 +604,41 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     the hand mic PTT cannot key (m: not reported); a real antenna instead of the dummy radiates 0.1 W on
     the rig's frequency (with oob anywhere); the audio level path is fixed (TXD_MONI).
 
+50. Remote rigs and switching (2026-11-14, after v0.17.16; not on the radio yet):
+    `/etc/x6100/remote.conf` (mode 600, else unused with a warning) lists up to 16 rigs:
+    `<name> <host> <udp port> <user> <password> [txdummy] [txdgain=N]`
+    (docs/x6100_remote.conf.example). LOCAL and the rigs are switched at run time,
+    without a restart: the RIG panel (GEN held 1.5 s; the status page at 0.6 s gives way
+    to it) or console `rig <name>` / `rig local` (`rig` lists). The choice is in the
+    state (`rig <name>`): the next start comes up as left; `--remote <name>` picks one
+    at the start, `--remote <host> <port> <user> <password>` is a rig of its own
+    (CMDLINE, not saved). LOCAL and each rig keep their own place (frequencies, modes,
+    band memories, VFO B, AGC, ATT, PRE, RF gain, NR / NB, split, RIT / XIT, memory
+    mode; the rigs' only while x6100_trx runs); the state file only ever holds
+    LOCAL's. Settings (volume, keyer, mic, panels) are shared. The session opens in the
+    loop: the codec busy (wfserver ending) is tried again once a second for 10 s, then
+    LOCAL with REMOTE: CODEC BUSY. Not while transmitting. The panel shows no hosts.
+    build.sh backup / restore / deploy carry remote.conf at mode 600 (no example
+    installed); x6100_giveaway.sh removes it. Checked here: the parser (options, bad
+    port, names), the switch LOCAL -> rig -> LOCAL -> rig (places, state view, marker,
+    refused while keyed, unknown name), the panel rendered. Test plan:
+    a. remote.conf with the 7851 (txdummy) and a second, made-up rig; chmod 644: the
+       warning and LOCAL only; chmod 600: `rig` lists both.
+    b. Start without --remote, state says local: LOCAL. GEN held: status page at 0.6 s,
+       RIG panel at 1.5 s; GEN short and long otherwise as before.
+    c. Panel: MFK to the 7851, push: REMOTE LINK, then REMOTE TRX; the panel shows
+       CONNECTING, then LINK UP; wfserver goes (x6100_ui.sh status).
+    d. Tune the 7851 elsewhere, switch to LOCAL: the X6100 back on its own band and
+       frequency, local audio and scope, wfserver back; switch to the 7851 again: its
+       frequency as left.
+    e. Quit while on the 7851 and start again: comes up on the 7851; the state file
+       holds LOCAL's frequency (grep band /etc/x6100/x6100_trx.state).
+    f. Switch while keyed: refused (RIG: NOT WHILE TRANSMITTING).
+    g. The made-up rig: REMOTE LINK, no session; what shows and how to get back (panel).
+    h. --remote IC7851 and --remote local override the state; the long form shows as
+       CMDLINE and is not saved.
+    i. x6100_giveaway.sh -n lists remote.conf; build.sh backup saves it at mode 600.
+
 ## Next steps (suggested order)
 
 1. Radio checks above; the 2026-10-27 evening checklist (scope panel, fixed edges, wfview

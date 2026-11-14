@@ -4,7 +4,8 @@
 #
 # Removes what is personal or belongs to this one radio: the x6100_trx settings, state,
 # birdie list (scanned on this radio), memories, messages and voice recordings, the
-# wfserver login, the saved WiFi networks (passwords), the Bluetooth pairings, the ssh
+# wfserver login, the remote rigs (remote.conf: hosts and passwords), the saved WiFi
+# networks (passwords), the Bluetooth pairings, the ssh
 # key that lets you in and the hosts you reached, the shell history. Optional: the ssh host keys (-k) and the
 # start logs on /mnt/app_logs (-l). x6100_trx starts with its defaults when its files
 # are missing. Kept: x6100_trx itself, x6100_ui.sh, the boot choice (boot.trx), the
@@ -27,7 +28,7 @@
 set -eu
 
 readonly C_X6100="/etc/x6100"
-readonly C_FILES="x6100_trx.state x6100_trx.conf birdies.conf memories.conf messages.conf wfserver.ini bb_hangs.log"
+readonly C_FILES="x6100_trx.state x6100_trx.conf birdies.conf memories.conf messages.conf wfserver.ini bb_hangs.log remote.conf"
 readonly C_SYSTEM="/etc/NetworkManager/system-connections/* /var/lib/bluetooth/* /root/.ssh/authorized_keys /root/.ssh/known_hosts /root/.ash_history /root/.bash_history"
 readonly C_HOSTKEYS="/etc/ssh/ssh_host_* /etc/dropbear/dropbear_*_host_key"
 readonly C_LOGS="/mnt/app_logs/*"

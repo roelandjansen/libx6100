@@ -440,6 +440,27 @@ settings_seed() {
 			printf 'installed %s from the example\n' "${L_FILE}"
 		fi
 	done
+
+	remote_conf_restore seed	# no example installed: it would list rigs that are not there
+}
+
+#
+# The remote rigs (remote.conf) from the local copy to the radio, mode 600 there (else
+# x6100_trx leaves the file unused); with "seed" only when the radio has none
+#
+
+remote_conf_restore() {
+	if [[ ! -f "${G_CONFIG}/${C_REMOTE_CONF}" ]]; then
+		return 0
+	fi
+
+	if [[ "${1:-}" == seed ]] && ssh -- "${G_HOST}" "test -f ${C_RADIO_SETTINGS}/${C_REMOTE_CONF}"; then
+		return 0
+	fi
+
+	scp -q -- "${G_CONFIG}/${C_REMOTE_CONF}" "${G_HOST}:${C_RADIO_SETTINGS}/${C_REMOTE_CONF}"
+	ssh -- "${G_HOST}" "chmod 600 ${C_RADIO_SETTINGS}/${C_REMOTE_CONF}"
+	printf 'restored %s (mode 600)\n' "${C_REMOTE_CONF}"
 }
 
 settings_backup() {
@@ -460,6 +481,14 @@ settings_backup() {
 		printf 'saved WiFi profiles in %s\n' "${G_CONFIG}/${C_NM_DIR##*/}"
 	else
 		printf '%s\n' 'no WiFi profiles on the radio'
+	fi
+
+	# Remote rigs (passwords in plain text): kept 0600 here, as on the radio
+	if scp -q -p -- "${G_HOST}:${C_RADIO_SETTINGS}/${C_REMOTE_CONF}" "${G_CONFIG}/${C_REMOTE_CONF}" 2> /dev/null; then
+		chmod 600 -- "${G_CONFIG}/${C_REMOTE_CONF}"
+		printf 'saved %s (mode 600)\n' "${G_CONFIG}/${C_REMOTE_CONF}"
+	else
+		printf 'no %s on the radio\n' "${C_REMOTE_CONF}"
 	fi
 
 	# Voice messages (MSG): the WAV files
@@ -490,6 +519,8 @@ settings_restore() {
 		ssh -- "${G_HOST}" "chmod 600 ${C_NM_DIR}/*.nmconnection && /etc/init.d/S45network-manager restart"
 		printf '%s\n' 'restored WiFi profiles, NetworkManager restarted'
 	fi
+
+	remote_conf_restore
 
 	# Voice messages (MSG)
 	if compgen -G "${G_CONFIG}/voice/*.wav" > /dev/null; then
@@ -527,6 +558,7 @@ readonly C_STAMP="${C_OUT}/.fingerprint"
 readonly C_DEPLOY=("${C_OUT}/x6100_trx" scripts/x6100_ui.sh docs/x6100_trx_quickref.md)
 readonly C_RADIO_SETTINGS="/etc/x6100"
 readonly C_SETTINGS=(x6100_trx.conf x6100_trx.state filters.conf memories.conf birdies.conf messages.conf wfserver.ini)
+readonly C_REMOTE_CONF="remote.conf"	# remote rigs with passwords: copied apart, mode 600 (remote_conf_restore)
 readonly C_NM_DIR="/etc/NetworkManager/system-connections"
 readonly C_WFS_DIR="/opt/wfserver"
 

@@ -391,6 +391,11 @@ Open from the receive side (handover 2026-11-12):
   does not poll it). PRE, ATT, RF gain, NR, NB work from the head (2026-11-12); from the
   7851 they now come back (to check).
 - On connect the X6100's saved state overwrites the 7851's: take the 7851's instead.
+  Since the rig switch (STATUS 50) only on the first visit to a rig after the start:
+  then LOCAL's frequency and mode go to the rig; later visits bring the rig's own back.
+- The rigs' places (frequency, mode and so on) are kept only while x6100_trx runs: not
+  in the state yet (one line per rig would do).
+- remote.conf passwords in plain text (mode 600): an encrypted form later.
 - A send dropped from a full session queue is not tried again.
 - Started again within about 90 s of the last session, the 7851 does not answer its
   CI-V ID until then (no rig file, no scope; REMOTE: WAIT FOR RIG shows). To find out:
