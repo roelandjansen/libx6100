@@ -692,6 +692,9 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     the rig file is there) until a row of +- 50 kHz comes, at most 5 times 3 s apart,
     then left alone: a span or menu chosen on the rig stays (the rows are placed by
     their own edges, any span shows right).
+    Verified on the 7851 (2026-11-14): the menu showed MIC turn into LAN on connecting
+    and MIC again on exit (a, b). The 7851's screen still gets taken (focus changes)
+    after the span fix: something else the head sends; open.
 
 53. `build.sh dist` (2026-11-14): out/x6100_trx-<rev>.tar.gz for freshly flashed
     OpenX6X00 images: payload/ with the files at their places on the radio
