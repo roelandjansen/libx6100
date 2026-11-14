@@ -1740,6 +1740,7 @@ static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 
 		x6100_set_txpwr(ctl, 0.1f);	/* the floor (x6100_set_txpwr clamps 0 to 0.1 W too) */
 		x6100_atu_set_network(ctl, &none);
+
 		// Keyed into the dummy (--remote-tx-dummy): the speaker muted, so the monitor does not
 		// play there and feed back into the mic (2026-11-14). The codec capture, which carries
 		// the monitor to the rig, sits before the RX volume (as found with the squelch)
