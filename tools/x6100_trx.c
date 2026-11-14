@@ -10779,11 +10779,15 @@ static void help_options(FILE *fp, const char *argv0)
 		"  --oob             band check off (you are responsible for where you transmit)\n"
 		"  --no-limit        tune 10 kHz - 100 MHz (baseband probe)\n"
 #ifdef X6100_REMOTE
+		"  --remote <name>   start on that rig of /etc/x6100/remote.conf (mode 600), or local;\n"
+		"                    without it x6100_trx comes up as left. While running: hold GEN 1.5 s\n"
+		"                    (RIG panel) or console rig <name> / rig local / rig\n"
 		"  --remote <host> <udp port> <user> <password>\n"
-		"                    control head for a remote Icom (wfserver or its LAN port), receive only\n"
+		"                    control head for a remote Icom (its LAN port or wfserver), a rig of\n"
+		"                    its own for a test (CMDLINE, not saved); receive only unless:\n"
+		"  --remote-tx-dummy with --remote: TX on the rig with the X6100 mic (txdummy in remote.conf).\n"
+		"                    The X6100 keys itself at 0.1 W: A DUMMY LOAD ON ITS ANTENNA PORT\n"
 		"  --rigs <dir>      wfview .rig files for --remote (default /opt/wfserver/share/wfview/rigs)\n"
-		"  --remote-tx-dummy with --remote: TX on the rig with the X6100 mic. The X6100 keys itself\n"
-		"                    at 0.1 W: A DUMMY LOAD ON ITS ANTENNA PORT; its monitor is the TX audio\n"
 #endif
 		"  --cat[=baud|pty]  CI-V on the DEV port (4800-19200), or the pty only\n"
 		"  --cat-log         print CI-V commands and refusals\n"
@@ -10791,7 +10795,8 @@ static void help_options(FILE *fp, const char *argv0)
 		"  --bbreset         reset the baseband first (when it does not answer on I2C)\n"
 		"  --help, -h, ?     this text\n\n"
 		"freq 7074000 | 7.074 | 7074k   mode usb lsb cw cwr am nfm   agc off slow fast auto\n"
-		"While running: type help on the console for its commands.\n", argv0);
+		"While running: type help on the console for its commands.\n"
+		"GUI off / on, x6100_trx at boot: /root/x6100_ui.sh stop | start | boot trx | boot gui\n", argv0);
 }
 
 static void help_console(void)
