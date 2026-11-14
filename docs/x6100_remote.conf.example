@@ -1,9 +1,13 @@
 # /etc/x6100/remote.conf - the remote Icoms x6100_trx can be a control head for
 #
-# Mode 600 (it holds passwords in plain text): chmod 600 /etc/x6100/remote.conf.
-# Readable by others and x6100_trx leaves the whole file unused (with a warning).
+# Mode 600 and root's (it holds passwords in plain text): chmod 600 /etc/x6100/remote.conf.
+# Otherwise x6100_trx goes remote to none of them: at the start the file is left unused
+# (with a warning), and every switch to a rig checks it again.
 # Never put your own copy in a repository; build.sh backup keeps it in
 # ~/.config/x6100 at mode 600, x6100_giveaway.sh removes it.
+#
+# '#' starts a comment at the start of a line or after a space or tab (so a whole
+# line, or the rest of one); a '#' inside a field, e.g. a password, is part of it.
 #
 # One rig a line, at most 16:
 #   <name> <host> <udp port> <user> <password> [txdummy] [txdgain=N]

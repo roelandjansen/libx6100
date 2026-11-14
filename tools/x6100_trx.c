@@ -1543,20 +1543,38 @@ static void rig_parse(rig_prof_t *p, char *line)
 		p->port = (uint16_t) port;
 }
 
+// RIG_CONF as found: none, fine, or not mode 600 / not ours (no group or other bits,
+// owned by the user x6100_trx runs as, root). Checked at the start and at every switch
+// to a rig, so a chmod or a new file after the start is caught too
+enum { RIG_CONF_NONE, RIG_CONF_OK, RIG_CONF_MODE };
+
+static int g_rig_conf = RIG_CONF_NONE;
+
+static int rig_conf_check(void)
+{
+	struct stat st;
+
+	if (stat(RIG_CONF, &st) != 0)
+		return RIG_CONF_NONE;
+
+	return (st.st_mode & 077) != 0 || st.st_uid != getuid() ? RIG_CONF_MODE : RIG_CONF_OK;
+}
+
 // RIG_CONF into g_rigs, at the start (a missing file: LOCAL only)
 static void rig_conf_load(void)
 {
-	struct stat st;
 	char line[512];
 	FILE *fp;
 
 	g_nrigs = 0;
+	g_rig_conf = rig_conf_check();
 
-	if (stat(RIG_CONF, &st) != 0)
+	if (g_rig_conf == RIG_CONF_NONE)
 		return;
 
-	if ((st.st_mode & 077) != 0) {
-		fprintf(stderr, "warning: %s can be read by others (passwords): not used; chmod 600 %s\n", RIG_CONF, RIG_CONF);
+	if (g_rig_conf == RIG_CONF_MODE) {
+		fprintf(stderr, "warning: %s is not mode 600 or not root's (passwords): not used, no remote rigs; "
+			"chmod 600 %s\n", RIG_CONF, RIG_CONF);
 		return;
 	}
 
@@ -1566,11 +1584,16 @@ static void rig_conf_load(void)
 	}
 
 	while (fgets(line, sizeof(line), fp) != NULL) {
-		char *h = strchr(line, '#');
 		char *s = line;
 
-		if (h != NULL)
-			*h = '\0';
+		// '#' starts a comment at the start of a line or after a blank: a '#' inside a
+		// field (a password) stays part of it
+		for (char *h = line; *h != '\0'; h++) {
+			if (*h == '#' && (h == line || h[-1] == ' ' || h[-1] == '\t')) {
+				*h = '\0';
+				break;
+			}
+		}
 
 		while (*s == ' ' || *s == '\t')
 			s++;
@@ -1737,6 +1760,13 @@ static bool rig_switch_poll(x6100_ctl_t *ctl, rx_t *rx)
 
 	if (to != RIG_LOCAL && g_rigs[to].err[0] != '\0') {
 		toast("RIG: SEE REMOTE.CONF");
+		return true;
+	}
+
+	// A rig of RIG_CONF: the file mode 600 and root's now too, not only at the start
+	if (to >= 0 && to < RIG_MAX && rig_conf_check() != RIG_CONF_OK) {
+		fprintf(stderr, "\nrig: %s not mode 600 or not root's: no remote; chmod 600 %s\n", RIG_CONF, RIG_CONF);
+		toast("RIG: REMOTE.CONF NOT MODE 600");
 		return true;
 	}
 
@@ -7825,8 +7855,8 @@ static void draw_rig_panel(x6100_lcd_t *lcd, const rx_t *rx)
 	const uint32_t sel = 0x2E2348, dim = 0x8A82A0, white = 0xF0F0F0, violet = 0xB080FF, green = 0x3CC83C,
 		amber = 0xFFB020, red = 0xFF5050;
 
-	gen_frame(lcd, px, py, pw, ph, "RIG", g_nrigs == 0 ? "NO /ETC/X6100/REMOTE.CONF (OR NOT MODE 600)"
-		: "MFK: CHOOSE  PUSH: SWITCH  GEN: CLOSE");
+	gen_frame(lcd, px, py, pw, ph, "RIG", g_rig_conf == RIG_CONF_MODE ? "REMOTE.CONF NOT MODE 600: NO REMOTE RIGS"
+		: g_nrigs == 0 ? "NO RIGS IN /ETC/X6100/REMOTE.CONF" : "MFK: CHOOSE  PUSH: SWITCH  GEN: CLOSE");
 
 	for (int i = top; i < top + vis; i++) {
 		const int y = py + 30 + (i - top) * 21, r = rig_of_line(i);

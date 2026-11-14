@@ -605,7 +605,10 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     the rig's frequency (with oob anywhere); the audio level path is fixed (TXD_MONI).
 
 50. Remote rigs and switching (2026-11-14, after v0.17.16; not on the radio yet):
-    `/etc/x6100/remote.conf` (mode 600, else unused with a warning) lists up to 16 rigs:
+    `/etc/x6100/remote.conf` (mode 600 and root's, else no remote at all: unused at the
+    start with a warning, and checked again at every switch to a rig: RIG: REMOTE.CONF
+    NOT MODE 600; '#' a comment at the line start or after a blank, a '#' inside a
+    password kept) lists up to 16 rigs:
     `<name> <host> <udp port> <user> <password> [txdummy] [txdgain=N]`
     (docs/x6100_remote.conf.example). LOCAL and the rigs are switched at run time,
     without a restart: the RIG panel (GEN held 1.5 s; the status page at 0.6 s gives way
