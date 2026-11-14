@@ -355,7 +355,24 @@ under GEN until a better key turns up.
 
 ## Remote head (x6100_trx --remote)
 
-Receive-only control head for a remote Icom (STATUS item 47). Open (handover 2026-11-12):
+Control head for a remote Icom (STATUS item 47); with `--remote-tx-dummy` voice TX too,
+through a dummy load on the X6100 (STATUS item 49, works on the IC-7851 2026-11-14:
+REMOTE TRX, the band-passed and gated mic audio as LAN audio at 16 kHz, the rig's RF
+power under the TX box, wfserver held off automatically). Open for TX (2026-11-14):
+
+- The crackle of the X6100's capture (not the mic, not the monitor, LINE OUT no help)
+  is muted in the pauses; under the voice it stays, some 30 dB down. Gone only with a
+  real noise reducer on our side.
+- The levels are set for the 7851 with its LAN input at 50 % (txdgain 3): another rig
+  or level needs `txdgain` in the conf. Why the rig takes our level some 30 dB hot
+  (voice peaks about -14 dBFS before the gain) is not known.
+- The hand mic PTT cannot key (the baseband does not report it with TX enable off):
+  the PTT key only.
+- Once the X6100 showed TX 3.0 W instead of its 0.1 W (one status line): watch for it.
+- Test plan 49 not done yet: link lost while keyed (f), other modes (h), the 180 s
+  time-out (i).
+
+Open from the receive side (handover 2026-11-12):
 
 - Scope amplitude: RSCOPE_DB_STEP 0.5 dB a step was a guess; wfview v3's IC-785x.rig has
   SpectrumDbPerDN=0.5 (2026-11-13), so it holds; later: read it from the rig file.

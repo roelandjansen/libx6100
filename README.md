@@ -34,6 +34,17 @@ off by default: the last 32 waterfall lines in perspective, newest in front, eac
 hiding what lies behind it, the VFO a red tick on the front edge. Rendered by its own
 drawing code with synthetic 40 m signals.
 
+![x6100_trx as a remote head for an IC-7851](docs/images/x6100_trx_remote_trx.png)
+
+Remote head (2026-11-14): `x6100_trx --remote <host> <udp port> <user> <password>`
+makes the X6100 a control head for a networked Icom, here an IC-7851 over its LAN port.
+Frequency, mode, AGC, ATT, NB / NR, the S meter (S2, -113 dBm) and the scope are the
+rig's, both ways; its audio plays on the X6100. With `--remote-tx-dummy` it transmits
+too (REMOTE TRX): the X6100 keys itself at 0.1 W into a dummy load, and its own mic
+audio, band-passed and gated, goes to the rig as LAN audio. Under the TX box the rig's
+RF power (100 %). Screenshot from the radio (`shot`); details in
+`docs/x6100_trx_quickref.md` and STATUS item 49.
+
 ![x6100_trx filter panel](docs/images/x6100_trx_filter.png)
 
 Filter panel (hold F5), IC-705 style: MFK sets BW or SFT, per mode group and FIL1-3.
