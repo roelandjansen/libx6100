@@ -129,7 +129,7 @@ struct x6100_remote
 	int scope_tries;		/* scope mode / span sends so far (C_SCOPE_TRIES, then left alone) */
 	int64_t fil_hold_ms;		/* mode / filter changed then: the Filter Width before it not used for C_FIL_HOLD_MS */
 	int64_t tune_ms;		/* our tune sent then, 0 none: its tuner watched (C_TUNE_WATCH_MS) */
-	int64_t tune_ask_ms;
+	int64_t tune_ask_ms;		/* the tuner last asked (each second, each 0.5 s while tuning) */
 	uint64_t row_width;		/* width of the last scope row, 0: none yet */
 	bool smeter_valid;
 	double smeter_dbm;
@@ -724,22 +724,34 @@ void x6100_remote_poll(x6100_remote_t *r, x6100_remote_status_t *st)
 	if (rs.rig_valid && t - r->ctl_poll_ms >= 333) {
 		// Filter Width too (2026-11-14: the head showed its own widths, 2.8 / 2.4 / 1.8 k,
 		// with the 7851 on 3.0 / 2.6 / 1.8 k); each now about every 2 s
-		static const char *const poll[7] = { "Noise Reduction", "Noise Blanker", "RF Gain", "CW Pitch", "RF Power",
-			"Filter Width", "Tuner/ATU Status" };
+		static const char *const poll[6] = { "Noise Reduction", "Noise Blanker", "RF Gain", "CW Pitch", "RF Power",
+			"Filter Width" };
 
 		session_get_value(r->s, poll[r->ctl_poll_i], 0);
-		r->ctl_poll_i = (r->ctl_poll_i + 1) % 7;
+		r->ctl_poll_i = (r->ctl_poll_i + 1) % 6;
 		r->ctl_poll_ms = t;
 	}
 
-	// While the rig tunes (our tune, x6100_remote_tune): its tuner twice a second, so
-	// TUNE goes off when it is done; at most C_TUNE_WATCH_MS
-	if (r->tune_ms != 0 && t - r->tune_ms < C_TUNE_WATCH_MS && t - r->tune_ask_ms >= 500) {
-		session_get_value(r->s, "Tuner/ATU Status", 0);
-		r->tune_ask_ms = t;
+	// The tuner (2026-11-14): once a second on its own (in the rotation it came every
+	// 2.3 s, so the TUNER key on the rig showed late; Icom does not announce it), twice a
+	// second while the rig tunes (ours or one started on the rig), at most C_TUNE_WATCH_MS
+	{
+		const bool watch = r->tune_ms != 0 && t - r->tune_ms < C_TUNE_WATCH_MS;
+
+		if (rs.rig_valid && t - r->tune_ask_ms >= (watch ? 500 : 1000)) {
+			session_get_value(r->s, "Tuner/ATU Status", 0);
+			r->tune_ask_ms = t;
+		}
 	}
 
 	st->rig_tuning = rs.tuner.valid && rs.tuner.value == 2;
+
+	// A tune started on the rig (its TUNER key) watched the same way as ours, so TUNE
+	// goes off when it is done, not at the next turn of our poll (about 2.3 s)
+	if (st->rig_tuning && r->tune_ms == 0) {
+		r->tune_ms = t;
+		r->tune_ask_ms = t;
+	}
 
 	if (r->tune_ms != 0 && t - r->tune_ms >= 1500 && !st->rig_tuning)
 		r->tune_ms = 0;	/* done (or never started): the watch ends */

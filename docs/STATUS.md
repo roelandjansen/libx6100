@@ -728,12 +728,15 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     the place). Long: the rig tunes (Tuner/ATU Status 2, as wfview; TX rigs only,
     refused for a receive-only rig, and only where TX is allowed: band plan, link);
     TUNE in the indicator while the rig reports 2 (its tuner asked twice a second
-    during a tune, else in our poll, about every 2.3 s). Test: ATU short on the head
+    during a tune, also one started on the rig, else once a second). Test: ATU short on the head
     and on the rig both ways; ATU long on the 7851 / 7760: TUNE, the rig tunes, TUNE
     goes when done; on a receive-only rig: RIG TUNE REFUSED.
     Notes RIG TUNER OFF / RIG TUNER  ON / RIG    TUNING, one width. The app
     (libx6100_app) got its own ATU button: state in its text (ATU ?, ATU OFF, ATU ON
     green, TUNING amber), short in / out, long tune; verified on Android with the 7851.
+    Later the same day: a TUNER key or tune on the rig itself showed late (the rig file
+    polls the tuner Medium; Icom does not announce it): the app and x6100_trx now ask
+    the tuner once a second, twice a second while the rig reports tuning.
     To test further: the label shows 3.00k / 2.60k / 1.80k on the 7851's FIL1-3,
     follows a width changed on the rig within about 2 s, and a FIL change at once.
     Also 2026-11-14: wfserver built from wfview v3 (main) works; the CW decoder holds
