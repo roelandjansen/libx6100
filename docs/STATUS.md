@@ -575,6 +575,12 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
        or in the codec input. Next: the voice far above that floor before the codec
        (the TX panel LINE OUT level, moni 100), else a noise gate on our side.
        TX stream since 2026-11-14: 16 kHz (was 48 kHz) as RX; the core resamples.
+       LINE OUT 10-36: no difference heard. So the TX audio is cleaned before it is sent:
+       band-pass 300-2700 Hz (on recordings: noise -10 dB, pop peaks -8..9 dB, the voice
+       band untouched) and a gate at -40 dBFS after the filter, 20 dB down, hold 250 ms
+       (the code run on the no-mic recording: -51 to -87 dBFS without speech, a 1 kHz
+       tone at -23 dBFS passed unchanged, the pops never opened it). Console txdbp
+       (toggle), txdgate N (0 off). To hear on the 7851; txdgain 3-5 at LAN input 50 %.
     Blind spots: the monitor (level 70) also played on the X6100 speaker while keyed
     (now muted, k); CW is not handled;
     the hand mic PTT cannot key (m: not reported); a real antenna instead of the dummy radiates 0.1 W on

@@ -1203,6 +1203,104 @@ static void txd_rec_feed(const int16_t *stereo, size_t frames)
 	if (g_txd_rec_n >= TXD_REC_S * 48000u)
 		txd_rec_close();
 }
+
+//
+// --remote-tx-dummy cleanup (2026-11-14): the capture carries pops and a rumble from the
+// baseband's audio out / the codec input (about 12-15 a second, mostly below 300 Hz,
+// with or without the monitor; recordings in STATUS 49 o). A band-pass 300-2700 Hz (two
+// 2nd-order high-pass and two low-pass sections) takes the noise down some 10 dB and the
+// pop peaks 8-9 dB with the voice left as it is; a gate below g_txd_gate_db (dBFS, after
+// the filter) turns the pauses down 20 dB (hold 250 ms). Console txdbp on|off, txdgate N
+// (0 = no gate). Left channel in, the result on both
+//
+
+#define TXD_FS		48000.0
+#define TXD_GATE_FLOOR	0.1		/* -20 dB when closed */
+
+typedef struct
+{
+	double b0, b1, b2, a1, a2;
+	double x1, x2, y1, y2;
+} txd_bq_t;
+
+static bool g_txd_bp = true;		/* console txdbp on|off */
+static int g_txd_gate_db = -40;		/* console txdgate, dBFS; 0 = off */
+static txd_bq_t g_txd_bq[4];
+static double g_txd_env;		/* gate: the envelope, 0..1 */
+static double g_txd_gain_now = 1.0;	/* gate: the gain applied, smoothed */
+static uint32_t g_txd_hold;		/* gate: frames left open after the envelope fell */
+
+// RBJ 2nd-order high-pass (hp) or low-pass at f, Q 0.707
+static void txd_bq_set(txd_bq_t *q, bool hp, double f)
+{
+	double w = 2.0 * M_PI * f / TXD_FS, c = cos(w), al = sin(w) / (2.0 * 0.7071), a0 = 1.0 + al;
+
+	q->b0 = (hp ? 1.0 + c : 1.0 - c) / 2.0 / a0;
+	q->b1 = (hp ? -(1.0 + c) : 1.0 - c) / a0;
+	q->b2 = q->b0;
+	q->a1 = -2.0 * c / a0;
+	q->a2 = (1.0 - al) / a0;
+	q->x1 = q->x2 = q->y1 = q->y2 = 0.0;
+}
+
+static double txd_bq(txd_bq_t *q, double x)
+{
+	double y = q->b0 * x + q->b1 * q->x1 + q->b2 * q->x2 - q->a1 * q->y1 - q->a2 * q->y2;
+
+	q->x2 = q->x1;
+	q->x1 = x;
+	q->y2 = q->y1;
+	q->y1 = y;
+	return y;
+}
+
+// At key-down: the filter and the gate from rest (closed)
+static void txd_clean_reset(void)
+{
+	txd_bq_set(&g_txd_bq[0], true, 300.0);
+	txd_bq_set(&g_txd_bq[1], true, 300.0);
+	txd_bq_set(&g_txd_bq[2], false, 2700.0);
+	txd_bq_set(&g_txd_bq[3], false, 2700.0);
+	g_txd_env = 0.0;
+	g_txd_gain_now = TXD_GATE_FLOOR;
+	g_txd_hold = 0;
+}
+
+static void txd_clean(int16_t *stereo, size_t frames)
+{
+	const double thr = g_txd_gate_db < 0 ? pow(10.0, g_txd_gate_db / 20.0) : 0.0;
+	const double rel = exp(-1.0 / (0.050 * TXD_FS));	/* envelope release 50 ms */
+	const double g_up = 1.0 - exp(-1.0 / (0.002 * TXD_FS));	/* gate opens in 2 ms */
+	const double g_dn = 1.0 - exp(-1.0 / (0.060 * TXD_FS));	/* closes in 60 ms */
+
+	for (size_t i = 0; i < frames; i++) {
+		double x = stereo[i * 2] / 32768.0;
+
+		if (g_txd_bp)
+			x = txd_bq(&g_txd_bq[3], txd_bq(&g_txd_bq[2], txd_bq(&g_txd_bq[1], txd_bq(&g_txd_bq[0], x))));
+
+		if (thr > 0.0) {
+			double a = fabs(x);
+
+			g_txd_env = a > g_txd_env ? a : g_txd_env * rel;
+
+			if (g_txd_env >= thr)
+				g_txd_hold = (uint32_t) (0.250 * TXD_FS);
+			else if (g_txd_hold > 0)
+				g_txd_hold--;
+
+			double want = g_txd_hold > 0 ? 1.0 : TXD_GATE_FLOOR;
+
+			g_txd_gain_now += (want - g_txd_gain_now) * (want > g_txd_gain_now ? g_up : g_dn);
+			x *= g_txd_gain_now;
+		}
+
+		long v = lround(x * 32768.0);
+
+		v = v > 32767 ? 32767 : v < -32768 ? -32768 : v;
+		stereo[i * 2] = stereo[i * 2 + 1] = (int16_t) v;
+	}
+}
 #else
 #define REMOTE_ON	false
 #define TXD_ON		false
@@ -10007,6 +10105,13 @@ static bool console_token(rx_t *rx, const char *t)
 	// txdmute / notxdmute (2026-11-14, a test aid, not saved): --remote-tx-dummy mutes the
 	// speaker while keyed, or not; to find out whether the mute also silences the monitor
 	// on the capture (the rig's TX audio)
+	// txdbp on|off: the 300-2700 Hz band-pass on the TX audio (see txd_clean)
+	if (strcasecmp(t, "txdbp") == 0) {
+		g_txd_bp = !g_txd_bp;
+		fprintf(stderr, "\nremote TX: band-pass %s\n", g_txd_bp ? "on" : "off");
+		return true;
+	}
+
 	// txdrec: record the next TX as it goes to the rig (see TXD_REC_PATH)
 	if (strcasecmp(t, "txdrec") == 0) {
 		g_txd_rec_req = true;
@@ -11133,6 +11238,14 @@ static bool console_line(rx_t *rx, char *line)
 			want_lvl = &g_txd_gain;
 			lvl_min = 0;
 			lvl_max = 400;
+			continue;
+		}
+
+		// The gate threshold in dBFS after the band-pass, 0 = no gate (see txd_clean)
+		if (strcasecmp(t, "txdgate") == 0) {
+			want_lvl = &g_txd_gate_db;
+			lvl_min = -80;
+			lvl_max = 0;
 			continue;
 		}
 #endif
@@ -13332,11 +13445,12 @@ int main(int argc, char **argv)
 
 #ifdef X6100_REMOTE
 				if (got > 0 && g_remote != NULL && g_txd_keyed) {
-					x6100_remote_tx_audio(g_remote, abuf, (size_t) got);	/* the monitor: the rig's TX audio */
-					txd_rec_feed(abuf, (size_t) got);	/* console txdrec */
-
-					for (ssize_t i = 0; i < got; i++)	/* its level for the log, left as sent */
+					for (ssize_t i = 0; i < got; i++)	/* its level for the log, as captured */
 						g_txd_cap_sq += (double) abuf[i * 2] * abuf[i * 2];
+
+					txd_clean(abuf, (size_t) got);	/* band-pass, gate (txdbp, txdgate) */
+					x6100_remote_tx_audio(g_remote, abuf, (size_t) got);	/* the monitor: the rig's TX audio */
+					txd_rec_feed(abuf, (size_t) got);	/* console txdrec: as sent */
 
 					g_txd_cap_n += (uint32_t) got;
 				}
@@ -13868,6 +13982,9 @@ int main(int argc, char **argv)
 
 				if (want != g_txd_keyed) {
 					if (x6100_remote_ptt(g_remote, want) == 0 || !want) {
+						if (want)
+							txd_clean_reset();	/* filter and gate from rest */
+
 						g_txd_keyed = want;
 					} else {
 						tx_drop(&rx, "REMOTE PTT REFUSED");
@@ -13909,12 +14026,12 @@ int main(int argc, char **argv)
 
 					x6100_remote_tx_stats(g_remote, &ts);
 					fprintf(stderr, "\nremote TX: capture %u frames %.1f dBFS, sent %u packets %u blocks, "
-						"last block peak %.1f rms %.1f dBFS, overruns %u, tx %s, speaker %s, moni %d boost %d gain %d%%, codec 0x%02x %u Hz\n",
+						"last block peak %.1f rms %.1f dBFS, overruns %u, tx %s, speaker %s, moni %d boost %d gain %d%%, band-pass %s gate %d dBFS, codec 0x%02x %u Hz\n",
 						g_txd_cap_n, rms > 0.0 ? 20.0 * log10(rms) : -120.0, ts.packets, ts.blocks,
 						ts.peak > 0.0f ? 20.0 * log10(ts.peak) : -120.0,
 						ts.rms > 0.0f ? 20.0 * log10(ts.rms) : -120.0, ts.overruns,
 						ts.available ? "available" : "NOT available", g_txd_mute ? "muted" : "on", g_txd_moni,
-						g_txd_boost_set, g_txd_gain, ts.codec, ts.rate);
+						g_txd_boost_set, g_txd_gain, g_txd_bp ? "on" : "off", g_txd_gate_db, ts.codec, ts.rate);
 					g_txd_cap_sq = 0.0;
 					g_txd_cap_n = 0;
 					g_txd_log_at = t;
