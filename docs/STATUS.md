@@ -1,6 +1,12 @@
 # libx6100 / x6100_trx — status
 
-Snapshot: 2026-11-12. Last tag: v0.17.15 (2026-11-12; CW decoder (scope panel CW
+Snapshot: 2026-11-14. Last tag: v0.17.16 (2026-11-14; remote head transmits:
+--remote-tx-dummy, voice TX on the rig with the X6100 mic through a dummy load
+(REMOTE TRX; the mic audio band-passed 300-2700 Hz and gated, LAN audio at 16 kHz;
+mic AUTO acts as HAND; verified on an IC-7851), the rig's RF power under the TX box;
+wfserver held off automatically while x6100_trx --remote runs, x6100_ui.sh trx
+stop|start|restart; wfview followed on GitHub main (v3); X6200 at CI-V 0x63; the CW
+decoder on the remote head too), on v0.17.15 (2026-11-12; CW decoder (scope panel CW
 DECODER, decodes on the band); remote head: REMOTE RX note, CW-R, the rig's RF gain /
 NR / NB / ATT / PRE back to the head, ID asked at the rig's address, own quick poll,
 REMOTE: WAIT FOR RIG; X6200.rig and CI-V 0x63 reserved; baseband hang log; notes not
