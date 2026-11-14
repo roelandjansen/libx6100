@@ -285,17 +285,36 @@ static void *audio_main(void *arg)
 
 enum { LANMOD_IDLE, LANMOD_ASKED, LANMOD_SET, LANMOD_DONE };
 
-// Network thread: an answer to our ask is FE FE E1 <rig> <command> <value> FD
+// Network thread: an answer to our ask is FE FE E1 <rig> <command> <value> FD; a packet
+// may hold more than one frame, so each is looked at
 static void lanmod_hook(void *ctx, const uint8_t *civ, size_t len)
 {
 	x6100_remote_t *r = ctx;
-	size_t n = r->lan_cmd_n;
+	const size_t n = r->lan_cmd_n;
 
-	if (n == 0 || len != 6 + n || civ[0] != 0xFE || civ[1] != 0xFE || civ[2] != RIG_CONTROLLER_ADDR
-		|| civ[len - 1] != 0xFD || memcmp(civ + 4, r->lan_cmd, n) != 0)
+	if (n == 0)
 		return;
 
-	atomic_store(&r->lan_seen, (civ[4 + n] >> 4) * 10 + (civ[4 + n] & 0x0F));	/* BCD */
+	for (size_t a = 0; a + 1 < len; a++) {
+		size_t e;
+
+		if (civ[a] != 0xFE || civ[a + 1] != 0xFE)
+			continue;
+
+		for (e = a + 2; e < len && civ[e] != 0xFD; e++)
+			;
+
+		if (e >= len)
+			return;
+
+		const uint8_t *f = civ + a;
+		const size_t fl = e - a + 1;
+
+		if (fl == 6 + n && f[2] == RIG_CONTROLLER_ADDR && memcmp(f + 4, r->lan_cmd, n) == 0)
+			atomic_store(&r->lan_seen, (f[4 + n] >> 4) * 10 + (f[4 + n] & 0x0F));	/* BCD */
+
+		a = e;
+	}
 }
 
 // The set as a CI-V frame of our own: the core encodes values only for the kinds it
