@@ -216,11 +216,12 @@ bash build.sh -f --no-pull    # force a build, no pull
 `deploy` copies to `$X6100_HOST:/root` (default `root@x6100`).
 
 `dist` (2026-11-14) makes an archive for anyone with a freshly flashed OpenX6X00 image:
-the files at their places on the radio, `install.sh` (run on a Linux PC:
+wfserver and the files at their places on the radio, `install.sh` (run on a Linux PC:
 `./install.sh <address of the radio>`; one tar over ssh, the root password once) and a
 README. The install step on the radio sets owners and modes and copies the example
 settings only where none are there; it installs no `remote.conf` (passwords) and does
-not change the boot choice. The wfserver bundle goes in when built. The scripts are in
+not change the boot choice. Build the wfserver bundle first (contrib/wfserver): without
+it dist stops, `dist --no-wfserver` leaves it out on purpose. The scripts are in
 `scripts/dist/`.
 
 ## Run on the radio

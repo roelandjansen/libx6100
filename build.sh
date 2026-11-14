@@ -537,12 +537,28 @@ settings_restore() {
 # (out/wfserver-armhf.tar.gz). Settings, a remote.conf or the boot choice: never
 #
 
+#
+# dist: wfserver belongs in it; stop, before the build, when it is not built
+#
+
+dist_check() {
+	if [[ ! -f "${G_WFSERVER}" && "${G_DIST_NOWFS}" -eq 0 ]]; then
+		printf '%s\n' "error: dist without wfserver: ${G_WFSERVER} is not built" \
+			'  build it first (contrib/wfserver/README.md), as a normal user:' \
+			'    git clone https://github.com/wf-group/wfview.git' \
+			'    contrib/wfserver/container.sh <the wfview clone>' \
+			'  or build.sh dist --no-wfserver for an archive without it' >&2
+		exit 1
+	fi
+}
+
 make_dist() {
 	local L_REV
 	local L_NAME
 	local L_DIR
 	local L_PAY
 
+	dist_check
 	L_REV="$(git rev-parse --short HEAD 2>/dev/null || printf '%s' dev)"	# not a checkout: dev
 	L_NAME="x6100_trx-${L_REV}"
 	L_DIR="${C_OUT}/dist/${L_NAME}"
@@ -594,7 +610,8 @@ usage() {
 		'  dist         the same build, then out/x6100_trx-<rev>.tar.gz for OpenX6X00 images:' \
 		'               the files at their places on the radio, install.sh (run on the PC:' \
 		'               ./install.sh <address>, the root password once) and README.md;' \
-		'               the wfserver bundle when built; no settings or passwords' \
+		'               with the wfserver bundle (stops when it is not built:' \
+		'               contrib/wfserver; --no-wfserver: without); no settings or passwords' \
 		'  backup       copy the radio settings (/etc/x6100) to $X6100_CONFIG' \
 		'               (default ~/.config/x6100); no build' \
 		'  restore      copy $X6100_CONFIG to the radio, overwriting; no build' \
@@ -620,6 +637,7 @@ G_FORCE=0
 G_PULL=1
 G_DEPLOY=0
 G_DIST=0
+G_DIST_NOWFS=0	# dist --no-wfserver: an archive without wfserver on purpose
 
 while [[ $# -gt 0 ]]; do
 	case "$1" in
@@ -637,6 +655,9 @@ while [[ $# -gt 0 ]]; do
 			;;
 		dist)
 			G_DIST=1
+			;;
+		--no-wfserver)
+			G_DIST_NOWFS=1
 			;;
 		-h|--help)
 			usage
@@ -659,6 +680,10 @@ if [[ "${G_SETTINGS}" == backup ]]; then
 elif [[ "${G_SETTINGS}" == restore ]]; then
 	settings_restore
 	exit 0
+fi
+
+if [[ "${G_DIST}" -eq 1 ]]; then
+	dist_check	# before the build: no waiting for an archive that cannot be made
 fi
 
 check_zig
