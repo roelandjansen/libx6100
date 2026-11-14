@@ -372,8 +372,9 @@ power under the TX box, wfserver held off automatically). Open for TX (2026-11-1
   to be decided), that DATA MOD on LAN with its own LAN level, so DATA OFF MOD stays
   MIC. To find out: whether x6100_trx switches the rig to that data mode when keying and
   back after (CI-V 1A 06 data mode with filter), or keeps it in data mode while REMOTE
-  TRX; what the 7851 does differently in data mode (TX filter width, compressor, the
-  monitor); whether the LAN level is per data mode or one setting.
+  TRX; what the 7851's data mode itself changes (TX filter width, compressor, the
+  monitor). The LAN input is the same either way: the 7851 treats LAN in a data mode
+  just as LAN on DATA OFF MOD, no other processing (2026-11-14).
 - The hand mic PTT cannot key (the baseband does not report it with TX enable off):
   the PTT key only.
 - Once the X6100 showed TX 3.0 W instead of its 0.1 W (one status line): watch for it.
