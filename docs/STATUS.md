@@ -694,7 +694,14 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     their own edges, any span shows right).
     Verified on the 7851 (2026-11-14): the menu showed MIC turn into LAN on connecting
     and MIC again on exit (a, b). The 7851's screen still gets taken (focus changes)
-    after the span fix: something else the head sends; open.
+    after the span fix: something else the head sends (found, below).
+    The screen taken on all three rigs (7851, 9700, 7760): the core (libx6100_app)
+    kept "Scope On/Off" (27 10 01) recurring for the whole session, several times a
+    second, each one putting the rig back on its scope screen. wfview deletes it once
+    scope data came (receiverwidget: queue->del(funcScopeOnOff, 0)); the core does so
+    now too (libx6100_app 5eb8dd8, test_rig checks it and fails without). Pin updated.
+    Also 2026-11-14: wfserver built from wfview v3 (main) works; the CW decoder holds
+    up in a contest.
 
 53. `build.sh dist` (2026-11-14): out/x6100_trx-<rev>.tar.gz for freshly flashed
     OpenX6X00 images: payload/ with the files at their places on the radio
