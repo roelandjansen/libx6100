@@ -686,6 +686,12 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     shows LAN, TX via the dummy works; b. switch to LOCAL: the menu shows MIC again,
     the 7851's own mic works; c. quit while on the 7851: MIC again; d. the rig already
     on LAN: left as it is, nothing put back; e. the same on the 9700 and the 7760.
+    The menu check could not be done (2026-11-14): the head sent the scope mode and span
+    again once a second whenever the rows had another width, and each send took the
+    7851 back to its scope screen, so its menu closed. Now set after connecting (once
+    the rig file is there) until a row of +- 50 kHz comes, at most 5 times 3 s apart,
+    then left alone: a span or menu chosen on the rig stays (the rows are placed by
+    their own edges, any span shows right).
 
 ## Next steps (suggested order)
 

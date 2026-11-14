@@ -38,6 +38,7 @@
 // The controls, as indices (send times, last rig values) and their X6100_REMOTE_C_* bits
 enum { C_AGC, C_ATT, C_PRE, C_RFG, C_NR, C_NB };
 #define C_SCOPE_HALF	50000		/* the rig scope, centre mode +- 50 kHz: the X6100 IQ width (SPAN_HZ) */
+#define C_SCOPE_TRIES	5		/* scope mode / span sent so often after connecting at most, then left alone */
 
 //
 // Mode numbers as wfview has them (.rig Modes\N\Num: its own list, not the CI-V Reg;
@@ -123,6 +124,7 @@ struct x6100_remote
 	uint32_t scope_seq;
 	bool scope_seen;
 	int64_t scope_set_ms;		/* last scope mode / span sent */
+	int scope_tries;		/* scope mode / span sends so far (C_SCOPE_TRIES, then left alone) */
 	uint64_t row_width;		/* width of the last scope row, 0: none yet */
 	bool smeter_valid;
 	double smeter_dbm;
@@ -838,23 +840,27 @@ void x6100_remote_poll(x6100_remote_t *r, x6100_remote_status_t *st)
 		}
 	}
 	//
-	// Rig scope: centre mode, +- 50 kHz, kept so. Judged by the width of the rows it
-	// sends: the core learns the span only from a reply to its own query, so a span
-	// changed at the rig (by hand, band change) does not show in its state. Sent
-	// right after connecting, then again at most once a second while the rows are
-	// another width (0.5 kHz slack for rounding at the edges)
+	// Rig scope: centre mode, +- 50 kHz, set after connecting until a row of that width
+	// comes (judged by the rows: the core learns the span only from a reply to its own
+	// query), at most C_SCOPE_TRIES times 3 s apart once the rig file is loaded (before
+	// it every set is refused, RIG_ERR_NO_CAPS), then left alone. Until 2026-11-14 it was sent
+	// again once a second whenever the rows had another width, and each send took the
+	// 7851 back to its scope screen: its menus could not be read. The rows are placed
+	// by their own edges (remote_scope_feed), so any span the rig is set to shows right
 	//
 	{
 		const uint64_t want = 2 * (uint64_t) C_SCOPE_HALF;
-		// No rows yet: again every 3 s (the first set is refused before the rig file
-		// is loaded, RIG_ERR_NO_CAPS)
-		bool off = r->row_width == 0 ? t - r->scope_set_ms >= 3000
-			: (r->row_width > want ? r->row_width - want : want - r->row_width) > 500;
+		const bool right = r->row_width != 0
+			&& (r->row_width > want ? r->row_width - want : want - r->row_width) <= 500;
 
-		if (off && t - r->scope_set_ms >= 1000) {
+		if (right)
+			r->scope_tries = C_SCOPE_TRIES;	/* done: the rig keeps what is set there from now */
+
+		if (!right && rs.rig_valid && r->scope_tries < C_SCOPE_TRIES && t - r->scope_set_ms >= 3000) {
 			session_set_value(r->s, "Scope Mode", 0, 0);
 			session_set_span(r->s, 0, C_SCOPE_HALF);
 			r->scope_set_ms = t;
+			r->scope_tries++;
 		}
 	}
 
