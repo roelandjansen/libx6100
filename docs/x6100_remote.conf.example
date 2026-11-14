@@ -17,7 +17,7 @@
 #   host       name or IP address of the rig (its LAN port, or wfserver)
 #   udp port   the control port, 50001 on an Icom
 #   user       a user of the rig's network settings (or of wfserver)
-#   password   its password, no spaces
+#   password   its password; no spaces, as the Icom LAN protocol itself has none
 #   txdummy    transmit too: the X6100 keys itself at 0.1 W into a DUMMY LOAD on its
 #              antenna port, its mic goes to the rig as LAN audio (set the rig's
 #              DATA OFF MOD to LAN). Without it: receive only
