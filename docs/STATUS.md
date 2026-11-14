@@ -585,6 +585,11 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
        crackle heard at the 7851: not in our stream any more. Open: the same with the
        7851 in SSB, and keyed from wfview (LAN, silent) or its own PTT without mic: the
        7851's own chain or RF into its audio?
+       Correction (2026-11-14): it is ours (gone at txdgain 0; 7851 under 5 W, MONI; also
+       in SSB and CW). The log showed only the last 20 ms block; the pops passed the gate
+       at -20 dB, about -69 dBFS, and the 7851 takes our level some 30 dB hot (txdgain 100
+       in that test). The gate now mutes (-60 dB; pauses -118 dBFS on the recording) and
+       the log shows the loudest sample sent each second (after gain).
     Blind spots: the monitor (level 70) also played on the X6100 speaker while keyed
     (now muted, k); CW is not handled;
     the hand mic PTT cannot key (m: not reported); a real antenna instead of the dummy radiates 0.1 W on

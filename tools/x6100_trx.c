@@ -1210,12 +1210,12 @@ static void txd_rec_feed(const int16_t *stereo, size_t frames)
 // with or without the monitor; recordings in STATUS 49 o). A band-pass 300-2700 Hz (two
 // 2nd-order high-pass and two low-pass sections) takes the noise down some 10 dB and the
 // pop peaks 8-9 dB with the voice left as it is; a gate below g_txd_gate_db (dBFS, after
-// the filter) turns the pauses down 20 dB (hold 250 ms). Console txdbp on|off, txdgate N
+// the filter) mutes the pauses, -60 dB (hold 250 ms). Console txdbp on|off, txdgate N
 // (0 = no gate). Left channel in, the result on both
 //
 
 #define TXD_FS		48000.0
-#define TXD_GATE_FLOOR	0.1		/* -20 dB when closed */
+#define TXD_GATE_FLOOR	0.001		/* -60 dB when closed (was -20: the 7851 at our level, some 30 dB too hot, still let the pops through) */
 
 typedef struct
 {
@@ -1229,6 +1229,7 @@ static txd_bq_t g_txd_bq[4];
 static double g_txd_env;		/* gate: the envelope, 0..1 */
 static double g_txd_gain_now = 1.0;	/* gate: the gain applied, smoothed */
 static uint32_t g_txd_hold;		/* gate: frames left open after the envelope fell */
+static double g_txd_out_pk;		/* the loudest sample sent since the last log line, 0..1 (after filter and gate) */
 
 // RBJ 2nd-order high-pass (hp) or low-pass at f, Q 0.707
 static void txd_bq_set(txd_bq_t *q, bool hp, double f)
@@ -1294,6 +1295,9 @@ static void txd_clean(int16_t *stereo, size_t frames)
 			g_txd_gain_now += (want - g_txd_gain_now) * (want > g_txd_gain_now ? g_up : g_dn);
 			x *= g_txd_gain_now;
 		}
+
+		if (fabs(x) > g_txd_out_pk)
+			g_txd_out_pk = fabs(x);
 
 		long v = lround(x * 32768.0);
 
@@ -14026,21 +14030,25 @@ int main(int argc, char **argv)
 					double rms = g_txd_cap_n > 0 ? sqrt(g_txd_cap_sq / g_txd_cap_n) / 32768.0 : 0.0;
 
 					x6100_remote_tx_stats(g_remote, &ts);
-					fprintf(stderr, "\nremote TX: capture %u frames %.1f dBFS, sent %u packets %u blocks, "
+					fprintf(stderr, "\nremote TX: capture %u frames %.1f dBFS, sent peak %.1f dBFS (after gain), %u packets %u blocks, "
 						"last block peak %.1f rms %.1f dBFS, overruns %u, tx %s, speaker %s, moni %d boost %d gain %d%%, band-pass %s gate %d dBFS, codec 0x%02x %u Hz\n",
-						g_txd_cap_n, rms > 0.0 ? 20.0 * log10(rms) : -120.0, ts.packets, ts.blocks,
+						g_txd_cap_n, rms > 0.0 ? 20.0 * log10(rms) : -120.0,
+						g_txd_out_pk > 0.0 && g_txd_gain > 0 ? 20.0 * log10(g_txd_out_pk * g_txd_gain / 100.0) : -120.0,
+						ts.packets, ts.blocks,
 						ts.peak > 0.0f ? 20.0 * log10(ts.peak) : -120.0,
 						ts.rms > 0.0f ? 20.0 * log10(ts.rms) : -120.0, ts.overruns,
 						ts.available ? "available" : "NOT available", g_txd_mute ? "muted" : "on", g_txd_moni,
 						g_txd_boost_set, g_txd_gain, g_txd_bp ? "on" : "off", g_txd_gate_db, ts.codec, ts.rate);
 					g_txd_cap_sq = 0.0;
 					g_txd_cap_n = 0;
+					g_txd_out_pk = 0.0;
 					g_txd_log_at = t;
 				} else if (!g_txd_keyed) {
 					txd_rec_close();	/* released: the recording ends */
 					g_txd_log_at = t;	/* the first line a second after keying */
 					g_txd_cap_sq = 0.0;
 					g_txd_cap_n = 0;
+					g_txd_out_pk = 0.0;
 				}
 			}
 		}
