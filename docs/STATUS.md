@@ -1,6 +1,13 @@
 # libx6100 / x6100_trx — status
 
-Snapshot: 2026-11-14. Last tag: v0.17.16 (2026-11-14; remote head transmits:
+Snapshot: 2026-11-14. Last tag: v0.17.17 (2026-11-14; remote rigs: /etc/x6100/remote.conf
+(mode 600), LOCAL and the rigs switched while running (RIG panel: GEN held 1.5 s; rig
+<name>), the note names the rig (REMOTE TRX IC9700), each rig its own frequencies;
+rigs past the X6100's range (IC-9700: 2 m / 70 cm / 23 cm, small Hz digits, band keys
+on the rig's bands, VHF / UHF in the band plan); the rig's DATA OFF MOD set to LAN and
+restored; the rig's screen no longer taken (core: Scope On/Off not recurring); build.sh
+dist (install archive for OpenX6X00, wfserver from v3 in it); verified on IC-7851,
+IC-9700, IC-7760), on v0.17.16 (2026-11-14; remote head transmits:
 --remote-tx-dummy, voice TX on the rig with the X6100 mic through a dummy load
 (REMOTE TRX; the mic audio band-passed 300-2700 Hz and gated, LAN audio at 16 kHz;
 mic AUTO acts as HAND; verified on an IC-7851), the rig's RF power under the TX box;
