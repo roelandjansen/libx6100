@@ -1109,6 +1109,10 @@ static x6100_remote_t *g_remote;
 static bool g_remote_up;		/* link up and the rig file loaded (main loop, from the poll) */
 static bool g_txd_keyed;		/* --remote-tx-dummy: the rig keyed by us */
 static int g_remote_pwr = -1;		/* the rig's RF power setting (0-255), -1 not known: shown under the TX box */
+static bool g_txd_mute = true;		/* --remote-tx-dummy: speaker muted while keyed (console txdmute / notxdmute) */
+static double g_txd_cap_sq;		/* --remote-tx-dummy keyed: capture sum of squares (left) ... */
+static uint32_t g_txd_cap_n;		/* ... and frames, since the last log line */
+static uint64_t g_txd_log_at;		/* last TX log line (ms) */
 
 // --remote-tx-dummy: the X6100 keys itself at 0.1 W into a dummy load, its monitor
 // (the mic) goes to the rig as TX audio, then the rig keys. TXD_MONI: the monitor level
@@ -1744,8 +1748,10 @@ static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 
 		// Keyed into the dummy (--remote-tx-dummy): the speaker muted, so the monitor does not
 		// play there and feed back into the mic (2026-11-14). The codec capture, which carries
-		// the monitor to the rig, sits before the RX volume (as found with the squelch)
-		x6100_ctl_set(ctl, X6100_REG_RXVOL, rx->mute || (TXD_ON && rx->ptt) ? 0 : (uint32_t) rx->vol);
+		// the monitor to the rig, sits before the RX volume (as found with the squelch).
+		// 2026-11-14: no audio at the 7851, so open whether the monitor is after the RX
+		// volume: console notxdmute leaves the speaker on (txdmute: muted again)
+		x6100_ctl_set(ctl, X6100_REG_RXVOL, rx->mute || (TXD_ON && rx->ptt && g_txd_mute) ? 0 : (uint32_t) rx->vol);
 
 		if (TXD_ON && rx->ptt) {
 			// Keyed into the dummy: TX enable as apply_local set it (band check), the
@@ -9904,6 +9910,17 @@ static bool console_token(rx_t *rx, const char *t)
 		return true;
 	}
 
+#ifdef X6100_REMOTE
+	// txdmute / notxdmute (2026-11-14, a test aid, not saved): --remote-tx-dummy mutes the
+	// speaker while keyed, or not; to find out whether the mute also silences the monitor
+	// on the capture (the rig's TX audio)
+	if (strcasecmp(t, "txdmute") == 0 || strcasecmp(t, "notxdmute") == 0) {
+		g_txd_mute = strcasecmp(t, "txdmute") == 0;
+		fprintf(stderr, "\nremote TX: speaker %s while keyed\n", g_txd_mute ? "muted" : "on");
+		return true;
+	}
+#endif
+
 	// shot: a screenshot of the screen as it is, PNG in /tmp (also LOCK long)
 	if (strcasecmp(t, "shot") == 0) {
 		g_shot_req = true;
@@ -13162,8 +13179,14 @@ int main(int argc, char **argv)
 					audio_feed(&scr, abuf, (unsigned) got, 2);
 
 #ifdef X6100_REMOTE
-				if (got > 0 && g_remote != NULL && g_txd_keyed)
+				if (got > 0 && g_remote != NULL && g_txd_keyed) {
 					x6100_remote_tx_audio(g_remote, abuf, (size_t) got);	/* the monitor: the rig's TX audio */
+
+					for (ssize_t i = 0; i < got; i++)	/* its level for the log, left as sent */
+						g_txd_cap_sq += (double) abuf[i * 2] * abuf[i * 2];
+
+					g_txd_cap_n += (uint32_t) got;
+				}
 #endif
 
 				if (got > 0 && cwd_active(&rx) && !REMOTE_ON)
@@ -13690,6 +13713,29 @@ int main(int argc, char **argv)
 
 				if (g_txd_keyed)
 					x6100_remote_ptt_alive(g_remote);
+
+				// Keyed: once a second what goes to the rig (2026-11-14: the 7851 keyed,
+				// no audio): the capture level here, what the session sent. Capture flat:
+				// the X6100 side (mute, monitor); packets with level: the rig's input
+				if (g_txd_keyed && t - g_txd_log_at >= 1000) {
+					x6100_remote_tx_stats_t ts;
+					double rms = g_txd_cap_n > 0 ? sqrt(g_txd_cap_sq / g_txd_cap_n) / 32768.0 : 0.0;
+
+					x6100_remote_tx_stats(g_remote, &ts);
+					fprintf(stderr, "\nremote TX: capture %u frames %.1f dBFS, sent %u packets %u blocks, "
+						"last block peak %.1f rms %.1f dBFS, overruns %u, tx %s, speaker %s\n",
+						g_txd_cap_n, rms > 0.0 ? 20.0 * log10(rms) : -120.0, ts.packets, ts.blocks,
+						ts.peak > 0.0f ? 20.0 * log10(ts.peak) : -120.0,
+						ts.rms > 0.0f ? 20.0 * log10(ts.rms) : -120.0, ts.overruns,
+						ts.available ? "available" : "NOT available", g_txd_mute ? "muted" : "on");
+					g_txd_cap_sq = 0.0;
+					g_txd_cap_n = 0;
+					g_txd_log_at = t;
+				} else if (!g_txd_keyed) {
+					g_txd_log_at = t;	/* the first line a second after keying */
+					g_txd_cap_sq = 0.0;
+					g_txd_cap_n = 0;
+				}
 			}
 		}
 #endif

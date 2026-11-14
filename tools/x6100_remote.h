@@ -156,3 +156,20 @@ size_t x6100_remote_audio_tap(x6100_remote_t *r, int16_t *out, size_t max);
 int x6100_remote_ptt(x6100_remote_t *r, bool on);
 void x6100_remote_ptt_alive(x6100_remote_t *r);
 void x6100_remote_tx_audio(x6100_remote_t *r, const int16_t *stereo, size_t frames);
+
+//
+// What the session sent of the TX audio (counters since the start; peak / rms of the
+// last block, 0..1), for the log while keyed
+//
+
+typedef struct
+{
+	uint32_t packets;
+	uint32_t blocks;
+	uint32_t overruns;
+	float peak;
+	float rms;
+	bool available;
+} x6100_remote_tx_stats_t;
+
+void x6100_remote_tx_stats(x6100_remote_t *r, x6100_remote_tx_stats_t *out);

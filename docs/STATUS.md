@@ -532,6 +532,13 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
        baseband reports nothing for it with TX enable off (flow TX flag and hand mic key
        code stay 0), so it cannot be a PTT source here; the log is removed again. The
        hand mic as microphone works (meter follows) when keyed with the PTT key.
+    n. No audio at the 7851 (2026-11-14: it keys, DATA OFF MOD LAN, its MONI silent; the
+       0 % under the TX box with 200 W set). Logged now: while keyed, once a second
+       `remote TX: capture .. dBFS, sent .. packets ..` (the capture level here and what
+       the session sent), and `remote: rig RF power N (0-255)` on every change (RF Power
+       added to our own poll). Console `notxdmute` keeps the speaker on while keyed:
+       does the monitor (and so the TX audio) come back without the mute (k)? Raise VOL
+       for it (the monitor may follow it); hand mic, against feedback.
     Blind spots: the monitor (level 70) also played on the X6100 speaker while keyed
     (now muted, k); CW is not handled;
     the hand mic PTT cannot key (m: not reported); a real antenna instead of the dummy radiates 0.1 W on

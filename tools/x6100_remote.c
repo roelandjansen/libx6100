@@ -102,7 +102,8 @@ struct x6100_remote
 	bool log_idask;			/* "asking the ID directly" said */
 	int64_t id_sent_ms;		/* our own ID query to the login address, last sent */
 	int64_t ctl_poll_ms;		/* our own NR / NB poll, last sent */
-	int ctl_poll_i;			/* next one of our poll: NR, NB, RF gain, CW pitch */
+	int ctl_poll_i;			/* next one of our poll: NR, NB, RF gain, CW pitch, RF power */
+	int log_rfpwr;			/* RF power as last logged, -2 never */
 	int64_t streams_ms;		/* when the streams opened (0: not yet), for those two */
 	uint32_t scope_seq;
 	bool scope_seen;
@@ -271,6 +272,7 @@ int x6100_remote_open(x6100_remote_t **out, const x6100_remote_cfg_t *cfg)
 	for (int i = 0; i < 6; i++)
 		r->rig_ctl[i] = -1;
 	r->log_state = -1;
+	r->log_rfpwr = -2;
 	atomic_init(&r->stop, false);
 	atomic_init(&r->xruns, 0);
 	atomic_init(&r->tap_w, 0);
@@ -515,13 +517,14 @@ void x6100_remote_poll(x6100_remote_t *r, x6100_remote_status_t *st)
 	// NR, NB and RF gain of the main receiver, asked by us: the IC-785x file polls NR / NB
 	// Medium Low for both receivers into one field (about 10 s, and the sub's answer undoes
 	// the main's) and RF gain Medium (seconds; 2026-11-12: the number followed slowly).
-	// One every 333 ms, by turns: each about every 1.3 s. CW Pitch too (not in the file's
-	// poll): the CW decoder listens at the rig's pitch
+	// One every 333 ms, by turns: each about every 1.7 s. CW Pitch too (not in the file's
+	// poll): the CW decoder listens at the rig's pitch. RF Power too (2026-11-14: 0 % shown
+	// with the 7851 at 200 W; the file polls it Medium): under the TX box
 	if (rs.rig_valid && t - r->ctl_poll_ms >= 333) {
-		static const char *const poll[4] = { "Noise Reduction", "Noise Blanker", "RF Gain", "CW Pitch" };
+		static const char *const poll[5] = { "Noise Reduction", "Noise Blanker", "RF Gain", "CW Pitch", "RF Power" };
 
 		session_get_value(r->s, poll[r->ctl_poll_i], 0);
-		r->ctl_poll_i = (r->ctl_poll_i + 1) % 4;
+		r->ctl_poll_i = (r->ctl_poll_i + 1) % 5;
 		r->ctl_poll_ms = t;
 	}
 
@@ -531,6 +534,12 @@ void x6100_remote_poll(x6100_remote_t *r, x6100_remote_status_t *st)
 	st->rig_ready = rs.rig_valid;
 	st->cw_pitch = rs.cw_pitch.valid ? rs.cw_pitch.value : 0;
 	st->rf_power = rs.rf_power.valid ? rs.rf_power.value : -1;
+
+	// RF power each change, for the log (2026-11-14: 0 % shown with the 7851 at 200 W)
+	if (st->rf_power != r->log_rfpwr) {
+		fprintf(stderr, "\nremote: rig RF power %d (0-255)\n", st->rf_power);
+		r->log_rfpwr = st->rf_power;
+	}
 
 	if (rs.rig_valid && !r->log_caps) {
 		fprintf(stderr, "\nremote: rig file for %s (CI-V 0x%02x) loaded, %lld ms after the streams\n", rs.model,
@@ -741,4 +750,17 @@ void x6100_remote_tx_audio(x6100_remote_t *r, const int16_t *stereo, size_t fram
 		stereo += n * 2;
 		frames -= n;
 	}
+}
+
+void x6100_remote_tx_stats(x6100_remote_t *r, x6100_remote_tx_stats_t *out)
+{
+	struct session_info info;
+
+	session_get_info(r->s, &info);
+	out->packets = info.tx_packets;
+	out->blocks = info.tx_blocks;
+	out->overruns = info.tx_overrun_frames;
+	out->peak = info.tx_peak;
+	out->rms = info.tx_rms;
+	out->available = info.tx_available;
 }

@@ -445,6 +445,7 @@ The status line starts with the VFO in use (A / B); with split, RIT or XIT it ad
 | `region r1\|r2\|r3\|nl\|uk` | transmit allocations for the TX check and the OOB marker (default r1); nl and uk also have 4 m (70.0-70.5 MHz); uk has the 11 UK 60 m segments (Ofcom, 5258.5-5264, 5276-5284, 5288.5-5292, 5298-5307, 5313-5323, 5333-5338, 5354-5358, 5362-5374.5, 5378-5382, 5395-5401.5, 5403.5-5406.5 kHz; FST CH steps through their lower edges; 2026-11-07) |
 | `oob`, `nolimit` | as `--oob` / `--no-limit` (settings file): warned at every start, red OOB on the dial |
 | `nooob` | the band check on again at once (2026-11-07). `oob` / `nooob` go into the state: the last one holds at the next start (with the start warning when oob); an `oob` or `nooob` line in x6100_trx.conf wins over the state, `--oob` over both |
+| `notxdmute` / `txdmute` | `--remote-tx-dummy` only, a test aid (2026-11-14, not saved): the speaker stays on while keyed / is muted again (the default). To find out whether the mute also silences the monitor that goes to the rig |
 | `freqmin 148500`, `freqmax 75000000` | tuning range in Hz (VFO, CAT, memories), each within 5 kHz - 75 MHz, freqmin below freqmax; default 148.5 kHz (the LW broadcast band edge; below it MW bleeds through, 77.5 kHz tried) - 75 MHz (RX and TX work up to there, 2026-11-04; TX above 54 MHz is past the low-pass filters: into a dummy load only); kept in the state; below the IF shift (a few kHz) the LO goes above the receive frequency |
 
 ## Messages (MSG)
