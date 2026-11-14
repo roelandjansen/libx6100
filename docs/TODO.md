@@ -353,7 +353,7 @@ under GEN until a better key turns up.
 - Icom LAN server (ports 50001-50003): faster scope, network audio; then RADE via
   network audio. Design: `x6100_netaudio_design.md`.
 
-## Remote head (x6100_trx --remote)
+## Remote TRX (x6100_trx --remote, --remote-tx-dummy)
 
 Control head for a remote Icom (STATUS item 47); with `--remote-tx-dummy` voice TX too,
 through a dummy load on the X6100 (STATUS item 49, works on the IC-7851 2026-11-14:
