@@ -1555,6 +1555,17 @@ static const char *rig_name(int i)
 	return i == RIG_LOCAL ? "LOCAL" : g_rigs[i].name;
 }
 
+// The standing note with the rig's name (REMOTE TRX IC9700, 2026-11-14); always this one
+// buffer, so rx->warn == g_remote_note still tells the standing note from other notes
+static char g_remote_note_buf[48];
+
+static void remote_note(rx_t *rx, const char *what)
+{
+	snprintf(g_remote_note_buf, sizeof(g_remote_note_buf), "%s %s", what, rig_name(g_rig_cur));
+	g_remote_note = g_remote_note_buf;
+	rx->warn = g_remote_note;
+}
+
 // A bounded copy; false when it does not fit
 static bool rig_copy(char *dst, size_t n, const char *src)
 {
@@ -1765,8 +1776,7 @@ static void rig_enter(rx_t *rx, int i)
 	g_txd_gain_set = -1;
 	g_remote_tries = RIG_OPEN_TRIES;
 	g_remote_try_at = 1;	/* at once */
-	g_remote_note = "REMOTE LINK";
-	rx->warn = g_remote_note;
+	remote_note(rx, "REMOTE LINK");
 
 	// wfserver off while we are remote: the marker with our PID tells the wfserver
 	// watcher (x6100_ui.sh) to stop it and to start it again once we are gone
@@ -14867,10 +14877,11 @@ int main(int argc, char **argv)
 				// started again soon after the last session; it heals by itself)
 				// With --remote-tx-dummy the standing note says this head transmits too: REMOTE TRX
 				// (was REMOTE, TX VIA DUMMY 0.1 W; 2026-11-14)
-				static const char *const msg[] = { "REMOTE LINK", "REMOTE RX", "REMOTE TX", "REMOTE: WAIT FOR RIG" };
+				// The rig's name after it (REMOTE TRX IC9700, 2026-11-14): which rig the head is on
+				static const char *const msg[] = { "REMOTE LINK", "REMOTE RX", "REMOTE TX", "REMOTE: WAIT FOR" };
 				const char *m = remote_now == 1 && g_remote_cfg.tx_dummy ? "REMOTE TRX" : msg[remote_now];
 
-				rx.warn = g_remote_note = m;
+				remote_note(&rx, m);
 
 				g_remote_shown = remote_now;
 				changed = true;

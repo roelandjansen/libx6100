@@ -45,6 +45,16 @@ audio, band-passed and gated, goes to the rig as LAN audio. Under the TX box the
 RF power (100 %). Screenshot from the radio (`shot`); details in
 `docs/x6100_trx_quickref.md` and STATUS item 49.
 
+![x6100_trx RIG panel on an IC-9700 at 1298 MHz](docs/images/x6100_trx_rig_panel.png)
+
+The RIG panel (hold GEN 1.5 s): LOCAL, the X6100 itself, and the rigs of
+`/etc/x6100/remote.conf` (mode 600), switched while running, without a restart; MFK
+chooses, push switches. Here on an IC-9700 at 1298.373.800 MHz (23 cm), link up, with an
+IC-7851, IC-7760 and IC-7610 as the other rigs. LOCAL and each rig keep their own
+frequencies and modes; the band keys follow the rig's bands; from 100 MHz the Hz
+digits are drawn small beside the frequency. The panel shows no hosts. x6100_trx comes
+up on the rig it was left on (`--remote <name>` picks one).
+
 ![x6100_trx filter panel](docs/images/x6100_trx_filter.png)
 
 Filter panel (hold F5), IC-705 style: MFK sets BW or SFT, per mode group and FIL1-3.
