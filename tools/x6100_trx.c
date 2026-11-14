@@ -1113,12 +1113,15 @@ static bool g_txd_mute = true;		/* --remote-tx-dummy: speaker muted while keyed 
 static double g_txd_cap_sq;		/* --remote-tx-dummy keyed: capture sum of squares (left) ... */
 static uint32_t g_txd_cap_n;		/* ... and frames, since the last log line */
 static uint64_t g_txd_log_at;		/* last TX log line (ms) */
+static int g_txd_moni = 70;		/* --remote-tx-dummy: monitor level while keyed, 0-100 (console txdmoni) */
+static int g_txd_boost = -1;		/* ... codec Mic1 boost 0-7 for the capture, -1 as for RX (console txdboost) */
+static int g_txd_gain = 100;		/* ... the session's TX gain in %, 0-400 (console txdgain) */
+static int g_txd_boost_set = -1;	/* the Mic1 boost as last set on the codec, -1 not known */
 
 // --remote-tx-dummy: the X6100 keys itself at 0.1 W into a dummy load, its monitor
-// (the mic) goes to the rig as TX audio, then the rig keys. TXD_MONI: the monitor level
+// (the mic) goes to the rig as TX audio, then the rig keys. g_txd_moni: the monitor level
 // while keyed; TXD_LEAD_MS: the X6100 keyed this long before the rig keys
 #define TXD_ON		(g_remote_req && g_remote_cfg.tx_dummy)
-#define TXD_MONI	70
 #define TXD_LEAD_MS	150
 #define REMOTE_ON	(g_remote_req)
 #else
@@ -1756,7 +1759,7 @@ static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 		if (TXD_ON && rx->ptt) {
 			// Keyed into the dummy: TX enable as apply_local set it (band check), the
 			// monitor at a fixed level is the rig's TX audio, the mic gains as set
-			x6100_ctl_set(ctl, X6100_REG_MONILEVEL, TXD_MONI);
+			x6100_ctl_set(ctl, X6100_REG_MONILEVEL, (uint32_t) g_txd_moni);
 		} else {
 			x6100_ctl_set(ctl, X6100_REG_VFOA_BAND, 0);
 			x6100_ctl_set(ctl, X6100_REG_VFOB_BAND, 0);
@@ -11010,6 +11013,33 @@ static bool console_line(rx_t *rx, char *line)
 			continue;
 		}
 
+#ifdef X6100_REMOTE
+		// --remote-tx-dummy audio, a test aid (2026-11-14, not saved): the TX audio was
+		// noisy and hard to understand, so its levels live: the monitor level while keyed,
+		// the codec's Mic1 boost (+24 dB at 1 overdrives the input on AM; -1 as for RX)
+		// and the session's TX gain in %
+		if (strcasecmp(t, "txdmoni") == 0) {
+			want_lvl = &g_txd_moni;
+			lvl_min = 0;
+			lvl_max = 100;
+			continue;
+		}
+
+		if (strcasecmp(t, "txdboost") == 0) {
+			want_lvl = &g_txd_boost;
+			lvl_min = -1;
+			lvl_max = 7;
+			continue;
+		}
+
+		if (strcasecmp(t, "txdgain") == 0) {
+			want_lvl = &g_txd_gain;
+			lvl_min = 0;
+			lvl_max = 400;
+			continue;
+		}
+#endif
+
 		if (strcasecmp(t, "span") == 0) {
 			want_span = true;
 			continue;
@@ -13246,6 +13276,13 @@ int main(int argc, char **argv)
 		if ((want_scope || want_cwd || want_txd) && !apcm_open) {
 			int boost = rx.mode == X6100_MODE_AM || rx.mode == X6100_MODE_NFM ? 0 : 1;	/* as x6100_audio */
 
+#ifdef X6100_REMOTE
+			if (want_txd && g_txd_boost >= 0)
+				boost = g_txd_boost;	/* console txdboost */
+
+			g_txd_boost_set = boost;
+#endif
+
 			g_sql_cap = -1;	/* rx_setup turns the capture on: the squelch sets it again */
 			int prc = x6100_mixer_rx_setup(X6100_PCM_CARD, boost) < 0 ? -EIO
 				: x6100_pcm_open(&apcm, X6100_PCM_CARD, X6100_PCM_DEVICE, true, AS_RATE, 2, 1024, 4);
@@ -13467,6 +13504,10 @@ int main(int argc, char **argv)
 
 			if (x6100_mixer_rx_setup(X6100_PCM_CARD, boost) < 0 || x6100_mixer_tx_setup(X6100_PCM_CARD) < 0)
 				fprintf(stderr, "\nmod input USB: codec mixer setup failed\n");
+
+#ifdef X6100_REMOTE
+			g_txd_boost_set = boost;
+#endif
 
 			codec_routed = true;
 		}
@@ -13714,6 +13755,28 @@ int main(int argc, char **argv)
 				if (g_txd_keyed)
 					x6100_remote_ptt_alive(g_remote);
 
+				// Console txdgain / txdboost, live (txdmoni goes with apply)
+				static int gain_set = -1;
+
+				if (g_txd_gain != gain_set) {
+					x6100_remote_tx_gain(g_remote, g_txd_gain);
+					gain_set = g_txd_gain;
+				}
+
+				if (apcm_open) {
+					int boost = rx.mode == X6100_MODE_AM || rx.mode == X6100_MODE_NFM ? 0 : 1;
+
+					if (rx.ptt && g_txd_boost >= 0)
+						boost = g_txd_boost;
+
+					if (boost != g_txd_boost_set) {
+						if (x6100_mixer_set(X6100_PCM_CARD, "Mic1 Boost Volume", boost) < 0)
+							fprintf(stderr, "\nremote TX: Mic1 boost %d not set\n", boost);
+
+						g_txd_boost_set = boost;
+					}
+				}
+
 				// Keyed: once a second what goes to the rig (2026-11-14: the 7851 keyed,
 				// no audio): the capture level here, what the session sent. Capture flat:
 				// the X6100 side (mute, monitor); packets with level: the rig's input
@@ -13723,11 +13786,12 @@ int main(int argc, char **argv)
 
 					x6100_remote_tx_stats(g_remote, &ts);
 					fprintf(stderr, "\nremote TX: capture %u frames %.1f dBFS, sent %u packets %u blocks, "
-						"last block peak %.1f rms %.1f dBFS, overruns %u, tx %s, speaker %s\n",
+						"last block peak %.1f rms %.1f dBFS, overruns %u, tx %s, speaker %s, moni %d boost %d gain %d%%\n",
 						g_txd_cap_n, rms > 0.0 ? 20.0 * log10(rms) : -120.0, ts.packets, ts.blocks,
 						ts.peak > 0.0f ? 20.0 * log10(ts.peak) : -120.0,
 						ts.rms > 0.0f ? 20.0 * log10(ts.rms) : -120.0, ts.overruns,
-						ts.available ? "available" : "NOT available", g_txd_mute ? "muted" : "on");
+						ts.available ? "available" : "NOT available", g_txd_mute ? "muted" : "on", g_txd_moni,
+						g_txd_boost_set, g_txd_gain);
 					g_txd_cap_sq = 0.0;
 					g_txd_cap_n = 0;
 					g_txd_log_at = t;

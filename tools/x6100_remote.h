@@ -173,3 +173,6 @@ typedef struct
 } x6100_remote_tx_stats_t;
 
 void x6100_remote_tx_stats(x6100_remote_t *r, x6100_remote_tx_stats_t *out);
+
+// The session's TX gain in % (0-400, 100 unchanged; console txdgain)
+void x6100_remote_tx_gain(x6100_remote_t *r, int percent);

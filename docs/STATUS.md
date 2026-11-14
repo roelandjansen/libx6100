@@ -545,6 +545,14 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
        The capture level was the same with notxdmute: the mute (k) does not touch the
        TX audio, so it stays on (k confirmed). RF power: right after RF Power was added
        to our poll. To test again: the 7851 hears the voice (d).
+    o. TX audio quality (2026-11-14: it arrives, but noisy and hardly understandable;
+       the capture sits at about -33 dBFS without speech, the voice peaks about -20: some
+       13 dB above the noise). Console, live while keyed: `txdboost 0` first (Mic1 +24 dB
+       overdrives the codec input on AM, maybe on the monitor too), then `txdmoni` up
+       (voice above a fixed noise), `txdgain` for the level at the rig (its ALC). Compare
+       the capture level without speech and the voice peaks in the `remote TX:` line, and
+       how the 7851 sounds. Open as well: the TX stream is LPCM 48 kHz (about 770 kbit/s
+       over the internet); choppy rather than noisy would point there (16 kHz as RX).
     Blind spots: the monitor (level 70) also played on the X6100 speaker while keyed
     (now muted, k); CW is not handled;
     the hand mic PTT cannot key (m: not reported); a real antenna instead of the dummy radiates 0.1 W on
