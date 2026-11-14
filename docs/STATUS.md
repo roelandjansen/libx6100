@@ -666,7 +666,7 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     region; each band keeps its last frequency and mode while on that rig, a new one
     starts at the X6100's band memory of that name or the band's lower edge; NFM / AM
     kept). Checked with the real rig files: IC-9700 2m - 70cm - 23cm round, IC-785x
-    2200m .. 6m and Gen.
+    2200m .. 6m and Gen. On the 9700 (2026-11-14): band keys verified.
 
 ## Next steps (suggested order)
 
