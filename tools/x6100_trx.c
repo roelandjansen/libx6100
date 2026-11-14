@@ -10540,19 +10540,6 @@ overlays:
 		}
 	}
 
-	//
-	// Toast: a short confirmation in the middle of the spectrum (VFO A / B, A=B), drawn
-	// after the labels on the right (they cut AUDIO SCOPE: CODEC BUSY short, 2026-11-01)
-	//
-	if (g_toast[0] != '\0' && now_ms() < g_toast_until) {
-		int tw = x6100_lcd_text_width(g_toast, 3);
-		int tx = (W - tw) / 2, ty = SPEC_Y + SPEC_H / 2 - 16;
-
-		x6100_lcd_fill(lcd, tx - 14, ty - 8, tw + 28, 38, 0x000000);
-		x6100_lcd_hline(lcd, tx - 14, tx + tw + 13, ty - 8, SCR_ACCENT);
-		x6100_lcd_hline(lcd, tx - 14, tx + tw + 13, ty + 29, SCR_ACCENT);
-		x6100_lcd_text(lcd, tx, ty, 3, g_toast, SCR_ACCENT);
-	}
 
 	//
 	// Baseband watchdog: no flow (and so no new scope lines), red in the middle of the
@@ -10623,6 +10610,21 @@ overlays:
 
 	if (!portrait && (rx->tuning || (rx->tune_done && now_ms() - rx->tune_done < TUNE_SHOW_MS)))	/* portrait: TUNE in the bar */
 		draw_tune_panel(lcd, rx, scr);
+
+	//
+	// Toast: a short confirmation in the middle of the spectrum (VFO A / B, A=B, the
+	// screenshot), drawn after the labels on the right (they cut AUDIO SCOPE: CODEC BUSY
+	// short, 2026-11-01) and after the panels (an open panel hid SCREENSHOT, 2026-11-14)
+	//
+	if (g_toast[0] != '\0' && now_ms() < g_toast_until) {
+		int tw = x6100_lcd_text_width(g_toast, 3);
+		int tx = (W - tw) / 2, ty = SPEC_Y + SPEC_H / 2 - 16;
+
+		x6100_lcd_fill(lcd, tx - 14, ty - 8, tw + 28, 38, 0x000000);
+		x6100_lcd_hline(lcd, tx - 14, tx + tw + 13, ty - 8, SCR_ACCENT);
+		x6100_lcd_hline(lcd, tx - 14, tx + tw + 13, ty + 29, SCR_ACCENT);
+		x6100_lcd_text(lcd, tx, ty, 3, g_toast, SCR_ACCENT);
+	}
 
 	//
 	// SWR scan curve over the RF scope (APP): SWR 1 at the bottom, 4 at the top, grid
