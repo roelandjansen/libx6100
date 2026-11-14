@@ -720,7 +720,8 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     table (TODO). Verified on the 7760 (FIL1-3 3.0 / 2.6 / 1.8 k on rig and head); a FIL
     change first showed the head's own width (2.8, 2.4) until the rig's answer came:
     now each rig width seen is kept per mode group and FIL while on that rig, shown at
-    once on a later change (only a first visit can still flash the table value).
+    once on a later change (only a first visit can still flash the table value);
+    verified on the 7760 (2026-11-14).
     To test further: the label shows 3.00k / 2.60k / 1.80k on the 7851's FIL1-3,
     follows a width changed on the rig within about 2 s, and a FIL change at once.
     Also 2026-11-14: wfserver built from wfview v3 (main) works; the CW decoder holds
