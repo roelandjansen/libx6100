@@ -633,7 +633,7 @@ static unsigned g_conf_set;	/* GEN rows that x6100_trx.conf fixes (bit = row): s
 static bool g_conf_reading;	/* conf_load of CONF_PATH in progress */
 static bool g_conf_loading;	/* any conf_load in progress (mem lines do not save then) */
 static char g_ntp_msg[64] = "not run";	/* last NTP result, for the status page */
-static char g_toast[24];		/* short confirmation over the scope (VFO A / B, A=B) */
+static char g_toast[40];		/* short confirmation over the scope (VFO A / B, A=B); 39 characters (RIG: REMOTE.CONF NOT MODE 600 was cut at 23) */
 static uint64_t g_toast_until;	/* ms; shown while now_ms() is before this */
 
 //
@@ -1024,7 +1024,9 @@ static bool pbt_active(const rx_t *rx)
 // 2.4 / 1.8 k, with the 7851 on 3.0 / 2.6 / 1.8 k)
 static int g_remote_fil_hz;
 static bool g_remote_tuning;	/* remote: the rig's tuner is tuning (TUNE in the indicator) */
+#ifdef X6100_REMOTE
 static int g_remote_fil_kept[FG_COUNT][3];	/* the rig's widths seen, per mode group (FG_*) and FIL, while on that rig */
+#endif
 
 static void rx_filter(const rx_t *rx, uint32_t *low, uint32_t *high)
 {
@@ -4992,7 +4994,7 @@ static bool on_key(rx_t *rx, int key)
 
 		// Remote: the rig's tuner on / off (apply sends it, 2026-11-14), not ours
 		if (REMOTE_ON) {
-			toast(rx->atu_on ? "RIG ATU ON" : "RIG ATU OFF");
+			toast(rx->atu_on ? "RIG ATU ON " : "RIG ATU OFF");	/* the same width: the box stays */
 			break;
 		}
 
