@@ -471,7 +471,7 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     TX enable off, TX power 0). Verified on the radio 2026-11-11: frequency and VFO both
     ways, mode / filter, S meter, RX audio (16 kHz stream, SCHED_FIFO audio thread: no
     crackle), scope and waterfall from the 7851 (centre +- 50 kHz), the REMOTE RX note.
-    UDP in the port names (48bad70). Open points: TODO, Remote head.
+    UDP in the port names (48bad70). Open points: TODO, Remote TRX.
     Tested 2026-11-12: REMOTE RX stands, VFO / A-B both ways, S meter, audio clean,
     scope the same, PRE (PRE1), ATT (off / 12 dB), RF gain, NR, NB from the head work.
     Fixed then: CW-R from the head gave RTTY-R and the 7851's CW-R was not seen (wfview
