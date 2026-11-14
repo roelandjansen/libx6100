@@ -178,3 +178,18 @@ void x6100_remote_tx_stats(x6100_remote_t *r, x6100_remote_tx_stats_t *out);
 
 // The session's TX gain in % (0-400, 100 unchanged; console txdgain)
 void x6100_remote_tx_gain(x6100_remote_t *r, int percent);
+
+//
+// Bands
+//
+
+typedef struct
+{
+	uint32_t low;
+	uint32_t high;
+	char name[16];
+} x6100_remote_band_t;
+
+// The rig's bands from its rig file for IARU region 1-3 (and those for all), each name
+// once, by frequency; 0 until the rig file is loaded (band keys, 2026-11-14)
+size_t x6100_remote_bands(x6100_remote_t *r, int region, x6100_remote_band_t *out, size_t max);

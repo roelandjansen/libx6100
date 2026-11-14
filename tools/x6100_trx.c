@@ -900,17 +900,48 @@ static const char *band_label(const rx_t *rx, const char *none)
 	return none;
 }
 
-// The big frequency, as Icom shows it: always eight digits, so it keeps its width (a
-// remote IC-9700 at 145.5 MHz ran into the TX box, 2026-11-14): from 100 MHz the last
-// Hz digit goes (10 Hz), from 1 GHz two (100 Hz). hz1: the 1 Hz digit, else a 0 there
-static void freq_text(char *s, size_t n, uint32_t f, bool hz1)
+//
+// The big frequency (2026-11-14). Up to 99.999.999 MHz.kHz.Hz in the 73 px font; from
+// 100 MHz (a remote IC-9700: 145.5 MHz ran into the TX box) MHz.kHz there and the Hz
+// digits in the bitmap font beside it, bottoms lined up, as Icom does: all digits kept
+// (1298.375.000), at scale 4, at 3 when that is wider than FREQ_FIT (the room between
+// the VFO letter and the right edge, as wide as 74.000.000). hz1: the 1 Hz digit, else
+// a 0 there. right >= 0: right-aligned there, else centred in w
+//
+
+#define FREQ_FIT	396
+#define FREQ_GAP	6	/* between the kHz and the small Hz digits, in place of a dot */
+
+static void freq_draw(x6100_lcd_t *lcd, uint32_t f, bool hz1, int right, int w, int y, uint32_t rgb)
 {
-	if (f >= 1000000000u)
-		snprintf(s, n, "%u.%03u.%u", f / 1000000, f / 1000 % 1000, f % 1000 / 100);
-	else if (f >= 100000000u)
-		snprintf(s, n, "%u.%03u.%02u", f / 1000000, f / 1000 % 1000, f % 1000 / 10);
-	else
-		snprintf(s, n, "%u.%03u.%03u", f / 1000000, f / 1000 % 1000, hz1 ? f % 1000 : f % 1000 / 10 * 10);
+	char big[24], small[8];
+	int wb, ws = 0, sc = 0, x, base = x6100_font_freq.height;
+
+	if (f < 100000000u) {
+		snprintf(big, sizeof(big), "%u.%03u.%03u", f / 1000000, f / 1000 % 1000, hz1 ? f % 1000 : f % 1000 / 10 * 10);
+	} else {
+		snprintf(big, sizeof(big), "%u.%03u", f / 1000000, f / 1000 % 1000);
+		snprintf(small, sizeof(small), "%03u", hz1 ? f % 1000 : f % 1000 / 10 * 10);
+		sc = x6100_lcd_text_aa_width(&x6100_font_freq, big) + FREQ_GAP + x6100_lcd_text_width(small, 4) <= FREQ_FIT ? 4 : 3;
+		ws = FREQ_GAP + x6100_lcd_text_width(small, sc);
+	}
+
+	wb = x6100_lcd_text_aa_width(&x6100_font_freq, big);
+	x = right >= 0 ? right - wb - ws : (w - wb - ws) / 2;
+	x6100_lcd_text_aa(lcd, &x6100_font_freq, x, y, big, rgb);
+
+	if (sc == 0)
+		return;
+
+	// The bottom of the big digits: where the '0' glyph ends
+	for (int i = 0; i < x6100_font_freq.count; i++) {
+		if (x6100_font_freq.glyphs[i].c == '0') {
+			base = x6100_font_freq.glyphs[i].yoff + x6100_font_freq.glyphs[i].h;
+			break;
+		}
+	}
+
+	x6100_lcd_text(lcd, x + wb + FREQ_GAP, y + base - 7 * sc, sc, small, rgb);
 }
 
 //
@@ -1368,6 +1399,7 @@ static void txd_clean(int16_t *stereo, size_t frames)
 //
 
 static void upcase(char *s);
+static void rband_reset(void);
 
 #define RIG_CONF	"/etc/x6100/remote.conf"
 #define RIG_MAX		16
@@ -1687,6 +1719,7 @@ static void rig_leave(x6100_ctl_t *ctl, rx_t *rx)
 	place_put(rx, &g_place_local);
 
 	fprintf(stderr, "\nrig: %s left, LOCAL\n", rig_name(g_rig_cur));
+	rband_reset();
 	g_rig_cur = RIG_LOCAL;
 	g_remote_req = false;
 	g_remote_up = false;
@@ -1723,6 +1756,7 @@ static void rig_enter(rx_t *rx, int i)
 	if (p->txdgain >= 0)
 		g_txd_gain = p->txdgain;
 
+	rband_reset();	/* this rig's bands, read at the first band key */
 	g_rig_cur = i;
 	g_remote_req = true;
 	g_remote_up = false;
@@ -1865,6 +1899,111 @@ static int rig_of_line(int line)
 static int rig_line_of(int rig)
 {
 	return rig == RIG_LOCAL ? 0 : rig == RIG_CLI ? g_nrigs + 1 : rig + 1;
+}
+
+//
+// Band keys on a remote rig (2026-11-14: on an IC-9700 they went to 4 m and 160 m, the
+// X6100's own list): the rig's bands from its rig file, for our IARU region (r1, nl, uk:
+// 1), by frequency, round. Each band keeps its last frequency and mode while on this
+// rig; a band not yet visited starts at the X6100's band memory of that name (20m ..),
+// else at its lower edge. Where several bands hold the frequency (Gen), the narrowest
+//
+
+#define RBAND_MAX	32
+
+static void set_freq(rx_t *rx, int64_t freq);
+
+static x6100_remote_band_t g_rbands[RBAND_MAX];
+static int g_nrbands;				/* 0: not read yet (the rig file loads after the link) */
+static uint32_t g_rband_freq[RBAND_MAX];
+static x6100_mode_t g_rband_mode[RBAND_MAX];
+static bool g_rband_seen[RBAND_MAX];
+
+static void rband_reset(void)
+{
+	g_nrbands = 0;
+	memset(g_rband_seen, 0, sizeof(g_rband_seen));
+}
+
+static int rband_of(uint32_t f)
+{
+	int cur = -1;
+
+	for (int i = 0; i < g_nrbands; i++) {
+		if (f >= g_rbands[i].low && f <= g_rbands[i].high
+			&& (cur < 0 || g_rbands[i].high - g_rbands[i].low < g_rbands[cur].high - g_rbands[cur].low))
+			cur = i;
+	}
+
+	return cur;
+}
+
+static bool remote_band_step(rx_t *rx, int dir)
+{
+	int cur, next;
+	uint32_t f;
+	x6100_mode_t m;
+
+	if (g_nrbands == 0 && g_remote != NULL) {
+		const char *rn = g_regions[g_region].name;
+		int iaru = strcmp(rn, "r2") == 0 ? 2 : strcmp(rn, "r3") == 0 ? 3 : 1;
+
+		g_nrbands = (int) x6100_remote_bands(g_remote, iaru, g_rbands, RBAND_MAX);
+		memset(g_rband_seen, 0, sizeof(g_rband_seen));
+	}
+
+	if (g_nrbands == 0) {
+		toast("RIG BANDS NOT KNOWN YET");
+		return true;
+	}
+
+	cur = rband_of(rx->freq);
+
+	if (cur >= 0) {
+		g_rband_freq[cur] = rx->freq;
+		g_rband_mode[cur] = rx->mode;
+		g_rband_seen[cur] = true;
+		next = (cur + dir + g_nrbands) % g_nrbands;
+	} else if (dir > 0) {
+		next = 0;
+
+		for (int i = 0; i < g_nrbands; i++) {
+			if (g_rbands[i].low > rx->freq) {
+				next = i;
+				break;
+			}
+		}
+	} else {
+		next = g_nrbands - 1;
+
+		for (int i = g_nrbands - 1; i >= 0; i--) {
+			if (g_rbands[i].high < rx->freq) {
+				next = i;
+				break;
+			}
+		}
+	}
+
+	if (g_rband_seen[next]) {
+		f = g_rband_freq[next];
+		m = g_rband_mode[next];
+	} else {
+		f = g_rbands[next].low;
+
+		for (int k = 0; k < BAND_COUNT; k++) {
+			if (strcasecmp(g_bands[k].name, g_rbands[next].name) == 0 && rx->band_freq[k] >= g_rbands[next].low
+				&& rx->band_freq[k] <= g_rbands[next].high)
+				f = rx->band_freq[k];
+		}
+
+		m = rx->mode == X6100_MODE_NFM || rx->mode == X6100_MODE_AM ? rx->mode
+			: f < 10000000 ? X6100_MODE_LSB : X6100_MODE_USB;
+	}
+
+	rx->mem_mode = false;
+	set_freq(rx, f);
+	rx->mode = m;
+	return true;
 }
 
 // GEN held RIG_PRESS_MS: the panel, on the rig in use
@@ -4764,10 +4903,14 @@ static bool on_key(rx_t *rx, int key)
 				: rx->step == 5000 ? 10000 : rx->step == 10000 ? 100000 : 10;
 		break;
 	case X6100_KEY_BAND_UP:
-		band_step(rx, +1);
-		break;
 	case X6100_KEY_BAND_DOWN:
-		band_step(rx, -1);
+#ifdef X6100_REMOTE
+		if (REMOTE_ON) {	/* the rig's bands, not the X6100's */
+			remote_band_step(rx, key == X6100_KEY_BAND_UP ? +1 : -1);
+			break;
+		}
+#endif
+		band_step(rx, key == X6100_KEY_BAND_UP ? +1 : -1);
 		break;
 	case X6100_KEY_SSB:
 		am_mode(rx, rx->mode == X6100_MODE_USB ? X6100_MODE_LSB : X6100_MODE_USB);
@@ -9545,9 +9688,7 @@ static void draw_portrait(screen_t *scr, const rx_t *rx)
 		// Always three digits after the kHz, so the width does not change with the step: the
 		// Hz digit with the 1 Hz step (FST long), else a 0 there (2026-11-07; before, two
 		// digits and the line jumped when the 1 Hz step came on)
-		freq_text(s, sizeof(s), f, rx->step < 10);
-		x6100_lcd_text_aa(lcd, &x6100_font_freq, (W - x6100_lcd_text_aa_width(&x6100_font_freq, s)) / 2,
-			P_FREQ_Y, s, SCR_FREQ);
+		freq_draw(lcd, f, rx->step < 10, -1, W, P_FREQ_Y, SCR_FREQ);
 	}
 
 	//
@@ -9824,10 +9965,8 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 		uint32_t f = rx->send == SEND_SCAN && rx->tx_hz_ovr != 0 ? rx->tx_hz_ovr
 			: !on ? rx->freq : rx->split ? rx->b_freq : (uint32_t) ((int64_t) rx->freq + dup_shift(rx));
 
-		freq_text(s, sizeof(s), f, true);
+		freq_draw(lcd, f, true, FREQ_X + 480, 0, FREQ_Y - 17, SCR_FREQ);
 	}
-	x6100_lcd_text_aa(lcd, &x6100_font_freq, FREQ_X + (480 - x6100_lcd_text_aa_width(&x6100_font_freq, s)),
-		FREQ_Y - 17, s, SCR_FREQ);
 
 	//
 	// Info line in fixed columns, so changing values never shift the other fields

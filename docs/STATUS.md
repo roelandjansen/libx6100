@@ -657,6 +657,16 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     145.5 / 435 / 1296; b. the VFO knob tunes the 9700 (no jump to 75 MHz); c. no OOB
     on 2 m; d. TX via the dummy on 2 m: the 9700 hears the mic, the X6100 keys at
     14.200 (status line); e. back to LOCAL: the X6100's own range again.
+    First test on the 9700 (2026-11-14): connects from the RIG panel; a 23 cm repeater
+    with its shift works, RX and TX. Then fixed: 1298.375.000 was cut to 1298.375.0;
+    now from 100 MHz the Hz digits are drawn small beside MHz.kHz (Icom style, bitmap
+    font at scale 4, 3 when too wide; bottoms lined up; all digits kept; rendered: no
+    overlap with the TX box). The band keys went to 70.500 and 160 m (the X6100's own
+    list): remote, they now step through the rig's bands from its rig file (for the
+    region; each band keeps its last frequency and mode while on that rig, a new one
+    starts at the X6100's band memory of that name or the band's lower edge; NFM / AM
+    kept). Checked with the real rig files: IC-9700 2m - 70cm - 23cm round, IC-785x
+    2200m .. 6m and Gen.
 
 ## Next steps (suggested order)
 

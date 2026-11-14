@@ -772,3 +772,47 @@ void x6100_remote_tx_gain(x6100_remote_t *r, int percent)
 {
 	tx_set_mic_gain(r->s, percent);
 }
+
+//
+// The rig's bands from its wfview rig file: those for IARU region `region` (1-3; the
+// file has some per region, 40 m, 80 m, 2 m, 70 cm) and those for all, each name once,
+// by frequency. 0 while the rig file is not loaded
+//
+
+static int band_cmp(const void *a, const void *b)
+{
+	const x6100_remote_band_t *x = a, *y = b;
+
+	return x->low < y->low ? -1 : x->low > y->low ? 1 : 0;
+}
+
+size_t x6100_remote_bands(x6100_remote_t *r, int region, x6100_remote_band_t *out, size_t max)
+{
+	const struct rig_def *def = session_rig_def(r->s);
+	size_t n = 0;
+
+	if (def == NULL)
+		return 0;
+
+	for (size_t i = 0; i < def->n_bands && n < max; i++) {
+		const struct rig_band *b = &def->bands[i];
+		bool twice = false;
+
+		if ((b->region[0] != '\0' && atoi(b->region) != region) || b->end > UINT32_MAX || b->end <= b->start)
+			continue;
+
+		for (size_t k = 0; k < n; k++)
+			twice |= strcmp(out[k].name, b->name) == 0;
+
+		if (twice)
+			continue;
+
+		out[n].low = (uint32_t) b->start;
+		out[n].high = (uint32_t) b->end;
+		snprintf(out[n].name, sizeof(out[n].name), "%s", b->name);
+		n++;
+	}
+
+	qsort(out, n, sizeof(out[0]), band_cmp);
+	return n;
+}
