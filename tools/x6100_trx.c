@@ -13947,9 +13947,10 @@ int main(int argc, char **argv)
 			if (remote_now != remote_shown) {
 				// 3: the rig has not answered its ID yet (2026-11-12: up to some 90 s when
 				// started again soon after the last session; it heals by itself)
-				// With --remote-tx-dummy the standing note says how this head transmits
+				// With --remote-tx-dummy the standing note says this head transmits too: REMOTE TRX
+				// (was REMOTE, TX VIA DUMMY 0.1 W; 2026-11-14)
 				static const char *const msg[] = { "REMOTE LINK", "REMOTE RX", "REMOTE TX", "REMOTE: WAIT FOR RIG" };
-				const char *m = remote_now == 1 && g_remote_cfg.tx_dummy ? "REMOTE, TX VIA DUMMY 0.1 W" : msg[remote_now];
+				const char *m = remote_now == 1 && g_remote_cfg.tx_dummy ? "REMOTE TRX" : msg[remote_now];
 
 				rx.warn = g_remote_note = m;
 
