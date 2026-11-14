@@ -18,6 +18,21 @@ Source, documentation and issues: https://github.com/roelandjansen/libx6100
 | `etc/init.d/S96x6100_trx` | `/etc/init.d/S96x6100_trx` | starts x6100_trx at boot, only after `x6100_ui.sh boot trx` |
 | `opt/wfserver/` | `/opt/wfserver/` | wfserver for wfview, with X6100.rig (only in archives built with it) |
 
+## First: your ssh key on the radio
+
+OpenX6X00 lets root in with a key only, never with a password (`ssh` says
+`Permission denied (publickey)`). Once, on the PC:
+
+```
+ssh-keygen -t ed25519           # Enter for the defaults; skip when you have a key
+cat ~/.ssh/id_ed25519.pub       # the one line to copy
+```
+
+Then in a browser `http://<address of the radio>/ssh`, paste that line under "Add a
+key" and press Add. `ssh root@<address of the radio>` works from then on. The radio
+keeps the key in its backup on the card's data partition, so it survives a new image
+written over the old one.
+
 ## Install
 
 On the PC (Linux, with `ssh` and GNU `tar`):
@@ -29,8 +44,8 @@ cd x6100_trx-<version>
 ```
 
 Use the radio's own address (shown by OpenX6X00, or your router), or change
-`C_DEFAULT_HOST` at the top of `install.sh`. ssh asks for the radio's root password
-once.
+`C_DEFAULT_HOST` at the top of `install.sh`. It uses your ssh key (above): one
+connection for everything.
 
 The install step on the radio:
 

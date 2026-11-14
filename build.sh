@@ -609,7 +609,7 @@ usage() {
 		'               from contrib/wfserver/build.sh) to /opt/wfserver when there and changed' \
 		'  dist         the same build, then out/x6100_trx-<rev>.tar.gz for OpenX6X00 images:' \
 		'               the files at their places on the radio, install.sh (run on the PC:' \
-		'               ./install.sh <address>, the root password once) and README.md;' \
+		'               ./install.sh <address>, one ssh connection with your key) and README.md;' \
 		'               with the wfserver bundle (stops when it is not built:' \
 		'               contrib/wfserver; --no-wfserver: without); no settings or passwords' \
 		'  backup       copy the radio settings (/etc/x6100) to $X6100_CONFIG' \

@@ -227,7 +227,8 @@ bash build.sh -f --no-pull    # force a build, no pull
 
 `dist` (2026-11-14) makes an archive for anyone with a freshly flashed OpenX6X00 image:
 wfserver and the files at their places on the radio, `install.sh` (run on a Linux PC:
-`./install.sh <address of the radio>`; one tar over ssh, the root password once) and a
+`./install.sh <address of the radio>`; one tar over ssh with your key: OpenX6X00 takes
+root with a key only, added once on `http://<radio>/ssh`) and a
 README. The install step on the radio sets owners and modes and copies the example
 settings only where none are there; it installs no `remote.conf` (passwords) and does
 not change the boot choice. Build the wfserver bundle first (contrib/wfserver): without

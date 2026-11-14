@@ -8,8 +8,10 @@
 # networks (passwords), the Bluetooth pairings, the ssh
 # key that lets you in and the hosts you reached, the shell history, and OpenX6X00's own
 # backup of the WiFi, ssh keys and /root/.ssh on the data partition
-# (/mnt/backups/backup.tgz: restored at every boot, it brought them back after a clean
-# or a new image, 2026-11-14). Optional: the ssh host keys (-k) and the
+# (/mnt/backups/backup.tgz: restored at the first boot of a new image, it brought them
+# back, 2026-11-14; OpenX6X00 writes it anew at every shutdown, from the files then
+# there, so after this it holds nothing of yours). The new owner adds a key on
+# http://<radio>/ssh (root takes a key only). Optional: the ssh host keys (-k) and the
 # start logs on /mnt/app_logs (-l). x6100_trx starts with its defaults when its files
 # are missing. Kept: x6100_trx itself, x6100_ui.sh, the boot choice (boot.trx), the
 # filter widths, the image.

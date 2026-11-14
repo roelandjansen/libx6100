@@ -8,7 +8,8 @@ set -euo pipefail
 #        or change C_DEFAULT_HOST below and run ./install.sh
 #
 # Streams payload/ to the radio as one tar over ssh and runs the install step there in
-# the same session, so ssh asks for the radio's root password once. Existing settings
+# the same session: one connection. OpenX6X00 takes root with a key only (no password):
+# add yours first on http://<radio>/ssh (README.md). Existing settings
 # in /etc/x6100 are kept; a remote.conf (passwords) is never installed. Needs ssh and
 # GNU tar on this PC; nothing here needs elevated rights on the PC.
 #
@@ -67,9 +68,15 @@ G_LIST="$(mktemp)"
 # on the radio from this PC; the radio's tar makes missing parents itself
 (cd -- "${G_HERE}/payload" && find . -type f -o -type l) > "${G_LIST}"
 
-printf '%s\n' "installing $(wc -l < "${G_LIST}") files on ${G_HOST} (the radio's root password, once)"
+printf '%s\n' "installing $(wc -l < "${G_LIST}") files on ${G_HOST}"
 
-tar -C "${G_HERE}/payload" --owner=0 --group=0 --numeric-owner -cf - -T "${G_LIST}" \
-	| ssh -C -- "${G_HOST}" "tar -xf - -C / && sh ${C_POST}"
+if ! tar -C "${G_HERE}/payload" --owner=0 --group=0 --numeric-owner -cf - -T "${G_LIST}" \
+	| ssh -C -- "${G_HOST}" "tar -xf - -C / && sh ${C_POST}"; then
+	printf '%s\n' 'error: the install did not finish.' \
+		'  "Permission denied (publickey)": OpenX6X00 takes root with a key only. Make one' \
+		'  (ssh-keygen -t ed25519), paste ~/.ssh/id_ed25519.pub on http://<radio>/ssh, then' \
+		'  run this again (README.md, "First: your ssh key on the radio")' >&2
+	exit 1
+fi
 
 printf '%s\n' 'done'

@@ -719,7 +719,7 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     /root/x6100_dist/ with the examples and post_install.sh, /etc/init.d/S96x6100_trx,
     /opt/wfserver with X6100.rig / X6200.rig when the bundle is built), install.sh
     (PC, bash: files and links only as one tar over ssh, owner root, then
-    post_install.sh in the same session: the root password once) and README.md.
+    post_install.sh in the same session: one ssh connection) and README.md.
     post_install.sh (busybox): owners, modes, /etc/x6100 with the examples where a file
     is missing (existing settings kept), wfserver.ini likewise; never remote.conf, never
     the boot choice. Checked here with a stand-in binary and the wfserver bundle: 194
@@ -736,6 +736,14 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     why the ssh key still worked after dd of a new image (2026-11-14). For a radio
     without that backup (Jan's) the first login needs the password. x6100_giveaway.sh
     now removes that backup too: it brought the key and the WiFi passwords back.
+    OpenX6X00 takes root with a key only (sshd_config: PasswordAuthentication no,
+    PermitRootLogin prohibit-password): Jan's first ssh said Permission denied
+    (publickey). The key goes in on the radio's web page http://<radio>/ssh ("Add a
+    key"). The backup restore (S04restore_backup_config) runs only on a freshly
+    written card (no ssh host keys yet) and takes only regular files under the WiFi,
+    etc/ssh key and root/.ssh folders; backup() writes it anew at every shutdown.
+    The dist README now starts with the key step; install.sh says what to do when ssh
+    refuses.
 
 ## Next steps (suggested order)
 
