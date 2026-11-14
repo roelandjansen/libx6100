@@ -38,6 +38,13 @@ typedef struct
 	const char *user;
 	const char *pass;
 	const char *rig_dir;		/* wfview .rig files */
+
+	//
+	// TX through a dummy load (--remote-tx-dummy): the X6100 keys its own baseband at
+	// 0.1 W into a dummy, its monitor (the mic) comes back on the codec capture and goes
+	// to the rig as TX audio. false: receive only, PTT refused by the session
+	//
+	bool tx_dummy;
 } x6100_remote_cfg_t;
 
 typedef struct
@@ -137,3 +144,14 @@ bool x6100_remote_scope(x6100_remote_t *r, x6100_remote_scope_t *out);
 // The received audio (left channel, 48 kHz S16) since the last call, at most max
 // samples; for the CW decoder (main loop)
 size_t x6100_remote_audio_tap(x6100_remote_t *r, int16_t *out, size_t max);
+
+//
+// TX (--remote-tx-dummy only; the session refuses PTT otherwise). Main loop:
+// x6100_remote_ptt keys or releases the rig, x6100_remote_ptt_alive while keyed (the
+// session drops PTT when it stops), x6100_remote_tx_audio the monitor from the capture
+// (S16 stereo, 48 kHz)
+//
+
+int x6100_remote_ptt(x6100_remote_t *r, bool on);
+void x6100_remote_ptt_alive(x6100_remote_t *r);
+void x6100_remote_tx_audio(x6100_remote_t *r, const int16_t *stereo, size_t frames);

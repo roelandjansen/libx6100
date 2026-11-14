@@ -1106,9 +1106,19 @@ static const char *g_remote_note = "REMOTE RX";	/* remote head: the note that st
 static bool g_remote_req;		/* --remote: control head for a remote Icom, receive only */
 static x6100_remote_cfg_t g_remote_cfg = { .rig_dir = "/opt/wfserver/share/wfview/rigs" };
 static x6100_remote_t *g_remote;
+static bool g_remote_up;		/* link up and the rig file loaded (main loop, from the poll) */
+static bool g_txd_keyed;		/* --remote-tx-dummy: the rig keyed by us */
+
+// --remote-tx-dummy: the X6100 keys itself at 0.1 W into a dummy load, its monitor
+// (the mic) goes to the rig as TX audio, then the rig keys. TXD_MONI: the monitor level
+// while keyed; TXD_LEAD_MS: the X6100 keyed this long before the rig keys
+#define TXD_ON		(g_remote_req && g_remote_cfg.tx_dummy)
+#define TXD_MONI	70
+#define TXD_LEAD_MS	150
 #define REMOTE_ON	(g_remote_req)
 #else
 #define REMOTE_ON	false
+#define TXD_ON		false
 #endif
 
 //
@@ -1728,16 +1738,23 @@ static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 	if (g_remote_req) {
 		x6100_atu_t none = { 0, 0, 0 };
 
-		x6100_ctl_set(ctl, X6100_REG_VFOA_BAND, 0);
-		x6100_ctl_set(ctl, X6100_REG_VFOB_BAND, 0);
-		x6100_set_txpwr(ctl, 0.0f);
+		x6100_set_txpwr(ctl, 0.1f);	/* the floor (x6100_set_txpwr clamps 0 to 0.1 W too) */
 		x6100_atu_set_network(ctl, &none);
 		x6100_ctl_set(ctl, X6100_REG_RXVOL, rx->mute ? 0 : (uint32_t) rx->vol);
 
-		// No mic path to the speaker: monitor off, both mic gains 0 (a plugged-in mic
-		// fed the speaker back into itself, 2026-11-11); line levels kept
-		x6100_ctl_set(ctl, X6100_REG_MONILEVEL, 0);
-		x6100_ctl_set(ctl, X6100_REG_AUDIO_GAIN, X6100_R20(rx->line_in, rx->line_out, 0, 0));
+		if (TXD_ON && rx->ptt) {
+			// Keyed into the dummy: TX enable as apply_local set it (band check), the
+			// monitor at a fixed level is the rig's TX audio, the mic gains as set
+			x6100_ctl_set(ctl, X6100_REG_MONILEVEL, TXD_MONI);
+		} else {
+			x6100_ctl_set(ctl, X6100_REG_VFOA_BAND, 0);
+			x6100_ctl_set(ctl, X6100_REG_VFOB_BAND, 0);
+
+			// No mic path to the speaker: monitor off, both mic gains 0 (a plugged-in
+			// mic fed the speaker back into itself, 2026-11-11); line levels kept
+			x6100_ctl_set(ctl, X6100_REG_MONILEVEL, 0);
+			x6100_ctl_set(ctl, X6100_REG_AUDIO_GAIN, X6100_R20(rx->line_in, rx->line_out, 0, 0));
+		}
 
 		if (g_remote != NULL) {
 			x6100_remote_rx_t r = {
@@ -1755,7 +1772,15 @@ static void apply_flags(x6100_ctl_t *ctl, const rx_t *rx)
 {
 #ifdef X6100_REMOTE
 	if (g_remote_req) {
-		x6100_ctl_set(ctl, X6100_REG_FLAGS, X6100_FLAG_VOICE_REC);
+		// Keyed into the dummy (--remote-tx-dummy): the mic PTT alone, no play mode, no
+		// codec TX or tuner; else play mode alone
+		if (TXD_ON && rx->ptt) {
+			x6100_ctl_set(ctl, X6100_REG_FLAGS, 0);
+			x6100_set_ptt(ctl, true);
+		} else {
+			x6100_ctl_set(ctl, X6100_REG_FLAGS, X6100_FLAG_VOICE_REC);
+		}
+
 		return;
 	}
 #endif
@@ -1776,8 +1801,15 @@ static bool tx_allowed(rx_t *rx)
 #endif
 
 #ifdef X6100_REMOTE
-	if (g_remote_req) {
+	// Remote head: receive only, unless --remote-tx-dummy and the rig is there; then the
+	// checks below go on for the X6100's own (dummy load) TX
+	if (g_remote_req && !g_remote_cfg.tx_dummy) {
 		rx->warn = "REMOTE RX";
+		return false;
+	}
+
+	if (TXD_ON && !g_remote_up) {
+		rx->warn = "REMOTE LINK";
 		return false;
 	}
 #endif
@@ -9686,6 +9718,8 @@ static void help_options(FILE *fp, const char *argv0)
 		"  --remote <host> <udp port> <user> <password>\n"
 		"                    control head for a remote Icom (wfserver or its LAN port), receive only\n"
 		"  --rigs <dir>      wfview .rig files for --remote (default /opt/wfserver/share/wfview/rigs)\n"
+		"  --remote-tx-dummy with --remote: TX on the rig with the X6100 mic. The X6100 keys itself\n"
+		"                    at 0.1 W: A DUMMY LOAD ON ITS ANTENNA PORT; its monitor is the TX audio\n"
 #endif
 		"  --cat[=baud|pty]  CI-V on the DEV port (4800-19200), or the pty only\n"
 		"  --cat-log         print CI-V commands and refusals\n"
@@ -12806,6 +12840,11 @@ int main(int argc, char **argv)
 			continue;
 		}
 
+		if (strcmp(argv[i], "--remote-tx-dummy") == 0) {
+			g_remote_cfg.tx_dummy = true;
+			continue;
+		}
+
 		if (strcmp(argv[i], "--rigs") == 0 && i + 1 < argc) {
 			g_remote_cfg.rig_dir = argv[++i];
 			continue;
@@ -13107,6 +13146,11 @@ int main(int argc, char **argv)
 				if (got > 0)
 					audio_feed(&scr, abuf, (unsigned) got, 2);
 
+#ifdef X6100_REMOTE
+				if (got > 0 && g_remote != NULL && g_txd_keyed)
+					x6100_remote_tx_audio(g_remote, abuf, (size_t) got);	/* the monitor: the rig's TX audio */
+#endif
+
 				if (got > 0 && cwd_active(&rx) && !REMOTE_ON)
 					cwd_feed(abuf, (unsigned) got, 2, rx.cwtone);	/* the CW decoder */
 
@@ -13158,7 +13202,10 @@ int main(int argc, char **argv)
 		const bool cwd_codec = cwd_active(&rx) && !REMOTE_ON;	/* remote: the stream feeds it */
 		const bool want_cwd = cwd_codec && (cwd_busy_at == 0 || cap_now - cwd_busy_at >= 10000);
 
-		if ((want_scope || want_cwd) && !apcm_open) {
+		// --remote-tx-dummy keyed: the capture carries the monitor, the rig's TX audio
+		const bool want_txd = TXD_ON && rx.ptt;
+
+		if ((want_scope || want_cwd || want_txd) && !apcm_open) {
 			int boost = rx.mode == X6100_MODE_AM || rx.mode == X6100_MODE_NFM ? 0 : 1;	/* as x6100_audio */
 
 			g_sql_cap = -1;	/* rx_setup turns the capture on: the squelch sets it again */
@@ -13168,13 +13215,19 @@ int main(int argc, char **argv)
 			if (prc < 0) {
 				// Busy: another program has the codec capture (wfserver, pulseaudio's
 				// Bluetooth loopback); the open no longer waits for it
-				fprintf(stderr, "\n%s: codec capture not available: %s\n", want_scope ? "audio scope" : "CW decoder",
-					strerror(-prc));
+				fprintf(stderr, "\n%s: codec capture not available: %s\n", want_txd ? "remote TX" : want_scope
+					? "audio scope" : "CW decoder", strerror(-prc));
+
+				// --remote-tx-dummy: without the capture there is no TX audio and the rig would
+				// never key, the X6100 keyed into its dummy meanwhile: drop the TX (and so no
+				// open again on every pass)
+				if (want_txd)
+					tx_drop(&rx, prc == -EBUSY ? "REMOTE TX: CODEC BUSY" : "REMOTE TX: NO CAPTURE");
 
 				if (want_scope) {
 					toast(prc == -EBUSY ? "AUDIO SCOPE: CODEC BUSY" : "AUDIO SCOPE: NO CAPTURE");
 					rx.ascope = rx.asplit = false;
-				} else if (cwd_busy_at == 0) {	/* said once; tried again every 10 s */
+				} else if (!want_txd && cwd_busy_at == 0) {	/* said once; tried again every 10 s */
 					toast(prc == -EBUSY ? "CW DECODER: CODEC BUSY" : "CW DECODER: NO CAPTURE");
 				}
 
@@ -13185,7 +13238,7 @@ int main(int argc, char **argv)
 				cwd_busy_at = 0;
 				pfd[apcm_slot].fd = apcm.fd;
 			}
-		} else if (!want_scope && !cwd_codec && apcm_open) {
+		} else if (!want_scope && !cwd_codec && !want_txd && apcm_open) {
 			x6100_pcm_close(&apcm);
 			apcm_open = false;
 			pfd[apcm_slot].fd = -1;
@@ -13578,12 +13631,43 @@ int main(int argc, char **argv)
 			if (remote_now != remote_shown) {
 				// 3: the rig has not answered its ID yet (2026-11-12: up to some 90 s when
 				// started again soon after the last session; it heals by itself)
+				// With --remote-tx-dummy the standing note says how this head transmits
 				static const char *const msg[] = { "REMOTE LINK", "REMOTE RX", "REMOTE TX", "REMOTE: WAIT FOR RIG" };
+				const char *m = remote_now == 1 && g_remote_cfg.tx_dummy ? "REMOTE, TX VIA DUMMY 0.1 W" : msg[remote_now];
 
-				rx.warn = g_remote_note = msg[remote_now];
+				rx.warn = g_remote_note = m;
 
 				remote_shown = remote_now;
 				changed = true;
+			}
+
+			g_remote_up = rs.connected && rs.rig_ready;
+
+			//
+			// --remote-tx-dummy: the rig keys TXD_LEAD_MS after the X6100 (its monitor is
+			// flowing by then) and is released in the same pass the X6100's PTT goes, before
+			// apply_flags unkeys the X6100. Alive every pass while keyed (500 ms heartbeat
+			// in the session); link loss or a refused PTT drops both
+			//
+			if (TXD_ON) {
+				const bool want = rx.ptt && g_remote_up && apcm_open && t - rx.ptt_since >= TXD_LEAD_MS;
+
+				if (rx.ptt && !g_remote_up) {
+					tx_drop(&rx, "REMOTE LINK");
+					changed = true;
+				}
+
+				if (want != g_txd_keyed) {
+					if (x6100_remote_ptt(g_remote, want) == 0 || !want) {
+						g_txd_keyed = want;
+					} else {
+						tx_drop(&rx, "REMOTE PTT REFUSED");
+						changed = true;
+					}
+				}
+
+				if (g_txd_keyed)
+					x6100_remote_ptt_alive(g_remote);
 			}
 		}
 #endif
@@ -14019,6 +14103,9 @@ int main(int argc, char **argv)
 #ifdef X6100_REMOTE
 	// Remote head: the session and the playback go, the baseband back out of play mode
 	if (g_remote != NULL) {
+		if (g_txd_keyed)
+			x6100_remote_ptt(g_remote, false);	/* the rig first, as in the loop */
+
 		x6100_remote_close(g_remote);
 		g_remote = NULL;
 	}

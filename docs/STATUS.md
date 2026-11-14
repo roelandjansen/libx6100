@@ -500,6 +500,32 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     signal nearby. As a remote head (2026-11-12): fed from the stream (the audio thread's
     left channel through a small ring) at the rig's CW pitch (CW Pitch in the head's own
     poll): works (2026-11-12).
+49. Remote TX through a dummy load (2026-11-14; `--remote-tx-dummy` with `--remote`): the
+    X6100 keys itself at 0.1 W into a DUMMY LOAD on its antenna port, its monitor (the
+    mic, processed) comes back on the codec capture and goes to the rig as TX audio; the
+    rig keys 150 ms later over LAN (heartbeat 500 ms, rig time-out 180 s) and lets go
+    first. Fixed on applying: codec busy left the X6100 keyed with the rig never keyed
+    (now dropped, REMOTE TX: CODEC BUSY). Test plan (first both radios into dummy loads):
+    a. Before: X6100 dummy on its antenna port; the 7851's DATA OFF MOD (SSB) on LAN, else
+       it sends its own mic; wfserver off on the X6100 (the codec); note oob in the state.
+    b. Start with --remote-tx-dummy: the note reads REMOTE, TX VIA DUMMY 0.1 W.
+    c. PTT while REMOTE: WAIT FOR RIG: refused (REMOTE LINK).
+    d. PTT held and tapped (latched): X6100 TX at 0.1 W, the 7851 keys ~150 ms later; its
+       PO / ALC follow the voice. Mic gain (TX panel) for the 7851's ALC; listen for
+       clipping (Mic1 boost +24 dB in SSB) on a second receiver.
+    e. Release: the 7851 first, then the X6100; no tail of carrier.
+    f. Link lost while keyed (WiFi off): TX dropped (REMOTE LINK), the rig released by the
+       heartbeat within 0.5 s. Quit while keyed: rig first. kill -9 while keyed: the rig
+       lets go (heartbeat); check the X6100 baseband is not left keyed.
+    g. wfserver running, PTT: REMOTE TX: CODEC BUSY, nothing keyed.
+    h. SQL above the noise: the TX audio still goes. USB, LSB, AM, FM; CW (not meant for
+       it: see what happens). Hand mic PTT: nothing should key (TX enable off unkeyed).
+    i. Hold over 180 s: the rig's time-out; the X6100's TOT.
+    j. Without --remote-tx-dummy: receive only as before, PTT refused (REMOTE RX).
+    Blind spots: the monitor (level 70) also plays on the X6100 speaker while keyed
+    (feedback with the internal mic: headphones, or a mute to add); CW is not handled;
+    the hand mic PTT is not used; a real antenna instead of the dummy radiates 0.1 W on
+    the rig's frequency (with oob anywhere); the audio level path is fixed (TXD_MONI).
 
 ## Next steps (suggested order)
 

@@ -288,7 +288,9 @@ int x6100_remote_open(x6100_remote_t **out, const x6100_remote_cfg_t *cfg)
 	// RX: LPCM 16 bit stereo at C_NET_RATE (no decode cost on the R16), 150 ms as wfview.
 	// TX: the stream request still carries a TX codec, rate and buffer as wfview
 	// sends them (a rig that announces TX ignores a request with zeros there: no
-	// streams, no LAN on the 7851). No TX all the same: no capture rate, PTT disabled
+	// streams, no LAN on the 7851). Receive only: no capture rate, PTT disabled. With
+	// tx_dummy: the capture at C_RATE (the X6100 monitor), PTT with a 500 ms heartbeat
+	// and the rig's time-out at 180 s
 	//
 	p.rx_codec = AUDIO_CODEC_PCM16_2;
 	p.rx_sample = C_NET_RATE;
@@ -297,8 +299,11 @@ int x6100_remote_open(x6100_remote_t **out, const x6100_remote_cfg_t *cfg)
 	p.tx_sample = C_RATE;
 	p.tx_latency = 150;
 	p.dev_rate = C_RATE;
-	p.cap_rate = 0;
-	p.enable_ptt = false;
+	p.cap_rate = cfg->tx_dummy ? C_RATE : 0;
+	p.enable_ptt = cfg->tx_dummy;
+	p.ptt_heartbeat_ms = cfg->tx_dummy ? 500 : 0;
+	p.ptt_timeout_enabled = true;
+	p.ptt_timeout_s = 180;
 
 	memset(&h, 0, sizeof(h));
 
@@ -709,4 +714,30 @@ size_t x6100_remote_audio_tap(x6100_remote_t *r, int16_t *out, size_t max)
 
 	atomic_store_explicit(&r->tap_r, rd + n, memory_order_release);
 	return n;
+}
+
+int x6100_remote_ptt(x6100_remote_t *r, bool on)
+{
+	return tx_ptt(r->s, on ? 1 : 0);
+}
+
+void x6100_remote_ptt_alive(x6100_remote_t *r)
+{
+	tx_ptt_heartbeat(r->s);
+}
+
+void x6100_remote_tx_audio(x6100_remote_t *r, const int16_t *stereo, size_t frames)
+{
+	float buf[1024 * 2];
+
+	while (frames > 0) {
+		size_t n = frames < 1024 ? frames : 1024;
+
+		for (size_t i = 0; i < n * 2; i++)
+			buf[i] = (float) stereo[i] / 32768.0f;
+
+		tx_capture_write(r->s, buf, n, 2);
+		stereo += n * 2;
+		frames -= n;
+	}
 }
