@@ -1023,6 +1023,7 @@ static bool pbt_active(const rx_t *rx)
 // polled), 0 locally or not known yet (2026-11-14: the head showed its own table, 2.8 /
 // 2.4 / 1.8 k, with the 7851 on 3.0 / 2.6 / 1.8 k)
 static int g_remote_fil_hz;
+static int g_remote_fil_kept[FG_COUNT][3];	/* the rig's widths seen, per mode group (FG_*) and FIL, while on that rig */
 
 static void rx_filter(const rx_t *rx, uint32_t *low, uint32_t *high)
 {
@@ -1762,6 +1763,7 @@ static void rig_leave(x6100_ctl_t *ctl, rx_t *rx)
 	g_txd_keyed = false;
 	g_remote_pwr = -1;
 	g_remote_fil_hz = 0;	/* the head's own filter widths until the rig says */
+	memset(g_remote_fil_kept, 0, sizeof(g_remote_fil_kept));
 	g_remote_shown = -1;
 	g_remote_try_at = 0;
 	x6100_ctl_set(ctl, X6100_REG_FLAGS, 0);
@@ -1799,6 +1801,7 @@ static void rig_enter(rx_t *rx, int i)
 	g_remote_up = false;
 	g_remote_pwr = -1;
 	g_remote_fil_hz = 0;	/* the head's own filter widths until the rig says */
+	memset(g_remote_fil_kept, 0, sizeof(g_remote_fil_kept));
 	g_remote_shown = -1;
 	g_txd_gain_set = -1;
 	g_remote_tries = RIG_OPEN_TRIES;
@@ -14923,10 +14926,23 @@ int main(int argc, char **argv)
 				dirty = true;
 			}
 
-			// The rig's filter width: the label and the passband on the scope (rx_filter)
-			if (rs.filter_hz != g_remote_fil_hz) {
-				g_remote_fil_hz = rs.filter_hz;
-				changed = true;
+			// The rig's filter width: the label and the passband on the scope (rx_filter).
+			// Kept per mode group and FIL while on this rig: right after a FIL change the
+			// one known for it shows at once (2026-11-14: 2.8 first, 3.0 a moment later,
+			// the head's own width until the rig's answer came)
+			{
+				int *kept = &g_remote_fil_kept[mode_group(rx.mode)][clampi(rx.fil, 0, 2)];
+				int hz = rs.filter_hz;
+
+				if (hz > 0)
+					*kept = hz;
+				else
+					hz = *kept;
+
+				if (hz != g_remote_fil_hz) {
+					g_remote_fil_hz = hz;
+					changed = true;
+				}
 			}
 
 			//
