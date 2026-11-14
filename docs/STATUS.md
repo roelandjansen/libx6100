@@ -730,6 +730,12 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     the ext4 root survives reboots; the image's new S00adata / S04restore_backup_config
     do not touch it). A boot trx that seemed lost was x6100_trx boot trx typed for
     x6100_ui.sh boot trx: x6100_trx --help now names x6100_ui.sh.
+    OpenX6X00 0.3.12 keeps /root/.ssh, the ssh host keys and the WiFi profiles in
+    /mnt/backups/backup.tgz on the card's data partition (FAT, /dev/mmcblk0p3, kept when
+    a new image is written) and restores them at every boot (S04restore_backup_config):
+    why the ssh key still worked after dd of a new image (2026-11-14). For a radio
+    without that backup (Jan's) the first login needs the password. x6100_giveaway.sh
+    now removes that backup too: it brought the key and the WiFi passwords back.
 
 ## Next steps (suggested order)
 

@@ -6,7 +6,10 @@
 # birdie list (scanned on this radio), memories, messages and voice recordings, the
 # wfserver login, the remote rigs (remote.conf: hosts and passwords), the saved WiFi
 # networks (passwords), the Bluetooth pairings, the ssh
-# key that lets you in and the hosts you reached, the shell history. Optional: the ssh host keys (-k) and the
+# key that lets you in and the hosts you reached, the shell history, and OpenX6X00's own
+# backup of the WiFi, ssh keys and /root/.ssh on the data partition
+# (/mnt/backups/backup.tgz: restored at every boot, it brought them back after a clean
+# or a new image, 2026-11-14). Optional: the ssh host keys (-k) and the
 # start logs on /mnt/app_logs (-l). x6100_trx starts with its defaults when its files
 # are missing. Kept: x6100_trx itself, x6100_ui.sh, the boot choice (boot.trx), the
 # filter widths, the image.
@@ -29,7 +32,7 @@ set -eu
 
 readonly C_X6100="/etc/x6100"
 readonly C_FILES="x6100_trx.state x6100_trx.conf birdies.conf memories.conf messages.conf wfserver.ini bb_hangs.log remote.conf"
-readonly C_SYSTEM="/etc/NetworkManager/system-connections/* /var/lib/bluetooth/* /root/.ssh/authorized_keys /root/.ssh/known_hosts /root/.ash_history /root/.bash_history"
+readonly C_SYSTEM="/etc/NetworkManager/system-connections/* /var/lib/bluetooth/* /root/.ssh/authorized_keys /root/.ssh/known_hosts /root/.ash_history /root/.bash_history /mnt/backups/backup.tgz"
 readonly C_HOSTKEYS="/etc/ssh/ssh_host_* /etc/dropbear/dropbear_*_host_key"
 readonly C_LOGS="/mnt/app_logs/*"
 
