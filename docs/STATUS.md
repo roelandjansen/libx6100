@@ -561,6 +561,14 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
        30 dB more level than the -20 dBFS peaks suggest: the stream format (codec, rate)
        is now in the log line; console txdrec records what is sent (/tmp/x6100_txd.wav):
        crackle in the recording is the monitor / capture side, clean is the way to the rig.
+       Recordings 2026-11-14, mic unplugged, no speech: txdrec (X6100, -51 dBFS) and the
+       7851's own (16 kHz, -43.5 dBFS): the same noise at both ends, the same spectrum
+       (strongest 50-150 Hz, falling to -25 dB at 3 kHz), the same pops (about 12 a
+       second at random intervals, not on the capture's 1024-frame or the 20 ms block
+       boundaries). No gaps, no clicks, no pitch shift: the way to the rig is clean; the
+       crackle is made in the X6100's analog path (monitor, baseband audio out or codec
+       input). Next: txdmoni 0 with txdrec (gone: the monitor / TX chain; still there:
+       the audio out / codec input); the X6100 compressor off.
     Blind spots: the monitor (level 70) also played on the X6100 speaker while keyed
     (now muted, k); CW is not handled;
     the hand mic PTT cannot key (m: not reported); a real antenna instead of the dummy radiates 0.1 W on
