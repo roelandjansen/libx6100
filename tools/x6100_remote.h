@@ -65,11 +65,16 @@ typedef struct
 	//
 	bool nr;
 	bool nb;
+
+	//
+	// The rig's tuner on / off (2026-11-14; tune: x6100_remote_tune)
+	//
+	bool atu;
 } x6100_remote_rx_t;
 
 // The controls the rig reports back (bits of x6100_remote_status_t.ctl_changed)
 enum { X6100_REMOTE_C_AGC = 1, X6100_REMOTE_C_ATT = 2, X6100_REMOTE_C_PRE = 4, X6100_REMOTE_C_RFG = 8,
-	X6100_REMOTE_C_NR = 16, X6100_REMOTE_C_NB = 32 };
+	X6100_REMOTE_C_NR = 16, X6100_REMOTE_C_NB = 32, X6100_REMOTE_C_ATU = 64 };
 
 typedef struct
 {
@@ -104,6 +109,7 @@ typedef struct
 	int cw_pitch;			/* the rig's CW pitch in Hz, 0 not known yet (the decoder listens there) */
 	int rf_power;			/* the rig's RF power setting, Icom 0-255, -1 not known yet (the TX box shows it) */
 	int filter_hz;			/* the rig's filter width in Hz for its mode and filter (Filter Width), 0 not known */
+	bool rig_tuning;		/* the rig's tuner is tuning (Tuner/ATU Status 2) */
 } x6100_remote_status_t;
 
 typedef struct x6100_remote x6100_remote_t;
@@ -179,6 +185,9 @@ void x6100_remote_tx_stats(x6100_remote_t *r, x6100_remote_tx_stats_t *out);
 
 // The session's TX gain in % (0-400, 100 unchanged; console txdgain)
 void x6100_remote_tx_gain(x6100_remote_t *r, int percent);
+
+// The rig's tuner: tune now (TX rigs only; 0 sent, < 0 refused)
+int x6100_remote_tune(x6100_remote_t *r);
 
 //
 // Bands

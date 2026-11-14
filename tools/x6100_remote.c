@@ -36,10 +36,11 @@
 #define C_ATT_DB	12		/* ATT key on: the Icom attenuator step used (0 = off) */
 
 // The controls, as indices (send times, last rig values) and their X6100_REMOTE_C_* bits
-enum { C_AGC, C_ATT, C_PRE, C_RFG, C_NR, C_NB };
+enum { C_AGC, C_ATT, C_PRE, C_RFG, C_NR, C_NB, C_ATU, C_CTLS };
 #define C_SCOPE_HALF	50000		/* the rig scope, centre mode +- 50 kHz: the X6100 IQ width (SPAN_HZ) */
 #define C_SCOPE_TRIES	5		/* scope mode / span sent so often after connecting at most, then left alone */
 #define C_FIL_HOLD_MS	700		/* after a mode / filter change: the old Filter Width answer not shown so long */
+#define C_TUNE_WATCH_MS	30000		/* a rig tune watched so long at most */
 
 //
 // Mode numbers as wfview has them (.rig Modes\N\Num: its own list, not the CI-V Reg;
@@ -81,7 +82,7 @@ struct x6100_remote
 	x6100_remote_rx_t sent;
 	int64_t freq_sent_ms;
 	int64_t mode_sent_ms;
-	int64_t ctl_sent_ms[6];	/* per control (C_* below): last sent, for the echo guard */
+	int64_t ctl_sent_ms[C_CTLS];	/* per control (C_* below): last sent, for the echo guard */
 
 	//
 	// Logged on a change (stderr)
@@ -113,7 +114,7 @@ struct x6100_remote
 	int rig_mode_num;
 	int rig_mode_data;
 	int rig_filter;
-	int rig_ctl[6];			/* the controls as the rig last reported them, -1 none yet */
+	int rig_ctl[C_CTLS];			/* the controls as the rig last reported them, -1 none yet */
 	bool log_caps;			/* "rig file loaded" said */
 	bool log_nocaps;		/* "no CI-V ID yet" said */
 	bool log_idask;			/* "asking the ID directly" said */
@@ -127,6 +128,8 @@ struct x6100_remote
 	int64_t scope_set_ms;		/* last scope mode / span sent */
 	int scope_tries;		/* scope mode / span sends so far (C_SCOPE_TRIES, then left alone) */
 	int64_t fil_hold_ms;		/* mode / filter changed then: the Filter Width before it not used for C_FIL_HOLD_MS */
+	int64_t tune_ms;		/* our tune sent then, 0 none: its tuner watched (C_TUNE_WATCH_MS) */
+	int64_t tune_ask_ms;
 	uint64_t row_width;		/* width of the last scope row, 0: none yet */
 	bool smeter_valid;
 	double smeter_dbm;
@@ -450,7 +453,7 @@ int x6100_remote_open(x6100_remote_t **out, const x6100_remote_cfg_t *cfg)
 
 	r->rig_mode_num = -1;
 
-	for (int i = 0; i < 6; i++)
+	for (int i = 0; i < C_CTLS; i++)
 		r->rig_ctl[i] = -1;
 	r->log_state = -1;
 	r->log_rfpwr = -2;
@@ -613,6 +616,13 @@ void x6100_remote_apply(x6100_remote_t *r, const x6100_remote_rx_t *rx)
 		r->ctl_sent_ms[C_NB] = t;
 	}
 
+	// The tuner on / off (2026-11-14): only a change on the head goes out, not the first
+	// push, so the rig keeps its own state at connect and the head takes it (poll)
+	if (!all && rx->atu != o->atu) {
+		session_set_value(r->s, "Tuner/ATU Status", 0, rx->atu ? 1 : 0);
+		r->ctl_sent_ms[C_ATU] = t;
+	}
+
 	r->sent = *rx;
 	r->sent_valid = true;
 }
@@ -714,13 +724,25 @@ void x6100_remote_poll(x6100_remote_t *r, x6100_remote_status_t *st)
 	if (rs.rig_valid && t - r->ctl_poll_ms >= 333) {
 		// Filter Width too (2026-11-14: the head showed its own widths, 2.8 / 2.4 / 1.8 k,
 		// with the 7851 on 3.0 / 2.6 / 1.8 k); each now about every 2 s
-		static const char *const poll[6] = { "Noise Reduction", "Noise Blanker", "RF Gain", "CW Pitch", "RF Power",
-			"Filter Width" };
+		static const char *const poll[7] = { "Noise Reduction", "Noise Blanker", "RF Gain", "CW Pitch", "RF Power",
+			"Filter Width", "Tuner/ATU Status" };
 
 		session_get_value(r->s, poll[r->ctl_poll_i], 0);
-		r->ctl_poll_i = (r->ctl_poll_i + 1) % 6;
+		r->ctl_poll_i = (r->ctl_poll_i + 1) % 7;
 		r->ctl_poll_ms = t;
 	}
+
+	// While the rig tunes (our tune, x6100_remote_tune): its tuner twice a second, so
+	// TUNE goes off when it is done; at most C_TUNE_WATCH_MS
+	if (r->tune_ms != 0 && t - r->tune_ms < C_TUNE_WATCH_MS && t - r->tune_ask_ms >= 500) {
+		session_get_value(r->s, "Tuner/ATU Status", 0);
+		r->tune_ask_ms = t;
+	}
+
+	st->rig_tuning = rs.tuner.valid && rs.tuner.value == 2;
+
+	if (r->tune_ms != 0 && t - r->tune_ms >= 1500 && !st->rig_tuning)
+		r->tune_ms = 0;	/* done (or never started): the watch ends */
 
 	// The rig file: loaded once the rig has answered its CI-V ID (19 00); until then every
 	// set is refused (RIG_ERR_NO_CAPS -1), so say when it is there, and when it is long
@@ -794,13 +816,13 @@ void x6100_remote_poll(x6100_remote_t *r, x6100_remote_status_t *st)
 	// sent, and not just after our own send of that control
 	//
 	{
-		static const unsigned bit[6] = { X6100_REMOTE_C_AGC, X6100_REMOTE_C_ATT, X6100_REMOTE_C_PRE,
-			X6100_REMOTE_C_RFG, X6100_REMOTE_C_NR, X6100_REMOTE_C_NB };
-		const struct radio_value *val[6] = { &rs.agc, &rs.attenuator, &rs.preamp, &rs.rf_gain,
-			&rs.noise_reduction, &rs.noise_blanker };
-		static const char *const name[6] = { "AGC", "ATT", "PRE", "RF gain", "NR", "NB" };
+		static const unsigned bit[C_CTLS] = { X6100_REMOTE_C_AGC, X6100_REMOTE_C_ATT, X6100_REMOTE_C_PRE,
+			X6100_REMOTE_C_RFG, X6100_REMOTE_C_NR, X6100_REMOTE_C_NB, X6100_REMOTE_C_ATU };
+		const struct radio_value *val[C_CTLS] = { &rs.agc, &rs.attenuator, &rs.preamp, &rs.rf_gain,
+			&rs.noise_reduction, &rs.noise_blanker, &rs.tuner };
+		static const char *const name[C_CTLS] = { "AGC", "ATT", "PRE", "RF gain", "NR", "NB", "ATU" };
 
-		for (int i = 0; i < 6; i++) {
+		for (int i = 0; i < C_CTLS; i++) {
 			if (!val[i]->valid || val[i]->value == r->rig_ctl[i])
 				continue;
 
@@ -842,6 +864,11 @@ void x6100_remote_poll(x6100_remote_t *r, x6100_remote_status_t *st)
 				if ((v != 0) == s->nr)
 					continue;
 				c->nr = s->nr = v != 0;
+				break;
+			case C_ATU:	/* 0 off, 1 on, 2 tuning (on too) */
+				if ((v != 0) == s->atu)
+					continue;
+				c->atu = s->atu = v != 0;
 				break;
 			default:
 				if ((v != 0) == s->nb)
@@ -1020,4 +1047,22 @@ size_t x6100_remote_bands(x6100_remote_t *r, int region, x6100_remote_band_t *ou
 
 	qsort(out, n, sizeof(out[0]), band_cmp);
 	return n;
+}
+
+//
+// The rig's tuner tunes (2026-11-14: the ATU key long on the head): Tuner/ATU Status 2,
+// as wfview's tune; the session refuses it for a receive-only rig (PTT disabled). TUNE
+// shows while the rig reports 2 (rig_tuning)
+//
+
+int x6100_remote_tune(x6100_remote_t *r)
+{
+	int rc = tx_tune(r->s);
+
+	if (rc == 0) {
+		r->tune_ms = now_ms();
+		r->tune_ask_ms = 0;
+	}
+
+	return rc;
 }

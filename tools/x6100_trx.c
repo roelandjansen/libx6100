@@ -1023,6 +1023,7 @@ static bool pbt_active(const rx_t *rx)
 // polled), 0 locally or not known yet (2026-11-14: the head showed its own table, 2.8 /
 // 2.4 / 1.8 k, with the 7851 on 3.0 / 2.6 / 1.8 k)
 static int g_remote_fil_hz;
+static bool g_remote_tuning;	/* remote: the rig's tuner is tuning (TUNE in the indicator) */
 static int g_remote_fil_kept[FG_COUNT][3];	/* the rig's widths seen, per mode group (FG_*) and FIL, while on that rig */
 
 static void rx_filter(const rx_t *rx, uint32_t *low, uint32_t *high)
@@ -1474,6 +1475,7 @@ typedef struct
 	bool xit;
 	bool mem_mode;
 	vfo_keep_t mem_vfo;
+	bool atu_on;		/* remote: the rig's tuner on / off (2026-11-14) */
 } rig_place_t;
 
 static rig_prof_t g_rigs[RIG_MAX + 1];
@@ -1517,6 +1519,7 @@ static void place_get(const rx_t *rx, rig_place_t *p)
 	p->xit = rx->xit;
 	p->mem_mode = rx->mem_mode;
 	p->mem_vfo = rx->mem_vfo;
+	p->atu_on = rx->atu_on;
 }
 
 static void place_put(rx_t *rx, const rig_place_t *p)
@@ -1546,6 +1549,7 @@ static void place_put(rx_t *rx, const rig_place_t *p)
 	rx->xit = p->xit;
 	rx->mem_mode = p->mem_mode;
 	rx->mem_vfo = p->mem_vfo;
+	rx->atu_on = p->atu_on;
 }
 
 // The state file holds LOCAL's place: while remote, a copy of rx with it put back
@@ -1763,6 +1767,7 @@ static void rig_leave(x6100_ctl_t *ctl, rx_t *rx)
 	g_txd_keyed = false;
 	g_remote_pwr = -1;
 	g_remote_fil_hz = 0;	/* the head's own filter widths until the rig says */
+	g_remote_tuning = false;
 	memset(g_remote_fil_kept, 0, sizeof(g_remote_fil_kept));
 	g_remote_shown = -1;
 	g_remote_try_at = 0;
@@ -1801,6 +1806,7 @@ static void rig_enter(rx_t *rx, int i)
 	g_remote_up = false;
 	g_remote_pwr = -1;
 	g_remote_fil_hz = 0;	/* the head's own filter widths until the rig says */
+	g_remote_tuning = false;
 	memset(g_remote_fil_kept, 0, sizeof(g_remote_fil_kept));
 	g_remote_shown = -1;
 	g_txd_gain_set = -1;
@@ -2745,7 +2751,7 @@ static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 		if (g_remote != NULL) {
 			x6100_remote_rx_t r = {
 				.freq_hz = rx->freq, .mode = rx->mode, .filter = rx->fil, .agc = rx->agc,
-				.att = rx->att, .pre = rx->pre, .rfg = rx->rfg, .nr = rx->nr, .nb = rx->nb,
+				.att = rx->att, .pre = rx->pre, .rfg = rx->rfg, .nr = rx->nr, .nb = rx->nb, .atu = rx->atu_on,
 			};
 
 			x6100_remote_apply(g_remote, &r);
@@ -4984,6 +4990,12 @@ static bool on_key(rx_t *rx, int key)
 	case X6100_KEY_ATU:
 		rx->atu_on = !rx->atu_on;
 
+		// Remote: the rig's tuner on / off (apply sends it, 2026-11-14), not ours
+		if (REMOTE_ON) {
+			toast(rx->atu_on ? "RIG ATU ON" : "RIG ATU OFF");
+			break;
+		}
+
 		// Which tuner memory goes in (apply: the one nearest the TX frequency)
 		if (rx->atu_on) {
 			const atum_t *am = atu_find(tx_hz(rx));
@@ -5208,6 +5220,23 @@ static bool on_long_key(rx_t *rx, int key)
 
 		return true;
 	case X6100_KEY_ATU:
+#ifdef X6100_REMOTE
+		// Remote (2026-11-14): the rig's tuner tunes, not ours. A tune transmits: TX rigs
+		// only (txdummy), with TX allowed there (band plan, link); TUNE shows while the
+		// rig reports it tuning
+		if (REMOTE_ON) {
+			if (rx->ptt || g_remote_tuning || !tx_allowed(rx))
+				return true;
+
+			if (g_remote == NULL || x6100_remote_tune(g_remote) != 0)
+				toast("RIG TUNE REFUSED");
+			else
+				toast("RIG TUNING");
+
+			return true;
+		}
+#endif
+
 		if (rx->ptt || rx->tuning || !tx_allowed(rx))
 			return true;
 
@@ -9989,7 +10018,7 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 			{ 372, 2 }, { 432, 2 }, { 372, 18 }, { 432, 18 },
 		};
 		const char *txt[4] = {
-			rx->tuning ? "TUNE" : rx->atu_on ? "ATU" : "", rx->att ? "ATT" : "",
+			rx->tuning || g_remote_tuning ? "TUNE" : rx->atu_on ? "ATU" : "", rx->att ? "ATT" : "",
 			rx->pre ? "PRE" : "", rx->lock ? "LOCK" : "",
 		};
 
@@ -14884,6 +14913,14 @@ int main(int argc, char **argv)
 
 			if (rs.ctl_changed & X6100_REMOTE_C_NB)
 				rx.nb = rs.ctl.nb;
+
+			if (rs.ctl_changed & X6100_REMOTE_C_ATU)
+				rx.atu_on = rs.ctl.atu;	/* the rig's tuner on / off */
+
+			if (rs.rig_tuning != g_remote_tuning) {	/* TUNE while the rig tunes */
+				g_remote_tuning = rs.rig_tuning;
+				changed = true;
+			}
 
 			changed |= rs.ctl_changed != 0;
 
