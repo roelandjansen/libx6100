@@ -509,7 +509,7 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     a. Before: X6100 dummy on its antenna port; the 7851's DATA OFF MOD (SSB) on LAN, else
        it sends its own mic; wfserver off on the X6100 (the codec; automatic since 2026-11-14:
        held off while x6100_trx --remote runs); note oob in the state.
-    b. Start with --remote-tx-dummy: the note reads REMOTE TRX (was REMOTE, TX VIA DUMMY 0.1 W).
+    b. Start with --remote-tx-dummy: the note reads REMOTE TRX (was REMOTE, TX VIA DUMMY 0.1 W), also while we transmit (the TX LED says it); REMOTE TX only when another client keys the rig.
     c. PTT while REMOTE: WAIT FOR RIG: refused (REMOTE LINK).
     d. PTT held and tapped (latched): X6100 TX at 0.1 W, the 7851 keys ~150 ms later; its
        PO / ALC follow the voice. Mic gain (TX panel) for the 7851's ALC; listen for

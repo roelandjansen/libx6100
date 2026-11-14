@@ -13954,7 +13954,9 @@ int main(int argc, char **argv)
 
 			// Status line: only on a change, so other warnings are not overwritten
 			static int remote_shown = -1;	/* 0 link down, 1 up, 2 rig keyed, 3 up but no rig file yet */
-			int remote_now = !rs.connected ? 0 : rs.rig_tx ? 2 : !rs.rig_ready ? 3 : 1;
+			// The rig keyed by us (--remote-tx-dummy) stays 1, REMOTE TRX: the TX LED says it
+			// (2026-11-14); REMOTE TX only when another client keys the rig
+			int remote_now = !rs.connected ? 0 : rs.rig_tx && !g_txd_keyed ? 2 : !rs.rig_ready ? 3 : 1;
 
 			if (remote_now != remote_shown) {
 				// 3: the rig has not answered its ID yet (2026-11-12: up to some 90 s when
