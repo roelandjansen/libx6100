@@ -1124,6 +1124,8 @@ static int g_txd_boost_set = -1;	/* the Mic1 boost as last set on the codec, -1 
 #define TXD_ON		(g_remote_req && g_remote_cfg.tx_dummy)
 #define TXD_LEAD_MS	150
 #define REMOTE_ON	(g_remote_req)
+#define REMOTE_MARK	"/tmp/x6100_trx.remote"	/* our PID while remote: x6100_ui.sh keeps wfserver off */
+#define REMOTE_CODEC_WAIT_S 10			/* the codec busy at start (wfserver ending): wait so long */
 
 //
 // --remote-tx-dummy recording (2026-11-14, a test aid; console txdrec): the capture as it
@@ -10009,7 +10011,7 @@ static bool console_token(rx_t *rx, const char *t)
 	if (strcasecmp(t, "txdrec") == 0) {
 		g_txd_rec_req = true;
 		fprintf(stderr, "\nremote TX: the next TX is recorded to %s (at most %d s)\n", TXD_REC_PATH, TXD_REC_S);
-		return false;
+		return true;	/* known (false reads as unknown) */
 	}
 
 	if (strcasecmp(t, "txdmute") == 0 || strcasecmp(t, "notxdmute") == 0) {
@@ -10022,7 +10024,7 @@ static bool console_token(rx_t *rx, const char *t)
 	// shot: a screenshot of the screen as it is, PNG in /tmp (also LOCK long)
 	if (strcasecmp(t, "shot") == 0) {
 		g_shot_req = true;
-		return false;
+		return true;	/* known (false reads as unknown) */
 	}
 
 	// bbreset: reset the baseband (GPIO line) and send it everything again (main loop)
@@ -13173,14 +13175,39 @@ int main(int argc, char **argv)
 		apply_flags(&ctl, &rx);
 		x6100_ctl_sync(&ctl);
 
-		if ((rc = x6100_remote_open(&g_remote, &g_remote_cfg)) < 0) {
+		// wfserver off while we are remote (2026-11-14): the marker with our PID tells the
+		// wfserver watcher (x6100_ui.sh) to stop it and to start it again once we are gone.
+		// It may still hold the codec for a few seconds: the playback open waits up to
+		// REMOTE_CODEC_WAIT_S for it
+		FILE *mk = fopen(REMOTE_MARK, "w");
+
+		if (mk != NULL) {
+			fprintf(mk, "%ld\n", (long) getpid());
+			fclose(mk);
+		}
+
+		for (int w = 0;; w++) {
+			rc = x6100_remote_open(&g_remote, &g_remote_cfg);
+
+			if (rc != -EBUSY || w >= REMOTE_CODEC_WAIT_S)
+				break;
+
+			if (w == 0)
+				fprintf(stderr, "remote: codec busy (wfserver?), waiting up to %d s\n", REMOTE_CODEC_WAIT_S);
+
+			sleep(1);
+		}
+
+		if (rc < 0) {
 			fprintf(stderr, "remote: %s UDP %u: %s\n", g_remote_cfg.host, g_remote_cfg.port, strerror(-rc));
 			x6100_ctl_set(&ctl, X6100_REG_FLAGS, 0);
 			x6100_ctl_sync(&ctl);
+			unlink(REMOTE_MARK);
 			return 1;
 		}
 
-		fprintf(stderr, "remote: %s UDP %u, receive only\n", g_remote_cfg.host, g_remote_cfg.port);
+		fprintf(stderr, "remote: %s UDP %u, %s\n", g_remote_cfg.host, g_remote_cfg.port,
+			g_remote_cfg.tx_dummy ? "TX via the dummy load" : "receive only");
 		rx.warn = g_remote_note;	/* stands while remote (see the note expiry in the loop) */
 	}
 #endif
@@ -14341,8 +14368,10 @@ int main(int argc, char **argv)
 		g_remote = NULL;
 	}
 
-	if (g_remote_req)
+	if (g_remote_req) {
 		x6100_ctl_set(&ctl, X6100_REG_FLAGS, 0);
+		unlink(REMOTE_MARK);	/* the codec is free: wfserver may run again */
+	}
 #endif
 
 	x6100_ctl_set(&ctl, X6100_REG_RXVOL, 0);

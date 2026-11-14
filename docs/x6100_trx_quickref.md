@@ -7,7 +7,10 @@ panel. `x6100_rx` is the same program, receive only (PTT and tune refused).
 
 Stop the stock GUI first (`scripts/x6100_ui.sh stop`). That also starts wfserver when it is
 installed and set up (`contrib/wfserver`): it runs while x6100_trx serves the CI-V pty (always on, `catpty`);
-`x6100_ui.sh wfserver off` / `on` switches that off / on, `x6100_ui.sh start` stops it.
+`x6100_ui.sh wfserver off` / `on` switches that off / on, `x6100_ui.sh start` stops it. While an
+x6100_trx with `--remote` runs, wfserver is held off (the remote head needs the codec) and comes
+back after it (2026-11-14). `x6100_ui.sh trx stop` ends a running x6100_trx without bringing the
+GUI back (to start one by hand, e.g. with `--remote`), `trx start` starts it again as at boot.
 x6100_trx refuses to start while a GUI (OpenX6X00 / R1CBU x6100_gui, IU1WXY) or another
 x6100_trx still runs.
 

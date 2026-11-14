@@ -15,13 +15,20 @@
 # wfserver (contrib/wfserver, /opt/wfserver): stop also starts a detached watcher that
 # runs wfserver while x6100_trx serves CI-V on /tmp/x6100-civ (always, unless catpty off), and restarts it
 # when x6100_trx restarts; start stops it. Only when installed, set up (a user in
-# /etc/x6100/wfserver.ini) and not switched off (/etc/x6100/wfserver.off).
+# /etc/x6100/wfserver.ini) and not switched off (/etc/x6100/wfserver.off). While an
+# x6100_trx with --remote runs (its PID in /tmp/x6100_trx.remote) the watcher keeps
+# wfserver stopped, so the remote head has the codec, and starts it again when that
+# x6100_trx is gone (2026-11-14).
 #
 # Busybox sh on the radio: POSIX only.
 #
 # Usage: x6100_ui.sh stop|start|status
 #        x6100_ui.sh wfserver on|off    autostart on (and start now) / off (and stop now)
 #        x6100_ui.sh boot trx|gui      at boot x6100_trx (S96x6100_trx) or the GUI
+#        x6100_ui.sh trx stop          end x6100_trx, no GUI after it (to start one by hand)
+#        x6100_ui.sh trx start         x6100_trx in the background as at boot (log
+#                                      /tmp/x6100_trx.log; the GUI when it quits)
+#        x6100_ui.sh trx restart       both
 #
 
 set -eu
@@ -42,6 +49,10 @@ readonly C_WFS_LOG="/tmp/wfserver.log"
 readonly C_CIV_LINK="/tmp/x6100-civ"
 readonly C_BOOT_TRX="/etc/x6100/boot.trx"	# S96x6100_trx starts x6100_trx at boot when it exists
 readonly C_BOOT_INIT="/etc/init.d/S96x6100_trx"
+readonly C_REMOTE="/tmp/x6100_trx.remote"	# x6100_trx --remote: its PID; wfserver held off
+readonly C_TRX="/root/x6100_trx"
+readonly C_TRX_LOG="/tmp/x6100_trx.log"
+readonly C_TRX_DOWN="/tmp/x6100_trx.poweroff"	# there: S96x6100_trx / trx start bring no GUI back
 
 #
 # Print the PIDs of shell processes running the respawn loop
@@ -207,7 +218,7 @@ wfs_loop() {
 	while :; do
 		L_PTY="$(pty_key)"
 
-		if [ -z "${L_PTY}" ]; then
+		if [ -z "${L_PTY}" ] || [ -n "$(remote_pid)" ]; then
 			sleep 2
 			continue
 		fi
@@ -215,14 +226,88 @@ wfs_loop() {
 		"${C_WFS}" -s "${C_WFS_INI}" -l "${C_WFS_LOG}" </dev/null >/dev/null 2>&1 &
 		L_WPID=$!
 
-		while pid_alive "${L_WPID}" && [ "$(pty_key)" = "${L_PTY}" ]; do
-			sleep 2
+		# Once a second: an x6100_trx --remote starting wants the codec at once
+		while pid_alive "${L_WPID}" && [ "$(pty_key)" = "${L_PTY}" ] && [ -z "$(remote_pid)" ]; do
+			sleep 1
 		done
 
 		pid_end "${L_WPID}"
 		L_WPID=""
 		sleep 2
 	done
+}
+
+#
+# The PID of an x6100_trx running with --remote (it holds the codec), if any; a marker
+# left by one that is gone (kill -9) counts as none
+#
+
+remote_pid() {
+	L_RPID="$(cat "${C_REMOTE}" 2>/dev/null || true)"	# no marker: none
+
+	if pid_alive "${L_RPID}" && grep -q 'x6100_trx' "/proc/${L_RPID}/comm" 2>/dev/null; then
+		printf '%s\n' "${L_RPID}"
+	fi
+}
+
+#
+# End x6100_trx (it saves its state on SIGTERM) and wait until it is gone; the marker
+# keeps a boot-started one (S96x6100_trx, trx start) from bringing the GUI back
+#
+
+trx_stop() {
+	L_N=0
+
+	if ! pidof x6100_trx >/dev/null 2>&1; then
+		printf '%s\n' 'x6100_trx: not running'
+		return 0
+	fi
+
+	: > "${C_TRX_DOWN}"
+	killall x6100_trx 2>/dev/null || true	# gone meanwhile: fine
+
+	while pidof x6100_trx >/dev/null 2>&1 && [ "${L_N}" -lt 10 ]; do
+		sleep 1
+		L_N=$((L_N + 1))
+	done
+
+	if pidof x6100_trx >/dev/null 2>&1; then
+		printf '%s\n' 'x6100_trx: still there after 10 s' >&2
+		exit 1
+	fi
+
+	printf '%s\n' 'x6100_trx: stopped (the GUI not started; start one by hand, or trx start)'
+}
+
+#
+# Start x6100_trx detached, as S96x6100_trx does: its output in the log, the GUI back
+# when it quits (not after power off or trx stop)
+#
+
+trx_start() {
+	if pidof x6100_trx >/dev/null 2>&1; then
+		printf '%s\n' 'x6100_trx: already running'
+		return 0
+	fi
+
+	if [ ! -x "${C_TRX}" ]; then
+		printf '%s\n' "error: ${C_TRX} missing" >&2
+		exit 1
+	fi
+
+	if [ -n "$(dri_holders)" ]; then
+		printf '%s\n' "error: the display is held (the GUI?): ${0##*/} stop first" >&2
+		exit 1
+	fi
+
+	rm -f "${C_TRX_DOWN}"
+	setsid sh -c "\"${C_TRX}\" >> \"${C_TRX_LOG}\" 2>&1 < /dev/null; [ -e \"${C_TRX_DOWN}\" ] || \"$(readlink -f "$0")\" start > /dev/null 2>&1" \
+		< /dev/null > /dev/null 2>&1 &
+	printf '%s\n' "x6100_trx: started (log ${C_TRX_LOG})"
+
+	if [ -z "$(wfs_pid)" ]; then
+		wfs_start
+	fi
 }
 
 #
@@ -333,7 +418,11 @@ ui_status() {
 	L_WHY="$(wfs_why_not)"
 	L_PID="$(wfs_pid)"
 
-	if [ -n "${L_PID}" ]; then
+	printf '%-17s %s\n' 'x6100_trx:' "$(pidof x6100_trx || printf '%s' 'not running')$([ -n "$(remote_pid)" ] && printf '%s' ' (--remote)')"
+
+	if [ -n "${L_PID}" ] && [ -n "$(remote_pid)" ]; then
+		printf '%-17s %s\n' 'wfserver:' "watcher ${L_PID}, held off while x6100_trx --remote runs"
+	elif [ -n "${L_PID}" ]; then
 		printf '%-17s %s\n' 'wfserver:' "watcher ${L_PID}, pty ${C_CIV_LINK} $([ -L "${C_CIV_LINK}" ] && printf '%s' 'up' || printf '%s' 'not there (x6100_trx not running, or catpty off?)')"
 	else
 		printf '%-17s %s\n' 'wfserver:' "not running${L_WHY:+, ${L_WHY}}"
@@ -395,12 +484,30 @@ case "${1:-}" in
 				;;
 		esac
 		;;
+	trx)
+		case "${2:-}" in
+			stop)
+				trx_stop
+				;;
+			start)
+				trx_start
+				;;
+			restart)
+				trx_stop
+				trx_start
+				;;
+			*)
+				printf 'usage: %s trx stop|start|restart\n' "$0" >&2
+				exit 1
+				;;
+		esac
+		;;
 	wfloop)		# internal: the detached watcher started by wfs_start
 		printf '%s\n' "$$" > "${C_WFS_PID}"
 		wfs_loop
 		;;
 	*)
-		printf 'usage: %s stop|start|status|wfserver on|off|boot trx|gui\n' "$0" >&2
+		printf 'usage: %s stop|start|status|wfserver on|off|boot trx|gui|trx stop|start|restart\n' "$0" >&2
 		exit 1
 		;;
 esac

@@ -138,6 +138,13 @@ only when wfserver is installed and set up (a user in the ini). `x6100_ui.sh wfs
 off` switches the autostart off (`/etc/x6100/wfserver.off`) and stops it, `on` switches
 it on and starts it; `x6100_ui.sh status` shows it.
 
+Remote head (2026-11-14): an x6100_trx started with `--remote` (and `--remote-tx-dummy`)
+needs the codec itself, for the rig's audio and the TX audio. It leaves its PID in
+`/tmp/x6100_trx.remote`; while that x6100_trx runs the watcher keeps wfserver stopped,
+and once it is gone wfserver runs again with the next x6100_trx. x6100_trx waits up to
+10 s for the codec at its start. So wfserver can stay on: `x6100_ui.sh trx stop` (ends
+the running x6100_trx, no GUI after it), then start x6100_trx with `--remote` by hand.
+
 The launcher adds `-s /etc/x6100/wfserver.ini` when no `-s` is given (wfserver's own default
 would be `~/.config/wfview/wfserver.conf`). For another file, use an absolute path with
 `-s`: a bare file name is taken relative to wfserver's data

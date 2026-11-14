@@ -298,7 +298,7 @@ int x6100_remote_open(x6100_remote_t **out, const x6100_remote_cfg_t *cfg)
 	p.rx_sample = C_NET_RATE;
 	p.rx_latency = 150;
 	p.tx_codec = AUDIO_CODEC_PCM16_1;
-	p.tx_sample = C_RATE;
+	p.tx_sample = C_NET_RATE;	/* 16 kHz as RX (2026-11-14: 48 kHz, about 770 kbit/s over the internet; resampled from the capture by the core) */
 	p.tx_latency = 150;
 	p.dev_rate = C_RATE;
 	p.cap_rate = cfg->tx_dummy ? C_RATE : 0;

@@ -507,7 +507,8 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     first. Fixed on applying: codec busy left the X6100 keyed with the rig never keyed
     (now dropped, REMOTE TX: CODEC BUSY). Test plan (first both radios into dummy loads):
     a. Before: X6100 dummy on its antenna port; the 7851's DATA OFF MOD (SSB) on LAN, else
-       it sends its own mic; wfserver off on the X6100 (the codec); note oob in the state.
+       it sends its own mic; wfserver off on the X6100 (the codec; automatic since 2026-11-14:
+       held off while x6100_trx --remote runs); note oob in the state.
     b. Start with --remote-tx-dummy: the note reads REMOTE, TX VIA DUMMY 0.1 W.
     c. PTT while REMOTE: WAIT FOR RIG: refused (REMOTE LINK).
     d. PTT held and tapped (latched): X6100 TX at 0.1 W, the 7851 keys ~150 ms later; its
@@ -569,6 +570,11 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
        crackle is made in the X6100's analog path (monitor, baseband audio out or codec
        input). Next: txdmoni 0 with txdrec (gone: the monitor / TX chain; still there:
        the audio out / codec input); the X6100 compressor off.
+       txdmoni 0 (and boost 0), mic unplugged: the same noise and pops (-51 dBFS, about
+       15 a second): not the monitor; they are on the baseband's audio out to the codec
+       or in the codec input. Next: the voice far above that floor before the codec
+       (the TX panel LINE OUT level, moni 100), else a noise gate on our side.
+       TX stream since 2026-11-14: 16 kHz (was 48 kHz) as RX; the core resamples.
     Blind spots: the monitor (level 70) also played on the X6100 speaker while keyed
     (now muted, k); CW is not handled;
     the hand mic PTT cannot key (m: not reported); a real antenna instead of the dummy radiates 0.1 W on
