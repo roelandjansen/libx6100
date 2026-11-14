@@ -708,6 +708,11 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     the boot choice. Checked here with a stand-in binary and the wfserver bundle: 194
     files, x6100_trx.conf kept, the others seeded, modes right. Not yet on a real image
     (zig not here: the archive comes from build.sh dist on the build PC).
+    On OpenX6X00 0.3.12 (2026-11-14, freshly flashed; files copied, settings restored):
+    x6100_trx runs, boot trx works (S96x6100_trx after S95gui, as before; /etc/x6100 on
+    the ext4 root survives reboots; the image's new S00adata / S04restore_backup_config
+    do not touch it). A boot trx that seemed lost was x6100_trx boot trx typed for
+    x6100_ui.sh boot trx: x6100_trx --help now names x6100_ui.sh.
 
 ## Next steps (suggested order)
 
