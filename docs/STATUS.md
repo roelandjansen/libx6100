@@ -553,6 +553,14 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
        the capture level without speech and the voice peaks in the `remote TX:` line, and
        how the 7851 sounds. Open as well: the TX stream is LPCM 48 kHz (about 770 kbit/s
        over the internet); choppy rather than noisy would point there (16 kHz as RX).
+       Result 2026-11-14: the earlier tests ran on the internal mic (MIC AUTO: the hand
+       mic only with its own PTT, which cannot key here; now AUTO acts as HAND in this
+       mode). Hand mic: txdboost -1 / 1 no difference; txdmoni 100 the best voice over
+       the crackle; txdgain above 1-3 % overdrives the 7851 (LAN input 100 %; at 50 %
+       and txdgain 3 about 150 W PEP). Still a crackling noise under the voice. Some
+       30 dB more level than the -20 dBFS peaks suggest: the stream format (codec, rate)
+       is now in the log line; console txdrec records what is sent (/tmp/x6100_txd.wav):
+       crackle in the recording is the monitor / capture side, clean is the way to the rig.
     Blind spots: the monitor (level 70) also played on the X6100 speaker while keyed
     (now muted, k); CW is not handled;
     the hand mic PTT cannot key (m: not reported); a real antenna instead of the dummy radiates 0.1 W on

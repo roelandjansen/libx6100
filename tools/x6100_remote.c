@@ -764,6 +764,8 @@ void x6100_remote_tx_stats(x6100_remote_t *r, x6100_remote_tx_stats_t *out)
 	out->peak = info.tx_peak;
 	out->rms = info.tx_rms;
 	out->available = info.tx_available;
+	out->codec = info.tx_codec;
+	out->rate = info.tx_sample;
 }
 
 void x6100_remote_tx_gain(x6100_remote_t *r, int percent)

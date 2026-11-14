@@ -43,7 +43,7 @@ x6100_trx --oob 5450000 usb slow
 | `--probe` | print the flow flag word on change, and every second the IQ peak and all flag bits seen (overflow hunt) |
 | `--bbreset` | reset the baseband first (GPIO 204 on gpiochip1, as X6100Control), for a baseband that does not answer on I2C (2026-11-05) |
 | `--remote <host> <udp port> <user> <password>` | control head for a remote Icom (IC-7851; wfserver or its LAN port): the rig's frequency, mode, controls, S meter, scope and audio, receive only (2026-11-11; STATUS item 47). `--rigs <dir>`: the wfview .rig files (default /opt/wfserver/share/wfview/rigs) |
-| `--remote-tx-dummy` | with `--remote`: voice TX on the rig with the X6100 mic. The X6100 keys itself at 0.1 W, so **a dummy load on its antenna port**; its monitor goes to the rig as TX audio, the rig keys 150 ms later. The rig's SSB mod input must be LAN. Under the TX box: the rig's RF power in % (any --remote). The hand mic PTT cannot key here (the baseband does not report it; use the PTT key, the hand mic still works as the mic) (2026-11-14; STATUS item 49) |
+| `--remote-tx-dummy` | with `--remote`: voice TX on the rig with the X6100 mic. The X6100 keys itself at 0.1 W, so **a dummy load on its antenna port**; its monitor goes to the rig as TX audio, the rig keys 150 ms later. The rig's SSB mod input must be LAN. Under the TX box: the rig's RF power in % (any --remote). The hand mic PTT cannot key here (the baseband does not report it; use the PTT key, the hand mic still works as the mic); MIC AUTO acts as HAND in this mode (2026-11-14; STATUS item 49) |
 | `--help`, `-h`, `help`, `?` | the options in short, and exit (2026-11-05) |
 
 Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
@@ -447,6 +447,7 @@ The status line starts with the VFO in use (A / B); with split, RIT or XIT it ad
 | `nooob` | the band check on again at once (2026-11-07). `oob` / `nooob` go into the state: the last one holds at the next start (with the start warning when oob); an `oob` or `nooob` line in x6100_trx.conf wins over the state, `--oob` over both |
 | `notxdmute` / `txdmute` | `--remote-tx-dummy` only, a test aid (2026-11-14, not saved): the speaker stays on while keyed / is muted again (the default). To find out whether the mute also silences the monitor that goes to the rig |
 | `txdmoni N` / `txdboost N` / `txdgain N` | `--remote-tx-dummy` only, a test aid (2026-11-14, not saved, live): the monitor level while keyed 0-100 (70), the codec's Mic1 boost for the capture 0-7 (-1: as for RX, 1 = +24 dB in SSB), the TX gain to the rig in % 0-400 (100). The `remote TX:` log line shows all three |
+| `txdrec` | `--remote-tx-dummy` only, a test aid (2026-11-14): the next TX as it goes to the rig (before the TX gain), key-down to release, at most 60 s, to `/tmp/x6100_txd.wav` (mono, 16 bit, 48 kHz). Fetch: `scp root@<radio>:/tmp/x6100_txd.wav .` |
 | `freqmin 148500`, `freqmax 75000000` | tuning range in Hz (VFO, CAT, memories), each within 5 kHz - 75 MHz, freqmin below freqmax; default 148.5 kHz (the LW broadcast band edge; below it MW bleeds through, 77.5 kHz tried) - 75 MHz (RX and TX work up to there, 2026-11-04; TX above 54 MHz is past the low-pass filters: into a dummy load only); kept in the state; below the IF shift (a few kHz) the LO goes above the receive frequency |
 
 ## Messages (MSG)

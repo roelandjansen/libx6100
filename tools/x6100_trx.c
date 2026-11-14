@@ -1124,6 +1124,83 @@ static int g_txd_boost_set = -1;	/* the Mic1 boost as last set on the codec, -1 
 #define TXD_ON		(g_remote_req && g_remote_cfg.tx_dummy)
 #define TXD_LEAD_MS	150
 #define REMOTE_ON	(g_remote_req)
+
+//
+// --remote-tx-dummy recording (2026-11-14, a test aid; console txdrec): the capture as it
+// goes to the rig (left channel, before the session's TX gain), from the next key-down
+// to the release, at most TXD_REC_S, mono S16 48 kHz WAV. Crackle in it: the monitor /
+// capture side; clean here but not at the rig: the way there
+//
+
+#define TXD_REC_PATH	"/tmp/x6100_txd.wav"
+#define TXD_REC_S	60
+
+static bool g_txd_rec_req;		/* txdrec: record the next TX */
+static FILE *g_txd_rec;			/* open while recording */
+static uint32_t g_txd_rec_n;		/* frames written */
+
+static void txd_le32(uint8_t *p, uint32_t v)
+{
+	p[0] = (uint8_t) v;
+	p[1] = (uint8_t) (v >> 8);
+	p[2] = (uint8_t) (v >> 16);
+	p[3] = (uint8_t) (v >> 24);
+}
+
+// The 44-byte header for n frames, mono S16 at 48 kHz
+static void txd_rec_header(FILE *fp, uint32_t n)
+{
+	uint8_t h[44] = { 'R', 'I', 'F', 'F', 0, 0, 0, 0, 'W', 'A', 'V', 'E', 'f', 'm', 't', ' ',
+		16, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 16, 0, 'd', 'a', 't', 'a' };
+
+	txd_le32(h + 4, 36 + n * 2);
+	txd_le32(h + 24, 48000);
+	txd_le32(h + 28, 48000 * 2);
+	txd_le32(h + 40, n * 2);
+	rewind(fp);
+	fwrite(h, 1, sizeof(h), fp);
+}
+
+static void txd_rec_close(void)
+{
+	if (g_txd_rec == NULL)
+		return;
+
+	txd_rec_header(g_txd_rec, g_txd_rec_n);
+	fclose(g_txd_rec);
+	g_txd_rec = NULL;
+	fprintf(stderr, "\nremote TX: recorded %.1f s to %s\n", g_txd_rec_n / 48000.0, TXD_REC_PATH);
+}
+
+// Captured stereo frames while keyed: their left channel into the recording
+static void txd_rec_feed(const int16_t *stereo, size_t frames)
+{
+	if (g_txd_rec == NULL && g_txd_rec_req) {
+		g_txd_rec_req = false;
+		g_txd_rec_n = 0;
+
+		if ((g_txd_rec = fopen(TXD_REC_PATH, "wb")) == NULL) {
+			fprintf(stderr, "\nremote TX: %s: %s\n", TXD_REC_PATH, strerror(errno));
+			return;
+		}
+
+		txd_rec_header(g_txd_rec, 0);
+		fprintf(stderr, "\nremote TX: recording to %s\n", TXD_REC_PATH);
+	}
+
+	if (g_txd_rec == NULL)
+		return;
+
+	for (size_t i = 0; i < frames && g_txd_rec_n < TXD_REC_S * 48000u; i++) {
+		uint8_t s[2] = { (uint8_t) stereo[i * 2], (uint8_t) ((uint16_t) stereo[i * 2] >> 8) };
+
+		fwrite(s, 1, 2, g_txd_rec);
+		g_txd_rec_n++;
+	}
+
+	if (g_txd_rec_n >= TXD_REC_S * 48000u)
+		txd_rec_close();
+}
 #else
 #define REMOTE_ON	false
 #define TXD_ON		false
@@ -1709,6 +1786,11 @@ static const char *tx_source(const rx_t *rx, bool *warn)
 	if (tx_usb_in(rx))
 		return g_modin[mode == X6100_MODE_LSB_DIG || mode == X6100_MODE_USB_DIG] == MODIN_LAN ? "LAN" : "USB";
 
+#ifdef X6100_REMOTE
+	if (TXD_ON && rx->micsel == 2)
+		return mic[1];	/* --remote-tx-dummy: AUTO acts as HAND (see apply) */
+#endif
+
 	*warn = rx->micsel == 1;
 	return mic[rx->micsel < 0 || rx->micsel > 2 ? 2 : rx->micsel];
 }
@@ -1748,6 +1830,12 @@ static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 
 		x6100_set_txpwr(ctl, 0.1f);	/* the floor (x6100_set_txpwr clamps 0 to 0.1 W too) */
 		x6100_atu_set_network(ctl, &none);
+
+		// --remote-tx-dummy: mic AUTO acts as HAND (2026-11-14). AUTO takes the hand mic
+		// only while its own PTT keys, and that PTT cannot key here (STATUS 49 m): the PTT
+		// key always got the internal mic. INT stays INT
+		if (TXD_ON && rx->micsel == 2)
+			x6100_ctl_update(ctl, X6100_REG_MIC_PTT_SQL, 0x0000FF03u, X6100_R21(1, 0, 0, 0, 0, 0));
 
 		// Keyed into the dummy (--remote-tx-dummy): the speaker muted, so the monitor does not
 		// play there and feed back into the mic (2026-11-14). The codec capture, which carries
@@ -9917,6 +10005,13 @@ static bool console_token(rx_t *rx, const char *t)
 	// txdmute / notxdmute (2026-11-14, a test aid, not saved): --remote-tx-dummy mutes the
 	// speaker while keyed, or not; to find out whether the mute also silences the monitor
 	// on the capture (the rig's TX audio)
+	// txdrec: record the next TX as it goes to the rig (see TXD_REC_PATH)
+	if (strcasecmp(t, "txdrec") == 0) {
+		g_txd_rec_req = true;
+		fprintf(stderr, "\nremote TX: the next TX is recorded to %s (at most %d s)\n", TXD_REC_PATH, TXD_REC_S);
+		return false;
+	}
+
 	if (strcasecmp(t, "txdmute") == 0 || strcasecmp(t, "notxdmute") == 0) {
 		g_txd_mute = strcasecmp(t, "txdmute") == 0;
 		fprintf(stderr, "\nremote TX: speaker %s while keyed\n", g_txd_mute ? "muted" : "on");
@@ -13211,6 +13306,7 @@ int main(int argc, char **argv)
 #ifdef X6100_REMOTE
 				if (got > 0 && g_remote != NULL && g_txd_keyed) {
 					x6100_remote_tx_audio(g_remote, abuf, (size_t) got);	/* the monitor: the rig's TX audio */
+					txd_rec_feed(abuf, (size_t) got);	/* console txdrec */
 
 					for (ssize_t i = 0; i < got; i++)	/* its level for the log, left as sent */
 						g_txd_cap_sq += (double) abuf[i * 2] * abuf[i * 2];
@@ -13786,16 +13882,17 @@ int main(int argc, char **argv)
 
 					x6100_remote_tx_stats(g_remote, &ts);
 					fprintf(stderr, "\nremote TX: capture %u frames %.1f dBFS, sent %u packets %u blocks, "
-						"last block peak %.1f rms %.1f dBFS, overruns %u, tx %s, speaker %s, moni %d boost %d gain %d%%\n",
+						"last block peak %.1f rms %.1f dBFS, overruns %u, tx %s, speaker %s, moni %d boost %d gain %d%%, codec 0x%02x %u Hz\n",
 						g_txd_cap_n, rms > 0.0 ? 20.0 * log10(rms) : -120.0, ts.packets, ts.blocks,
 						ts.peak > 0.0f ? 20.0 * log10(ts.peak) : -120.0,
 						ts.rms > 0.0f ? 20.0 * log10(ts.rms) : -120.0, ts.overruns,
 						ts.available ? "available" : "NOT available", g_txd_mute ? "muted" : "on", g_txd_moni,
-						g_txd_boost_set, g_txd_gain);
+						g_txd_boost_set, g_txd_gain, ts.codec, ts.rate);
 					g_txd_cap_sq = 0.0;
 					g_txd_cap_n = 0;
 					g_txd_log_at = t;
 				} else if (!g_txd_keyed) {
+					txd_rec_close();	/* released: the recording ends */
 					g_txd_log_at = t;	/* the first line a second after keying */
 					g_txd_cap_sq = 0.0;
 					g_txd_cap_n = 0;
@@ -14237,6 +14334,8 @@ int main(int argc, char **argv)
 	if (g_remote != NULL) {
 		if (g_txd_keyed)
 			x6100_remote_ptt(g_remote, false);	/* the rig first, as in the loop */
+
+		txd_rec_close();	/* quit while recording: the WAV complete */
 
 		x6100_remote_close(g_remote);
 		g_remote = NULL;

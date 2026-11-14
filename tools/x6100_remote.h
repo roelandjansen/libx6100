@@ -170,6 +170,8 @@ typedef struct
 	float peak;
 	float rms;
 	bool available;
+	unsigned codec;			/* the TX codec the rig agreed to (0x04 LPCM 16 bit mono) */
+	unsigned rate;			/* ... and its sample rate */
 } x6100_remote_tx_stats_t;
 
 void x6100_remote_tx_stats(x6100_remote_t *r, x6100_remote_tx_stats_t *out);
