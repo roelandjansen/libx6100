@@ -304,6 +304,7 @@ int x6100_remote_open(x6100_remote_t **out, const x6100_remote_cfg_t *cfg)
 	p.cap_rate = cfg->tx_dummy ? C_RATE : 0;
 	p.enable_ptt = cfg->tx_dummy;
 	p.ptt_heartbeat_ms = cfg->tx_dummy ? 500 : 0;
+	p.mic_gain = 100;	/* the TX gain in % (2026-11-14: left at 0 by the memset, the rig got silence) */
 	p.ptt_timeout_enabled = true;
 	p.ptt_timeout_s = 180;
 

@@ -524,7 +524,7 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     j. Without --remote-tx-dummy: receive only as before, PTT refused (REMOTE RX).
     k. Speaker muted while keyed (added 2026-11-14): no monitor on the X6100 speaker, no
        feedback with the internal mic, and the TX audio to the rig still there (the
-       capture sits before the RX volume: to confirm); the RX audio back after release.
+       capture sits before the RX volume: confirmed 2026-11-14, n); the RX audio back after release.
     l. Under the TX box (added 2026-11-14, after "5W shown"): the rig's RF power setting
        in percent (Icom 0-255, polled by the rig file), -- until known; changing it on
        the 7851 changes it here within a few seconds. Not the X6100's 5.0 W.
@@ -539,6 +539,12 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
        added to our own poll). Console `notxdmute` keeps the speaker on while keyed:
        does the monitor (and so the TX audio) come back without the mute (k)? Raise VOL
        for it (the monitor may follow it); hand mic, against feedback.
+       Result 2026-11-14: the capture carried the monitor (-19 to -33 dBFS), about 100
+       packets a second went out, but every block was silent (peak -120 dBFS): the
+       session's TX gain (profile mic_gain) was left at 0 by the memset. Fixed: 100 %.
+       The capture level was the same with notxdmute: the mute (k) does not touch the
+       TX audio, so it stays on (k confirmed). RF power: right after RF Power was added
+       to our poll. To test again: the 7851 hears the voice (d).
     Blind spots: the monitor (level 70) also played on the X6100 speaker while keyed
     (now muted, k); CW is not handled;
     the hand mic PTT cannot key (m: not reported); a real antenna instead of the dummy radiates 0.1 W on
