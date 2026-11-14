@@ -209,10 +209,19 @@ script, the submodule commit or the zig version changed (fingerprint in `out/.fi
 bash build.sh                 # pull, build if needed
 bash build.sh deploy          # ... and scp x6100_trx, x6100_ui.sh, the quick reference
 X6100_HOST=root@192.168.1.61 bash build.sh deploy
+bash build.sh dist            # ... and out/x6100_trx-<rev>.tar.gz for OpenX6X00 images
 bash build.sh -f --no-pull    # force a build, no pull
 ```
 
 `deploy` copies to `$X6100_HOST:/root` (default `root@x6100`).
+
+`dist` (2026-11-14) makes an archive for anyone with a freshly flashed OpenX6X00 image:
+the files at their places on the radio, `install.sh` (run on a Linux PC:
+`./install.sh <address of the radio>`; one tar over ssh, the root password once) and a
+README. The install step on the radio sets owners and modes and copies the example
+settings only where none are there; it installs no `remote.conf` (passwords) and does
+not change the boot choice. The wfserver bundle goes in when built. The scripts are in
+`scripts/dist/`.
 
 ## Run on the radio
 
