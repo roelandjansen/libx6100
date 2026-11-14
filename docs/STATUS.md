@@ -642,6 +642,22 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
        CMDLINE and is not saved.
     i. x6100_giveaway.sh -n lists remote.conf; build.sh backup saves it at mode 600.
 
+51. Remote rigs past the X6100's range (2026-11-14, an IC-9700 on 145.5 MHz: the
+    frequency ran into the TX box, the band stayed 20m, the scope kept the 20m edge,
+    OOB red). Now: the frequency always eight digits as Icom shows it (145.500.00,
+    1296.500.0; the same width as 74.000.000, measured: 396 of 480 px); the tuning
+    range while remote 10 kHz - 1300 MHz (the rig refuses what it cannot do); the
+    rig's frequency taken over with the band (and so the scope window); band names 2m,
+    70cm, 23cm for the label; 2 m / 70 cm / 23 cm in every region's band plan (IARU;
+    R2 144-148 / 420-450, UK 23 cm to 1325), so OOB and the TX check are right there;
+    remote, the TX check is the rig's frequency against the band plan only. The
+    baseband gets 14.200 MHz while the rig is past its range (RX or TX frequency): it
+    keys there for --remote-tx-dummy (0.1 W into the dummy, the monitor as before);
+    the TX line follows the rig. To test on the 9700: a. the frequency, band, scope at
+    145.5 / 435 / 1296; b. the VFO knob tunes the 9700 (no jump to 75 MHz); c. no OOB
+    on 2 m; d. TX via the dummy on 2 m: the 9700 hears the mic, the X6100 keys at
+    14.200 (status line); e. back to LOCAL: the X6100's own range again.
+
 ## Next steps (suggested order)
 
 1. Radio checks above; the 2026-10-27 evening checklist (scope panel, fixed edges, wfview

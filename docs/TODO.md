@@ -396,6 +396,10 @@ Open from the receive side (handover 2026-11-12):
 - The rigs' places (frequency, mode and so on) are kept only while x6100_trx runs: not
   in the state yet (one line per rig would do).
 - remote.conf passwords in plain text (mode 600): an encrypted form later.
+- The tuning range while remote is one for all rigs (10 kHz - 1300 MHz; past the top
+  the dial goes round to 10 kHz): take each rig's bands from its wfview rig file.
+- Band keys and band memories are the X6100's (160 m - 4 m): on a VHF / UHF rig 2 m,
+  70 cm, 23 cm are labels only, no band key or memory.
 - A send dropped from a full session queue is not tried again.
 - Started again within about 90 s of the last session, the 7851 does not answer its
   CI-V ID until then (no rig file, no scope; REMOTE: WAIT FOR RIG shows). To find out:

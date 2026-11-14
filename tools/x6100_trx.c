@@ -223,8 +223,12 @@ static int bb_reset_pulse(void)
 	return 0;
 }
 
-#define FREQ_MIN	(g_no_limit ? 10000u : g_freq_min)
-#define FREQ_MAX	(g_no_limit ? 100000000u : g_freq_max)
+// Remote head (2026-11-14, an IC-9700 at 145.5 MHz): the rig's range, not the X6100's;
+// the rig refuses what it cannot do. REMOTE_ON is defined further down
+#define REMOTE_FREQ_MIN	10000u
+#define REMOTE_FREQ_MAX	1300000000u	/* 23 cm */
+#define FREQ_MIN	(REMOTE_ON ? REMOTE_FREQ_MIN : g_no_limit ? 10000u : g_freq_min)
+#define FREQ_MAX	(REMOTE_ON ? REMOTE_FREQ_MAX : g_no_limit ? 100000000u : g_freq_max)
 
 #define POLL_MS		5
 #define LONG_PRESS_MS	600
@@ -523,7 +527,8 @@ _Static_assert(sizeof(g_bands) / sizeof(g_bands[0]) == BAND_MAX, "band_freq[] in
 // frequentieruimte zonder vergunning en met meldingsplicht (stcrt 2015-3772,
 // 2021-31799) for F registration, 60 m per WRC-15, 4 m 70.0-70.5 MHz. TX above 54 MHz
 // is past the X6100's low-pass filters: check the output on a spectrum analyser before
-// going on air there.
+// going on air there. 2 m / 70 cm / 23 cm (IARU; 2026-11-14) only come into play with a
+// remote rig (an IC-9700): the X6100 itself does not reach them.
 //
 
 typedef struct
@@ -532,7 +537,7 @@ typedef struct
 	uint32_t high;
 } seg_t;
 
-#define SEG_MAX		24	/* TX segments per region (uk: 11 on 60 m alone) */
+#define SEG_MAX		28	/* TX segments per region (uk: 11 on 60 m alone, 25 in all with 2 m / 70 cm / 23 cm) */
 
 typedef struct
 {
@@ -544,20 +549,24 @@ static const region_t g_regions[] = {
 	{ "r1", {
 		{ 1810000, 2000000 }, { 3500000, 3800000 }, { 5351500, 5366500 }, { 7000000, 7200000 },
 		{ 10100000, 10150000 }, { 14000000, 14350000 }, { 18068000, 18168000 }, { 21000000, 21450000 },
-		{ 24890000, 24990000 }, { 28000000, 29700000 }, { 50000000, 52000000 } } },
+		{ 24890000, 24990000 }, { 28000000, 29700000 }, { 50000000, 52000000 },
+		{ 144000000, 146000000 }, { 430000000, 440000000 }, { 1240000000, 1300000000 } } },
 	{ "r2", {
 		{ 1800000, 2000000 }, { 3500000, 4000000 }, { 5351500, 5366500 }, { 7000000, 7300000 },
 		{ 10100000, 10150000 }, { 14000000, 14350000 }, { 18068000, 18168000 }, { 21000000, 21450000 },
-		{ 24890000, 24990000 }, { 28000000, 29700000 }, { 50000000, 54000000 } } },
+		{ 24890000, 24990000 }, { 28000000, 29700000 }, { 50000000, 54000000 },
+		{ 144000000, 148000000 }, { 420000000, 450000000 }, { 1240000000, 1300000000 } } },
 	{ "r3", {
 		{ 1800000, 2000000 }, { 3500000, 3900000 }, { 5351500, 5366500 }, { 7000000, 7300000 },
 		{ 10100000, 10150000 }, { 14000000, 14350000 }, { 18068000, 18168000 }, { 21000000, 21450000 },
-		{ 24890000, 24990000 }, { 28000000, 29700000 }, { 50000000, 54000000 } } },
+		{ 24890000, 24990000 }, { 28000000, 29700000 }, { 50000000, 54000000 },
+		{ 144000000, 148000000 }, { 430000000, 440000000 }, { 1240000000, 1300000000 } } },
 	{ "nl", {
 		{ 1810000, 1880000 }, { 3500000, 3800000 }, { 5351500, 5366500 }, { 7000000, 7200000 },
 		{ 10100000, 10150000 }, { 14000000, 14350000 }, { 18068000, 18168000 }, { 21000000, 21450000 },
 		{ 24890000, 24990000 }, { 28000000, 29700000 }, { 50000000, 52000000 },
-		{ 70000000, 70500000 } } },	/* 4 m (2026-11-04); no ITU allocation, so not in r1-r3 */
+		{ 70000000, 70500000 },	/* 4 m (2026-11-04); no ITU allocation, so not in r1-r3 */
+		{ 144000000, 146000000 }, { 430000000, 440000000 }, { 1240000000, 1300000000 } } },
 	{ "uk", {	/* 60 m: the 11 UK segments (Ofcom, Full licence; 2026-11-07), not WRC-15 */
 		{ 1810000, 2000000 }, { 3500000, 3800000 },
 		{ 5258500, 5264000 }, { 5276000, 5284000 }, { 5288500, 5292000 }, { 5298000, 5307000 },
@@ -565,7 +574,8 @@ static const region_t g_regions[] = {
 		{ 5378000, 5382000 }, { 5395000, 5401500 }, { 5403500, 5406500 }, { 7000000, 7200000 },
 		{ 10100000, 10150000 }, { 14000000, 14350000 }, { 18068000, 18168000 }, { 21000000, 21450000 },
 		{ 24890000, 24990000 }, { 28000000, 29700000 }, { 50000000, 52000000 },
-		{ 70000000, 70500000 } } },	/* 4 m */
+		{ 70000000, 70500000 },	/* 4 m */
+		{ 144000000, 146000000 }, { 430000000, 440000000 }, { 1240000000, 1325000000 } } },
 };
 
 #define REGION_COUNT	((int) (sizeof(g_regions) / sizeof(g_regions[0])))
@@ -872,6 +882,37 @@ static int band_of(uint32_t freq)
 	return -1;
 }
 
+// The band name shown; above the X6100's bands (a remote rig, 2026-11-14) 2m, 70cm or
+// 23cm for the label only (no band memory, no band key), else none
+static const char *band_label(const rx_t *rx, const char *none)
+{
+	static const struct { const char *name; uint32_t low, high; } vu[] = {
+		{ "2m", 144000000, 148000000 }, { "70cm", 420000000, 450000000 }, { "23cm", 1240000000, 1325000000 },
+	};
+
+	if (rx->band >= 0)
+		return g_bands[rx->band].name;
+
+	for (size_t i = 0; i < sizeof(vu) / sizeof(vu[0]); i++)
+		if (rx->freq >= vu[i].low && rx->freq <= vu[i].high)
+			return vu[i].name;
+
+	return none;
+}
+
+// The big frequency, as Icom shows it: always eight digits, so it keeps its width (a
+// remote IC-9700 at 145.5 MHz ran into the TX box, 2026-11-14): from 100 MHz the last
+// Hz digit goes (10 Hz), from 1 GHz two (100 Hz). hz1: the 1 Hz digit, else a 0 there
+static void freq_text(char *s, size_t n, uint32_t f, bool hz1)
+{
+	if (f >= 1000000000u)
+		snprintf(s, n, "%u.%03u.%u", f / 1000000, f / 1000 % 1000, f % 1000 / 100);
+	else if (f >= 100000000u)
+		snprintf(s, n, "%u.%03u.%02u", f / 1000000, f / 1000 % 1000, f % 1000 / 10);
+	else
+		snprintf(s, n, "%u.%03u.%03u", f / 1000000, f / 1000 % 1000, hz1 ? f % 1000 : f % 1000 / 10 * 10);
+}
+
 //
 // Receive filters, IC-705 style: five mode groups x FIL1 / FIL2 / FIL3, each an
 // audio passband low / high in Hz (registers 44-47). Edited with F5 long + MFK as
@@ -1129,6 +1170,7 @@ static int g_txd_boost_set = -1;	/* the Mic1 boost as last set on the codec, -1 
 #define TXD_LEAD_MS	150
 #define REMOTE_ON	(g_remote_req)
 #define REMOTE_MARK	"/tmp/x6100_trx.remote"	/* our PID while remote: x6100_ui.sh keeps wfserver off */
+#define REMOTE_PARK_HZ	14200000u		/* the baseband's frequency while the rig is past its range (apply) */
 
 //
 // --remote-tx-dummy recording (2026-11-14, a test aid; console txdrec): the capture as it
@@ -2455,7 +2497,37 @@ static void apply_flags_local(x6100_ctl_t *ctl, const rx_t *rx)
 
 static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 {
+#ifdef X6100_REMOTE
+	//
+	// Remote rig past the X6100's own range (an IC-9700 on 2 m, 2026-11-14): the baseband
+	// gets a copy on REMOTE_PARK_HZ instead, inside its range and every region's band
+	// plan, so --remote-tx-dummy still keys it (0.1 W into the dummy) and the monitor
+	// carries the mic. The rig gets the real frequency below; the TX line too (g_keyed_hz)
+	//
+	if (g_remote_req) {
+		const uint32_t f = rx->freq, ft = tx_hz(rx);
+
+		if (f < g_freq_min || f > g_freq_max || ft < g_freq_min || ft > g_freq_max) {
+			static rx_t park;
+
+			park = *rx;
+			park.freq = park.b_freq = REMOTE_PARK_HZ;
+			park.band = band_of(REMOTE_PARK_HZ);
+			park.split = park.rit = park.xit = false;
+			park.dup = DUP_OFF;
+			apply_local(ctl, cal, &park);
+
+			if (g_keyed_hz != 0)
+				g_keyed_hz = ft;
+		} else {
+			apply_local(ctl, cal, rx);
+		}
+	} else {
+		apply_local(ctl, cal, rx);
+	}
+#else
 	apply_local(ctl, cal, rx);
+#endif
 
 #ifdef X6100_REMOTE
 	if (g_remote_req) {
@@ -2562,8 +2634,10 @@ static bool tx_allowed(rx_t *rx)
 	if (g_allow_oob)
 		return true;
 
-	// Selected region's allocation, and a band the baseband transmits in
-	if (!in_allocation(tx_hz(rx)) || rx->band < 0 || !(x6100_band_index(tx_hz(rx)) & 1)) {
+	// Selected region's allocation, and a band the baseband transmits in; remote: the
+	// rig's frequency in the allocation only (the baseband keys on its own parking
+	// frequency there when the rig is past its range, see apply)
+	if (!in_allocation(tx_hz(rx)) || (!REMOTE_ON && (rx->band < 0 || !(x6100_band_index(tx_hz(rx)) & 1)))) {
 		rx->warn = "OUT OF BAND";
 		return false;
 	}
@@ -2607,7 +2681,7 @@ static void show(const rx_t *rx)
 	int cols = ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0 ? ws.ws_col : 80;
 
 	snprintf(line, sizeof(line), "%c %9.3f kHz %-5s %-4s step %s  vol %3d%s  rfg %3d  pre %s  agc %-4s%s%s",
-		rx->mem_mode ? 'M' : rx->on_b ? 'B' : 'A', rx->freq / 1000.0, rx->band >= 0 ? g_bands[rx->band].name : "-",
+		rx->mem_mode ? 'M' : rx->on_b ? 'B' : 'A', rx->freq / 1000.0, band_label(rx, "-"),
 		mode_name(rx->mode), st, rx->vol, rx->mute ? " (mute)" : "", rx->rfg, rx->pre ? "on " : "off",
 		agc_name(rx->agc), sp, rx->lock ? "  LOCK" : "");
 
@@ -8378,7 +8452,7 @@ static void draw_tune_panel(x6100_lcd_t *lcd, const rx_t *rx, const screen_t *sc
 	// Title, band / frequency, elapsed (or total) time
 	//
 	x6100_lcd_text(lcd, px + 12, py + 12, 2, done ? "TUNED" : "TUNING", accent);
-	snprintf(s, sizeof(s), "%s  %u.%03u.%03u", rx->band >= 0 ? g_bands[rx->band].name : "-",
+	snprintf(s, sizeof(s), "%s  %u.%03u.%03u", band_label(rx, "-"),
 		rx->freq / 1000000, rx->freq / 1000 % 1000, rx->freq % 1000);
 	x6100_lcd_text(lcd, px + 120, py + 12, 2, s, white);
 	snprintf(s, sizeof(s), "%2u.%u S", (unsigned) (ms / 1000), (unsigned) (ms / 100 % 10));
@@ -9397,7 +9471,7 @@ static void draw_portrait(screen_t *scr, const rx_t *rx)
 		x6100_lcd_fill(lcd, 0, 0, W, P_BAR_H, red);
 
 	x6100_lcd_text(lcd, 12, 6, 3, rx->tuning ? "TUNE" : scr->tx ? "TX" : "RX", on ? 0xFFFFFF : 0x3CC83C);
-	snprintf(s, sizeof(s), "%s  %s", rx->band >= 0 ? g_bands[rx->band].name : "GEN",
+	snprintf(s, sizeof(s), "%s  %s", band_label(rx, "GEN"),
 		rx->mem_mode ? "M" : rx->on_b ? "B" : "A");
 	x6100_lcd_text(lcd, 110, 10, 2, s, on ? 0xFFFFFF : SCR_DIM);
 
@@ -9471,8 +9545,7 @@ static void draw_portrait(screen_t *scr, const rx_t *rx)
 		// Always three digits after the kHz, so the width does not change with the step: the
 		// Hz digit with the 1 Hz step (FST long), else a 0 there (2026-11-07; before, two
 		// digits and the line jumped when the 1 Hz step came on)
-		snprintf(s, sizeof(s), "%u.%03u.%03u", f / 1000000, f / 1000 % 1000,
-			rx->step < 10 ? f % 1000 : f % 1000 / 10 * 10);
+		freq_text(s, sizeof(s), f, rx->step < 10);
 		x6100_lcd_text_aa(lcd, &x6100_font_freq, (W - x6100_lcd_text_aa_width(&x6100_font_freq, s)) / 2,
 			P_FREQ_Y, s, SCR_FREQ);
 	}
@@ -9668,7 +9741,7 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 	// Status line, TX indicator, indicators right (TUNE while the tuner searches)
 	//
 	x6100_lcd_fill(lcd, 0, 0, W, TOP_H, SCR_BG);
-	snprintf(s, sizeof(s), "%4s %5s AGC %4s", rx->band >= 0 ? g_bands[rx->band].name : "GEN",
+	snprintf(s, sizeof(s), "%4s %5s AGC %4s", band_label(rx, "GEN"),
 		mode_name(rx->mode), agc_name(rx->agc));
 	x6100_lcd_text(lcd, 12, TOP_Y, 3, s, SCR_ACCENT);
 
@@ -9751,7 +9824,7 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 		uint32_t f = rx->send == SEND_SCAN && rx->tx_hz_ovr != 0 ? rx->tx_hz_ovr
 			: !on ? rx->freq : rx->split ? rx->b_freq : (uint32_t) ((int64_t) rx->freq + dup_shift(rx));
 
-		snprintf(s, sizeof(s), "%u.%03u.%03u", f / 1000000, f / 1000 % 1000, f % 1000);
+		freq_text(s, sizeof(s), f, true);
 	}
 	x6100_lcd_text_aa(lcd, &x6100_font_freq, FREQ_X + (480 - x6100_lcd_text_aa_width(&x6100_font_freq, s)),
 		FREQ_Y - 17, s, SCR_FREQ);
@@ -14593,7 +14666,7 @@ int main(int argc, char **argv)
 			x6100_remote_poll(g_remote, &rs);
 
 			if (rs.freq_changed) {
-				rx.freq = rs.freq_hz;
+				set_freq(&rx, rs.freq_hz);	/* the band too (it stayed 20m on 145.5 MHz, 2026-11-14) */
 				changed = true;
 			}
 
