@@ -666,7 +666,10 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     region; each band keeps its last frequency and mode while on that rig, a new one
     starts at the X6100's band memory of that name or the band's lower edge; NFM / AM
     kept). Checked with the real rig files: IC-9700 2m - 70cm - 23cm round, IC-785x
-    2200m .. 6m and Gen. On the 9700 (2026-11-14): band keys verified.
+    2200m .. 6m and Gen. On the 9700 (2026-11-14): band keys verified; the small Hz
+    digits look right, the scope follows the rig, no OOB on 2 m, back to LOCAL fine (a,
+    b, c, e). Also connected: an IC-7760. Not tested yet: TX via the dummy (d), on the
+    9700 and the 7760.
 
 ## Next steps (suggested order)
 
