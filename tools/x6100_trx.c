@@ -1493,6 +1493,8 @@ static uint64_t g_remote_try_at;		/* next open attempt (ms), 0 = none */
 static int g_remote_shown = -1;			/* the standing note as last set: 0 link, 1 up, 2 rig keyed, 3 no rig file */
 static int g_txd_gain_set = -1;			/* txdgain as last given to the session */
 static bool g_rig_cli_txd;			/* --remote-tx-dummy: TX via the dummy for the rig of the command line */
+static int g_rig_power = -1;			/* our last power command for the rig in use: 1 on, 0 off, -1 none (rig_power_*) */
+static uint64_t g_rig_off_ask;			/* the first hold for off in the RIG panel (ms), 0 none */
 
 static void place_get(const rx_t *rx, rig_place_t *p)
 {
@@ -1770,6 +1772,8 @@ static void rig_leave(x6100_ctl_t *ctl, rx_t *rx)
 	g_remote_pwr = -1;
 	g_remote_fil_hz = 0;	/* the head's own filter widths until the rig says */
 	g_remote_tuning = false;
+	g_rig_power = -1;	/* nothing switched on this rig yet */
+	g_rig_off_ask = 0;
 	memset(g_remote_fil_kept, 0, sizeof(g_remote_fil_kept));
 	g_remote_shown = -1;
 	g_remote_try_at = 0;
@@ -1809,6 +1813,8 @@ static void rig_enter(rx_t *rx, int i)
 	g_remote_pwr = -1;
 	g_remote_fil_hz = 0;	/* the head's own filter widths until the rig says */
 	g_remote_tuning = false;
+	g_rig_power = -1;	/* nothing switched on this rig yet */
+	g_rig_off_ask = 0;
 	memset(g_remote_fil_kept, 0, sizeof(g_remote_fil_kept));
 	g_remote_shown = -1;
 	g_txd_gain_set = -1;
@@ -2052,6 +2058,58 @@ static bool remote_band_step(rx_t *rx, int dir)
 	set_freq(rx, f);
 	rx->mode = m;
 	return true;
+}
+
+//
+// The rig on / off from the head (2026-11-15): the RIG panel, MFK held on the line of the
+// rig in use, or console rig on / rig off. On goes at once; off from the panel needs a
+// second hold within RIG_OFF_ASK_MS. The state is ours (the rig reports none in
+// standby): our last command, else on while the rig answers (its rig file loaded)
+//
+
+#define RIG_OFF_ASK_MS	3000
+
+static void rig_power_send(bool on)
+{
+	g_rig_off_ask = 0;
+
+	if (g_remote == NULL || x6100_remote_power(g_remote, on) != 0) {
+		toast("RIG POWER: NOT SENT");
+		return;
+	}
+
+	g_rig_power = on ? 1 : 0;
+	fprintf(stderr, "\nrig: %s switched %s\n", rig_name(g_rig_cur), on ? "on" : "off (standby)");
+	toast(on ? "RIG POWER  ON" : "RIG POWER OFF");
+}
+
+static bool rig_power_on(void)
+{
+	return g_rig_power >= 0 ? g_rig_power == 1 : g_remote_up;
+}
+
+// MFK held in the RIG panel
+static void rig_power_hold(const rx_t *rx)
+{
+	const int r = rig_of_line(rx->rigedit_par);
+
+	if (r == RIG_LOCAL || r != g_rig_cur || g_remote == NULL) {
+		toast("RIG POWER: SWITCH TO IT FIRST");
+		return;
+	}
+
+	if (!rig_power_on()) {
+		rig_power_send(true);
+		return;
+	}
+
+	if (g_rig_off_ask == 0 || now_ms() - g_rig_off_ask > RIG_OFF_ASK_MS) {
+		g_rig_off_ask = now_ms();
+		toast("HOLD AGAIN: RIG OFF");
+		return;
+	}
+
+	rig_power_send(false);
 }
 
 // GEN held RIG_PRESS_MS: the panel, on the rig in use
@@ -5082,6 +5140,15 @@ static bool on_long_key(rx_t *rx, int key)
 		g_bscan_req = -1;	/* any key stops a birdie scan */
 		return true;
 	}
+
+#ifdef X6100_REMOTE
+	// RIG panel open, MFK held: the rig on / off (on the line of the rig in use)
+	if (rx->rigedit && key == X6100_KEY_MFK_PUSH) {
+		rx->rigedit_since = now_ms();
+		rig_power_hold(rx);
+		return true;
+	}
+#endif
 
 	// RIG panel open: a long press only closes it; LOCK long goes on to the screenshot,
 	// with the panel in it (2026-11-14: it closed the panel and took no shot)
@@ -8146,7 +8213,7 @@ static void draw_rig_panel(x6100_lcd_t *lcd, const rx_t *rx)
 		amber = 0xFFB020, red = 0xFF5050;
 
 	gen_frame(lcd, px, py, pw, ph, "RIG", g_rig_conf == RIG_CONF_MODE ? "REMOTE.CONF NOT MODE 600: NO REMOTE RIGS"
-		: g_nrigs == 0 ? "NO RIGS IN /ETC/X6100/REMOTE.CONF" : "MFK: CHOOSE  PUSH: SWITCH  GEN: CLOSE");
+		: g_nrigs == 0 ? "NO RIGS IN /ETC/X6100/REMOTE.CONF" : "MFK: CHOOSE  PUSH: SWITCH  HOLD: ON / OFF  GEN: CLOSE");
 
 	for (int i = top; i < top + vis; i++) {
 		const int y = py + 30 + (i - top) * 21, r = rig_of_line(i);
@@ -8173,6 +8240,9 @@ static void draw_rig_panel(x6100_lcd_t *lcd, const rx_t *rx)
 			if (r == RIG_LOCAL) {
 				st = "IN USE";
 				stc = green;
+			} else if (g_rig_power == 0) {	/* switched off from here: standby */
+				st = "OFF";
+				stc = amber;
 			} else if (g_remote_up) {
 				st = "LINK UP";
 				stc = green;
@@ -11168,6 +11238,18 @@ static bool console_line(rx_t *rx, char *line)
 		// keyed); from the state at the start: the rig as left
 		if (want_rig) {
 			want_rig = false;
+
+			// rig on / rig off: the rig in use (2026-11-15; typed on purpose: no second ask)
+			if (!g_conf_loading && (strcasecmp(t, "on") == 0 || strcasecmp(t, "off") == 0)) {
+				if (g_rig_cur == RIG_LOCAL)
+					fprintf(stderr, "\nrig on / off: LOCAL in use, switch to a rig first\n");
+				else
+					rig_power_send(strcasecmp(t, "on") == 0);
+
+				changed = true;
+				continue;
+			}
+
 			snprintf(g_rig_ask, sizeof(g_rig_ask), "%s", t);
 
 			if (g_conf_loading)

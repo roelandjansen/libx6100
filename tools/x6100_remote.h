@@ -189,6 +189,9 @@ void x6100_remote_tx_gain(x6100_remote_t *r, int percent);
 // The rig's tuner: tune now (TX rigs only; 0 sent, < 0 refused)
 int x6100_remote_tune(x6100_remote_t *r);
 
+// The rig on / off (CI-V 18 01 / 18 00; also in standby, without a rig file): 0 sent
+int x6100_remote_power(x6100_remote_t *r, bool on);
+
 //
 // Bands
 //
