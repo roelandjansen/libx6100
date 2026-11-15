@@ -842,6 +842,10 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     of the 2026-11-06 / 07 scans is gone (40 m, 20 m), its two strongest (51165.4, 70352.4
     kHz) were harmonics of 6395.68 kHz and stay. Analysis and list:
     docs/x6100_birdies_full_20261115.md.
+    The FCC photos: STM32F4 (probably F427) on the base unit. 6395.68 kHz / 64 = 99.932
+    kHz: very likely the I2S bit clock of the IQ, the IQ rate 99.93 kHz, not 100. Console
+    `spancal [carrier Hz]` (default the 12791.331 kHz birdie) measures it: expected about
+    -680 ppm. Not run yet.
 
 57. Dual watch audio (2026-11-15; not on a rig yet): a 2-channel stream from an Icom has
     main left, sub right. Dual watch was heard right (main left, sub right), a single

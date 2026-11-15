@@ -2219,6 +2219,7 @@ static int g_ifshift = IFSHIFT_DEF;	/* conf / console token ifshift, Hz, 0 = off
 static int g_ifshift_tx = 1;	/* conf / console token ifshift_tx 0 / 1: keep the shift while keyed */
 
 static bool bscan_running(void);
+static bool spancal_running(void);	/* the span measurement: the receiver plain as for the scan */
 
 static int lo_shift(const rx_t *rx)
 {
@@ -2227,12 +2228,12 @@ static int lo_shift(const rx_t *rx)
 	if (!g_ifshift_tx && (rx->mode == X6100_MODE_CW || rx->mode == X6100_MODE_CWR))
 		return 0;
 
-	return !bscan_running() ? g_ifshift : 0;
+	return !bscan_running() && !spancal_running() ? g_ifshift : 0;
 }
 
 static int am_ofs(const rx_t *rx)
 {
-	return rx->mode == X6100_MODE_AM && !bscan_running() && g_ifshift == 0 ? g_am_ofs : 0;
+	return rx->mode == X6100_MODE_AM && !bscan_running() && !spancal_running() && g_ifshift == 0 ? g_am_ofs : 0;
 }
 
 //
@@ -2253,7 +2254,7 @@ static void am_pass(const rx_t *rx, int *centre, int *half)
 
 	mode_filter(rx->mode, rx->fil, &lo, &hi);
 
-	if (rx->mode != X6100_MODE_AM || bscan_running()) {
+	if (rx->mode != X6100_MODE_AM || bscan_running() || spancal_running()) {
 		*centre = 0;
 		*half = (int) hi;
 		return;
@@ -2868,6 +2869,11 @@ static bool tx_allowed(rx_t *rx)
 
 	if (bscan_running()) {
 		rx->warn = "BIRDIE SCAN";
+		return false;
+	}
+
+	if (spancal_running()) {
+		rx->warn = "SPAN CAL";
 		return false;
 	}
 
@@ -6335,6 +6341,186 @@ static void bscan_text(char *s, size_t n)
 {
 	snprintf(s, n, "BIRDIE SCAN %s %d %%  %d FOUND", bscan_name(),
 		g_bs.steps > 0 ? g_bs.step * 100 / g_bs.steps : 0, g_bs.found);
+}
+
+//
+// Span calibration (2026-11-15, console spancal [carrier Hz]): the true width of the
+// baseband IQ. A steady carrier is put SC_OFS_HZ above the centre, then SC_OFS_HZ below;
+// its place is measured both times (SC_FRAMES averaged spectra, a parabola through the
+// peak in dB). The two places are 2 x SC_OFS_HZ apart in truth: their distance in bins
+// gives the IQ rate; the radio's own frequency error is the same in both and drops out.
+// The full range birdie scan pointed at an IQ rate of 99.932 kHz (6395.68 kHz / 64, an
+// I2S bit clock), not the 100 kHz SPAN_HZ assumes. Default carrier: the 12791.331 kHz
+// birdie (56 dB, no antenna needed). Receive only; the VFO comes back at the end
+//
+
+#define SC_OFS_HZ	40000
+#define SC_FRAMES	128
+#define SC_SETTLE_MS	500
+#define SC_SEARCH_BINS	8		/* the peak looked for this far around where it should be */
+
+typedef struct
+{
+	int side;			/* 0 idle, 1 carrier above the centre, 2 below */
+	uint32_t carrier;
+	uint64_t settle_until;
+	int frames;
+	double acc[X6100_FLOW_SAMPLES];
+	double pos[2];			/* the peak, bins from the centre, per side */
+	double snr[2];
+	uint32_t ret_freq;
+	int ret_band;
+	bool ret_rit;
+	bool ret_atu;
+} spancal_t;
+
+static spancal_t g_sc;
+static uint32_t g_sc_req;		/* console: the carrier to measure on (main loop starts it) */
+
+static bool spancal_running(void)
+{
+	return g_sc.side != 0;
+}
+
+static void spancal_tune(rx_t *rx)
+{
+	rx->freq = g_sc.side == 1 ? g_sc.carrier - SC_OFS_HZ : g_sc.carrier + SC_OFS_HZ;
+	rx->band = band_of(rx->freq);
+	g_sc.frames = 0;
+	memset(g_sc.acc, 0, sizeof(g_sc.acc));
+	g_sc.settle_until = now_ms() + SC_SETTLE_MS;
+}
+
+static void spancal_end(rx_t *rx)
+{
+	g_sc.side = 0;
+	rx->freq = g_sc.ret_freq;
+	rx->band = g_sc.ret_band;
+	rx->rit = g_sc.ret_rit;
+	rx->atu_on = g_sc.ret_atu;
+}
+
+static void spancal_start(rx_t *rx, uint32_t carrier)
+{
+	if (spancal_running() || bscan_running() || rx->ptt || rx->tuning || rx->bb_tx) {
+		printf("\nspancal: not now (scan, TX or tune running)\n");
+		return;
+	}
+
+	memset(&g_sc, 0, sizeof(g_sc));
+	g_sc.carrier = carrier;
+	g_sc.ret_freq = rx->freq;
+	g_sc.ret_band = rx->band;
+	g_sc.ret_rit = rx->rit;
+	g_sc.ret_atu = rx->atu_on;
+	rx->rit = false;
+	rx->atu_on = false;
+	g_sc.side = 1;
+	printf("\nspancal: carrier %.3f kHz at +%d and -%d kHz, %d spectra each (about 10 s)\n", carrier / 1000.0,
+		SC_OFS_HZ / 1000, SC_OFS_HZ / 1000, SC_FRAMES);
+	spancal_tune(rx);
+}
+
+// The peak near the expected bin: place in bins from the centre (parabola in dB) and
+// its height over the median of the spectrum
+static bool spancal_peak(double expect, double *pos, double *snr)
+{
+	const int n = X6100_FLOW_SAMPLES, c = n / 2;
+	static double db[X6100_FLOW_SAMPLES], sorted[X6100_FLOW_SAMPLES];
+	int e = (int) lround(c + expect), best = -1;
+
+	for (int i = 0; i < n; i++) {
+		db[i] = g_sc.acc[i] > 1e-30 ? 10.0 * log10(g_sc.acc[i] / g_sc.frames) : -300.0;
+		sorted[i] = db[i];
+	}
+
+	for (int i = 1; i < n; i++) {
+		double v = sorted[i];
+		int j = i - 1;
+
+		while (j >= 0 && sorted[j] > v) {
+			sorted[j + 1] = sorted[j];
+			j--;
+		}
+		sorted[j + 1] = v;
+	}
+
+	for (int i = e - SC_SEARCH_BINS; i <= e + SC_SEARCH_BINS; i++)
+		if (i > 0 && i < n - 1 && (best < 0 || db[i] > db[best]))
+			best = i;
+
+	if (best < 0)
+		return false;
+
+	double den = db[best - 1] - 2.0 * db[best] + db[best + 1];
+	double d = den < 0.0 ? 0.5 * (db[best - 1] - db[best + 1]) / den : 0.0;
+
+	*pos = best + (d < -0.5 ? -0.5 : d > 0.5 ? 0.5 : d) - c;
+	*snr = db[best] - sorted[n / 2];
+	return true;
+}
+
+// Every flow frame while it runs: as the scan's FFT (Hann window, centred, mirrored IQ
+// taken into account), then the peak of each side and the result
+static void spancal_feed(rx_t *rx, const x6100_flow_frame_t *f)
+{
+	static float buf[X6100_FLOW_SAMPLES][2];
+	const int n = X6100_FLOW_SAMPLES;
+	const double bin_hz = (double) SPAN_HZ / n, expect = SC_OFS_HZ / bin_hz;
+	int s;
+
+	if (!spancal_running() || now_ms() < g_sc.settle_until)
+		return;
+
+	for (int i = 0; i < n; i++) {
+		float w = 0.5f - 0.5f * cosf(2.0f * (float) M_PI * (float) i / (float) (n - 1));
+
+		buf[i][0] = f->iq[i][0] * w;
+		buf[i][1] = f->iq[i][1] * w;
+	}
+
+	fft(buf, n);
+
+	for (int i = 0; i < n; i++) {
+		int k = (i + n / 2) % n;
+		int pos = X6100_FLOW_IQ_MIRRORED ? (n - i) % n : i;
+
+		g_sc.acc[pos] += (double) buf[k][0] * buf[k][0] + (double) buf[k][1] * buf[k][1];
+	}
+
+	if (++g_sc.frames < SC_FRAMES)
+		return;
+
+	s = g_sc.side - 1;
+
+	if (!spancal_peak(s == 0 ? expect : -expect, &g_sc.pos[s], &g_sc.snr[s])) {
+		printf("\nspancal: no peak found\n");
+		spancal_end(rx);
+		return;
+	}
+
+	printf("\nspancal: %s side: %+.4f bins (%.1f dB over the median)\n", s == 0 ? "upper" : "lower",
+		g_sc.pos[s], g_sc.snr[s]);
+
+	if (g_sc.side == 1) {
+		g_sc.side = 2;
+		spancal_tune(rx);
+		return;
+	}
+
+	// 2 x SC_OFS_HZ in truth over the distance in bins: the true bin width, x 512 the
+	// IQ rate. The middle of the two: the carrier against the dial (the radio's error)
+	const double dist = g_sc.pos[0] - g_sc.pos[1];
+	const double rate = dist > 1.0 ? 2.0 * SC_OFS_HZ / dist * n : 0.0;
+	const double mid_hz = (g_sc.pos[0] + g_sc.pos[1]) / 2.0 * (rate / n);
+
+	printf("spancal: distance %.4f bins (%.4f expected at %d Hz): IQ rate %.1f Hz, %+.0f ppm against %d\n",
+		dist, 2.0 * expect, SPAN_HZ, rate, (rate / SPAN_HZ - 1.0) * 1e6, SPAN_HZ);
+	printf("spancal: the carrier %+.1f Hz off %.3f kHz (the radio's own frequency error, or the carrier's)\n",
+		mid_hz, g_sc.carrier / 1000.0);
+	if (g_sc.snr[0] < 20.0 || g_sc.snr[1] < 20.0)
+		printf("spancal: weak peak (under 20 dB): take it with care\n");
+	spancal_end(rx);
 }
 
 static uint32_t wf_colour(float t)
@@ -11001,6 +11187,7 @@ static void help_console(void)
 		"  memory    memr [n]   memw n   memc n   mem n <Hz> <mode> fil<n> [...] [name text]\n"
 		"  messages  msg   msg n cw <text> | voice <file> | clear   msgsend n   msgstop   msgrepeat <s>\n"
 		"  birdies   birdiescan [all|full] [quiet]   birdiestop   birdies   birdieclear   birdiemarks   birdienotch\n"
+		"            spancal [carrier Hz]: the true IQ width (default: the 12791.331 kHz birdie)\n"
 		"  cat       cat <baud>|off   catpty on|off   civaddr a4|61   catmem ro|rw   cattime off|unsynced|on\n"
 		"            modin mic|usb mic|usb\n"
 		"  system    layout portrait|landscape   portraitrot 0|180   autolock <s>   bright 5-100\n"
@@ -11891,6 +12078,19 @@ static bool console_line(rx_t *rx, char *line)
 			}
 
 			g_bscan_req = 1;
+			continue;
+		}
+
+		// spancal [carrier Hz]: the true IQ width from a steady carrier at +-40 kHz;
+		// default the 12791.331 kHz birdie (2026-11-15)
+		if (strcasecmp(t, "spancal") == 0) {
+			const char *as = strtok(NULL, " \t\r\n");
+			long hz = as != NULL ? strtol(as, NULL, 10) : 12791331L;
+
+			if (hz < 100000L || hz > 74000000L)
+				fprintf(stderr, "\nspancal [carrier Hz, 0.1-74 MHz]\n");
+			else
+				g_sc_req = (uint32_t) hz;
 			continue;
 		}
 
@@ -14769,6 +14969,13 @@ int main(int argc, char **argv)
 			state_save(&rx);
 		}
 
+		// Span calibration asked for (console)
+		if (g_sc_req != 0) {
+			spancal_start(&rx, g_sc_req);
+			g_sc_req = 0;
+			dirty = true;
+		}
+
 		// Birdie scan asked for (GEN row, console): start / stop here, with rx at hand
 		if (g_bscan_req != 0) {
 			if (g_bscan_req > 0 && bscan_start(&rx, g_bscan_mode) && g_bscan_quiet) {
@@ -15430,6 +15637,11 @@ int main(int argc, char **argv)
 				dirty = true;
 			}
 
+			if (spancal_running()) {
+				spancal_feed(&rx, &frame);
+				dirty = true;
+			}
+
 			level += iq_level_db(&frame);
 			level_n++;
 
@@ -15608,6 +15820,8 @@ int main(int argc, char **argv)
 	x6100_ctl_sync(&ctl);
 	fil_save();
 	bscan_stop(&rx, false);	/* quit during a scan: the VFO comes back first */
+	if (spancal_running())
+		spancal_end(&rx);	/* the same for a span calibration */
 
 	if (cats[CAT_EP_PTY].pty_name[0] != '\0')
 		unlink(CAT_PTY_LINK);	/* the pty goes with us */
