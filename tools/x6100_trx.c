@@ -5048,6 +5048,13 @@ static bool on_key(rx_t *rx, int key)
 		}
 		break;
 	case X6100_KEY_ATU:
+#ifdef X6100_REMOTE
+		// A rig without a tuner (IC-9700; 2026-11-15): said so, nothing changes
+		if (REMOTE_ON && (g_remote == NULL || !x6100_remote_has_tuner(g_remote))) {
+			toast("RIG HAS NO TUNER");
+			break;
+		}
+#endif
 		rx->atu_on = !rx->atu_on;
 
 		// Remote: the rig's tuner on / off (apply sends it, 2026-11-14), not ours
@@ -5297,7 +5304,9 @@ static bool on_long_key(rx_t *rx, int key)
 			if (rx->ptt || g_remote_tuning || !tx_allowed(rx))
 				return true;
 
-			if (g_remote == NULL || x6100_remote_tune(g_remote) != 0)
+			if (g_remote == NULL || !x6100_remote_has_tuner(g_remote))
+				toast("RIG HAS NO TUNER");
+			else if (x6100_remote_tune(g_remote) != 0)
 				toast("RIG TUNE REFUSED");
 			else
 				toast("RIG    TUNING");	/* as wide as RIG TUNER OFF */
@@ -15032,6 +15041,13 @@ int main(int argc, char **argv)
 
 			if (rs.ctl_changed & X6100_REMOTE_C_ATU)
 				rx.atu_on = rs.ctl.atu;	/* the rig's tuner on / off */
+
+			// No tuner on this rig (IC-9700): no ATU in the indicator, also not from
+			// this rig's place or the rig before (2026-11-15)
+			if (rx.atu_on && x6100_remote_no_tuner(g_remote)) {
+				rx.atu_on = false;
+				changed = true;
+			}
 
 			if (rs.rig_tuning != g_remote_tuning) {	/* TUNE while the rig tunes */
 				g_remote_tuning = rs.rig_tuning;

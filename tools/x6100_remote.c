@@ -24,6 +24,7 @@
 
 #include "core/audio_decode.h"
 #include "core/rig.h"		/* RIG_CONTROLLER_ADDR, for our own ID query */
+#include "core/rigfile.h"	/* rigfile_cmd: the rig has a tuner */
 #include "core/session.h"
 #include "model/radio_state.h"
 
@@ -618,7 +619,7 @@ void x6100_remote_apply(x6100_remote_t *r, const x6100_remote_rx_t *rx)
 
 	// The tuner on / off (2026-11-14): only a change on the head goes out, not the first
 	// push, so the rig keeps its own state at connect and the head takes it (poll)
-	if (!all && rx->atu != o->atu) {
+	if (!all && rx->atu != o->atu && x6100_remote_has_tuner(r)) {
 		session_set_value(r->s, "Tuner/ATU Status", 0, rx->atu ? 1 : 0);
 		r->ctl_sent_ms[C_ATU] = t;
 	}
@@ -738,7 +739,7 @@ void x6100_remote_poll(x6100_remote_t *r, x6100_remote_status_t *st)
 	{
 		const bool watch = r->tune_ms != 0 && t - r->tune_ms < C_TUNE_WATCH_MS;
 
-		if (rs.rig_valid && t - r->tune_ask_ms >= (watch ? 500 : 1000)) {
+		if (rs.rig_valid && t - r->tune_ask_ms >= (watch ? 500 : 1000) && x6100_remote_has_tuner(r)) {
 			session_get_value(r->s, "Tuner/ATU Status", 0);
 			r->tune_ask_ms = t;
 		}
@@ -1062,6 +1063,25 @@ size_t x6100_remote_bands(x6100_remote_t *r, int region, x6100_remote_band_t *ou
 }
 
 //
+// The rig has a tuner: its rig file has Tuner/ATU Status (2026-11-15: the IC-9700 has
+// none; it was asked every second and the ATU key said RIG TUNER ON all the same)
+//
+
+bool x6100_remote_has_tuner(const x6100_remote_t *r)
+{
+	const struct rig_def *def = session_rig_def(r->s);
+
+	return def != NULL && rigfile_cmd(def, "Tuner/ATU Status") != NULL;
+}
+
+bool x6100_remote_no_tuner(const x6100_remote_t *r)
+{
+	const struct rig_def *def = session_rig_def(r->s);
+
+	return def != NULL && rigfile_cmd(def, "Tuner/ATU Status") == NULL;
+}
+
+//
 // The rig's tuner tunes (2026-11-14: the ATU key long on the head): Tuner/ATU Status 2,
 // as wfview's tune; the session refuses it for a receive-only rig (PTT disabled). TUNE
 // shows while the rig reports 2 (rig_tuning)
@@ -1069,7 +1089,12 @@ size_t x6100_remote_bands(x6100_remote_t *r, int region, x6100_remote_band_t *ou
 
 int x6100_remote_tune(x6100_remote_t *r)
 {
-	int rc = tx_tune(r->s);
+	int rc;
+
+	if (!x6100_remote_has_tuner(r))
+		return -1;
+
+	rc = tx_tune(r->s);
 
 	if (rc == 0) {
 		r->tune_ms = now_ms();

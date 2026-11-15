@@ -186,8 +186,14 @@ void x6100_remote_tx_stats(x6100_remote_t *r, x6100_remote_tx_stats_t *out);
 // The session's TX gain in % (0-400, 100 unchanged; console txdgain)
 void x6100_remote_tx_gain(x6100_remote_t *r, int percent);
 
-// The rig's tuner: tune now (TX rigs only; 0 sent, < 0 refused)
+// The rig's tuner: tune now (TX rigs only; 0 sent, < 0 refused or no tuner)
 int x6100_remote_tune(x6100_remote_t *r);
+
+// The rig has a tuner (its rig file has Tuner/ATU Status); false until the rig file is in
+bool x6100_remote_has_tuner(const x6100_remote_t *r);
+
+// The rig file is in and has no tuner (not the same as !has_tuner: unknown until then)
+bool x6100_remote_no_tuner(const x6100_remote_t *r);
 
 // The rig on / off (CI-V 18 01 / 18 00; also in standby, without a rig file): 0 sent
 int x6100_remote_power(x6100_remote_t *r, bool on);
