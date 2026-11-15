@@ -845,7 +845,8 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     The FCC photos: STM32F4 (probably F427) on the base unit. 6395.68 kHz / 64 = 99.932
     kHz: very likely the I2S bit clock of the IQ, the IQ rate 99.93 kHz, not 100. Console
     `spancal [carrier Hz]` (default the 12791.331 kHz birdie) measures it: expected about
-    -680 ppm. Not run yet.
+    -680 ppm. Run 2026-11-15: IQ rate 99934.4 Hz, -656 ppm (offline check of a true 99932
+    Hz: 99934.4): the IQ is 99.93 kHz wide. Next: the scope scale from it; cold / warm.
 
 57. Dual watch audio (2026-11-15; not on a rig yet): a 2-channel stream from an Icom has
     main left, sub right. Dual watch was heard right (main left, sub right), a single
