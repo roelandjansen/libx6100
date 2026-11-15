@@ -794,6 +794,9 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     With it the app stayed on "switching on": the core's ID query went to all (00) and
     the 7851 left it unanswered; it now goes to the address from the login
     (libx6100_app session), as x6100_trx's own query did.
+    Still "Radio Login OK!" with the rig in standby: no radio chosen, so no CI-V
+    path and no Power on. The control stream now says why it waits (no radio list,
+    busy without another client, more than one radio) instead of nothing.
 
 ## Next steps (suggested order)
 
