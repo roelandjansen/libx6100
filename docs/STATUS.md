@@ -858,6 +858,19 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     it could move onto the core's. Test: the rig on MIC, connect from the app: LAN;
     disconnect: MIC again; TX power with the buds.
 
+59. Dual watch in the app, step 1 (2026-11-15; not on a rig yet; HF rigs first: 785x,
+    7760, 7610): DW in the AGC row (dim off, amber on; a tap switches it on the rig),
+    while on the other receiver over the top left of the spectrum (SUB <freq> <mode>),
+    and in the rig-name menu the audio route (auto: main left, sub right / main on both
+    / sub on both). The core already polled both receivers (RX Frequency, RX Mode with
+    VFO=-1 in the rig files); VFO Dual Watch is now kept in the state. rx[1] is Icom's
+    unselected receiver: the sub while main is selected. Next: step 2 (tap the sub line
+    to make it the active receiver; tuning, mode, filter and scope follow), step 3 (a
+    two-column layout from about 600 dp wide: tablets, unfolded foldables). The 9700
+    later (no Command29, other addressing). Test: DW on / off from the app and on the
+    rig (the label follows within about a second), the sub line follows the sub's
+    frequency and mode, the three audio routes.
+
 ## Next steps (suggested order)
 
 1. Radio checks above; the 2026-10-27 evening checklist (scope panel, fixed edges, wfview
