@@ -858,7 +858,7 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     it could move onto the core's. Test: the rig on MIC, connect from the app: LAN;
     disconnect: MIC again; TX power with the buds.
 
-59. Dual watch in the app, step 1 (2026-11-15; not on a rig yet; HF rigs first: 785x,
+59. Dual watch in the app, step 1 (2026-11-15; DW and the sub line verified on the 7851; 785x,
     7760, 7610): DW in the AGC row (dim off, amber on; a tap switches it on the rig),
     while on the other receiver over the top left of the spectrum (SUB <freq> <mode>),
     and in the rig-name menu the audio route (auto: main left, sub right / main on both
