@@ -789,6 +789,9 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     asks again); native console power on|off. Same frame.
     A rig in standby kept the "reading radio state" overlay over the rig name: the
     overlay now has its own Power on button while no state comes.
+    With it the app stayed on "switching on": the core's ID query went to all (00) and
+    the 7851 left it unanswered; it now goes to the address from the login
+    (libx6100_app session), as x6100_trx's own query did.
 
 ## Next steps (suggested order)
 
