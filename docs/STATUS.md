@@ -798,8 +798,9 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     path and no Power on. The control stream now says why it waits (no radio list,
     busy without another client, more than one radio) instead of nothing.
 
-55. The IC-7851 held a session some 90 s after a disconnect (2026-11-15; not on a rig
-    yet): kill, then sleep 90 before a new start worked, less did not (wfview main
+55. The IC-7851 held a session some 90 s after a disconnect (2026-11-15; verified on the
+    7851: reconnect without the wait): kill, then sleep 90 before a new start worked,
+    less did not (wfview main
     the same). Seen meanwhile: LAN indication off, no scope, audio still heard: the
     7851 dropped control and CI-V and kept audio going, and the session counted any
     datagram as a live link. Changed in the libx6100_app core (x6100_trx and the app):
@@ -817,6 +818,8 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     90 s wait; the same in the app (disconnect / connect); a cable pull: REMOTE lost
     within 15 s and back without the wait. Loopback test checks token remove, 3
     disconnects per stream and a rig-side close.
+    Result on the 7851: stop / start works without the 90 s. Within about 1 s the rig
+    still reports busy (it is still closing the old session); a moment later it connects.
 
 ## Next steps (suggested order)
 
