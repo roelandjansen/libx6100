@@ -835,6 +835,15 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     A full scan replaces the whole list. Test: `birdiescan full quiet` with a dummy
     load; time taken, count, whether the list was full (the end message says so).
 
+57. Dual watch audio (2026-11-15; not on a rig yet): a 2-channel stream from an Icom has
+    main left, sub right. Dual watch was heard right (main left, sub right), a single
+    receiver only on the left. In the libx6100_app core (app and x6100_trx): a right
+    channel silent (below -80 dBFS) for 0.3 s gets the left one too; anything on the
+    right ends it at once (20 ms fade). Without the rig file, so every rig the same.
+    Not told apart: dual watch with the sub squelch closed (silent too): main on both
+    until the sub opens. Test: single RX on both sides, dual watch main left / sub
+    right, switching between them on the rig.
+
 ## Next steps (suggested order)
 
 1. Radio checks above; the 2026-10-27 evening checklist (scope panel, fixed edges, wfview
