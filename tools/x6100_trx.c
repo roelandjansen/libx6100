@@ -5796,8 +5796,16 @@ static const int g_tag_x[5] = { 52, 224, 393, 567, 742 };	/* fitted to photos of
 #define DISP_MS		70
 #define SPEC_DB_MIN	-130.0f
 #define SPEC_DB_MAX	-30.0f
-#define SPAN_HZ		100000	/* the IQ width: 512 bins of 195.3 Hz (2026-11-03; was 96000, 4 % off: with the
+#define SPAN_HZ_DEF	100000	/* the IQ width: 512 bins of 195.3 Hz (2026-11-03; was 96000, 4 % off: with the
 				   IF shift a carrier was drawn shift x 4 % short of the dial; stock: FFT SPAN 100k) */
+
+// The IQ width as measured (2026-11-15): spancal stores it (state: iqrate <Hz>), else
+// SPAN_HZ_DEF. One radio measured 99934.4 Hz, -656 ppm: the CS4272 codec's clocks run
+// that much low against the 26 MHz TCXO. Every bin <-> Hz conversion uses it
+static double g_span_hz = SPAN_HZ_DEF;
+#define SPAN_HZ		g_span_hz
+#define IQRATE_MIN	99000.0
+#define IQRATE_MAX	101000.0
 #define GRID_HZ		10000
 #define GRID_DB		10
 
@@ -6514,12 +6522,22 @@ static void spancal_feed(rx_t *rx, const x6100_flow_frame_t *f)
 	const double rate = dist > 1.0 ? 2.0 * SC_OFS_HZ / dist * n : 0.0;
 	const double mid_hz = (g_sc.pos[0] + g_sc.pos[1]) / 2.0 * (rate / n);
 
-	printf("spancal: distance %.4f bins (%.4f expected at %d Hz): IQ rate %.1f Hz, %+.0f ppm against %d\n",
-		dist, 2.0 * expect, SPAN_HZ, rate, (rate / SPAN_HZ - 1.0) * 1e6, SPAN_HZ);
+	printf("spancal: distance %.4f bins (%.4f expected at %.1f Hz): IQ rate %.1f Hz, %+.0f ppm against %d\n",
+		dist, 2.0 * expect, SPAN_HZ, rate, (rate / SPAN_HZ_DEF - 1.0) * 1e6, SPAN_HZ_DEF);
 	printf("spancal: the carrier %+.1f Hz off %.3f kHz (the radio's own frequency error, or the carrier's)\n",
 		mid_hz, g_sc.carrier / 1000.0);
-	if (g_sc.snr[0] < 20.0 || g_sc.snr[1] < 20.0)
-		printf("spancal: weak peak (under 20 dB): take it with care\n");
+
+	// Kept as the IQ width (state: iqrate) when both peaks were clear and it is near 100 kHz
+	if (g_sc.snr[0] < 20.0 || g_sc.snr[1] < 20.0) {
+		printf("spancal: weak peak (under 20 dB): not kept, IQ width stays %.1f Hz\n", SPAN_HZ);
+	} else if (rate < IQRATE_MIN || rate > IQRATE_MAX) {
+		printf("spancal: out of %.0f-%.0f Hz: not kept, IQ width stays %.1f Hz\n", IQRATE_MIN, IQRATE_MAX, SPAN_HZ);
+	} else {
+		g_span_hz = rate;
+		g_gen_save_at = now_ms() + GEN_SAVE_MS;	/* into the state */
+		printf("spancal: kept: the IQ width is now %.1f Hz (state: iqrate; iqrate 0 for %d)\n", SPAN_HZ,
+			SPAN_HZ_DEF);
+	}
 	spancal_end(rx);
 }
 
@@ -11187,7 +11205,8 @@ static void help_console(void)
 		"  memory    memr [n]   memw n   memc n   mem n <Hz> <mode> fil<n> [...] [name text]\n"
 		"  messages  msg   msg n cw <text> | voice <file> | clear   msgsend n   msgstop   msgrepeat <s>\n"
 		"  birdies   birdiescan [all|full] [quiet]   birdiestop   birdies   birdieclear   birdiemarks   birdienotch\n"
-		"            spancal [carrier Hz]: the true IQ width (default: the 12791.331 kHz birdie)\n"
+		"            spancal [carrier Hz]: the true IQ width, kept (default: the 12791.331 kHz birdie)\n"
+		"            iqrate [Hz]: show / set the IQ width (0: 100000)\n"
 		"  cat       cat <baud>|off   catpty on|off   civaddr a4|61   catmem ro|rw   cattime off|unsynced|on\n"
 		"            modin mic|usb mic|usb\n"
 		"  system    layout portrait|landscape   portraitrot 0|180   autolock <s>   bright 5-100\n"
@@ -11730,6 +11749,28 @@ static bool console_line(rx_t *rx, char *line)
 			if (!g_conf_loading)
 				set_freq(rx, rx->freq);	/* console: the VFO into the new range */
 
+			changed = true;
+			continue;
+		}
+
+		// iqrate [Hz]: the IQ width (spancal measures and stores it; conf, console, state);
+		// 0 back to 100000; without a value: shown (2026-11-15)
+		if (strcasecmp(t, "iqrate") == 0) {
+			const char *v = strtok(NULL, " \t\r\n");
+			char *end = NULL;
+			double hz = v != NULL ? strtod(v, &end) : -1.0;
+
+			if (v == NULL) {
+				printf("\niqrate %.1f Hz (%+.0f ppm against %d)\n", SPAN_HZ, (SPAN_HZ / SPAN_HZ_DEF - 1.0) * 1e6,
+					SPAN_HZ_DEF);
+				continue;
+			}
+			if (*end != '\0' || (hz != 0.0 && (hz < IQRATE_MIN || hz > IQRATE_MAX))) {
+				fprintf(stderr, "\niqrate: %.0f - %.0f Hz, or 0 for %d (now %.1f)\n", IQRATE_MIN, IQRATE_MAX,
+					SPAN_HZ_DEF, SPAN_HZ);
+				continue;
+			}
+			g_span_hz = hz == 0.0 ? SPAN_HZ_DEF : hz;
 			changed = true;
 			continue;
 		}
@@ -12635,6 +12676,8 @@ static void state_write(const rx_t *rx)
 
 	// The tuning range first: the frequencies below are checked against it as they are read
 	fprintf(fp, "freqmin %u freqmax %u\n", (unsigned) g_freq_min, (unsigned) g_freq_max);
+	if (g_span_hz != SPAN_HZ_DEF)
+		fprintf(fp, "iqrate %.1f\n", g_span_hz);	/* spancal's result (2026-11-15) */
 
 	for (int i = 0; i < BAND_COUNT; i++)
 		fprintf(fp, "band %s %u\n", g_bands[i].name, (unsigned) rx->band_freq[i]);

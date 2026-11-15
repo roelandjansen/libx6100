@@ -846,7 +846,9 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     kHz: very likely the I2S bit clock of the IQ, the IQ rate 99.93 kHz, not 100. Console
     `spancal [carrier Hz]` (default the 12791.331 kHz birdie) measures it: expected about
     -680 ppm. Run 2026-11-15: IQ rate 99934.4 Hz, -656 ppm (offline check of a true 99932
-    Hz: 99934.4): the IQ is 99.93 kHz wide. Next: the scope scale from it; cold / warm.
+    Hz: 99934.4): the IQ is 99.93 kHz wide. spancal now keeps it (state: iqrate; console
+    iqrate [Hz], 0 for 100000); every bin / Hz conversion uses it (scope, tap-to-tune,
+    scan, markers). Next: spancal again, then birdiescan on a band; cold / warm.
 
 57. Dual watch audio (2026-11-15; not on a rig yet): a 2-channel stream from an Icom has
     main left, sub right. Dual watch was heard right (main left, sub right), a single
