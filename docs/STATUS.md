@@ -738,16 +738,6 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     polls the tuner Medium; Icom does not announce it): the app and x6100_trx now ask
     the tuner once a second, twice a second while the rig reports tuning.
     ATU speeds head <-> rig verified (2026-11-15).
-54. The rig on / off from the head (2026-11-15; not on a rig yet): CI-V 18 01 / 18 00 to
-    the address the rig gave at login, as a frame of our own, as wfview's powerOn /
-    powerOff over the network (no FE preamble there); in standby the rig answers no ID,
-    so no rig file and the core would refuse it. Needs the rig's LAN kept alive in
-    standby (its network setting for power on over LAN). Core: RIG panel, MFK held on
-    the line of the rig in use: on at once, off after a second hold within 3 s (HOLD
-    AGAIN: RIG OFF); the panel shows OFF after it; console rig on / rig off (no second
-    ask). The state is ours (the rig reports none in standby): the last command, else on
-    while the rig answers. Test: the 7851 off from the head (standby, link stays), on
-    again (REMOTE: WAIT FOR, then the rig file, scope and audio come back).
     To test further: the label shows 3.00k / 2.60k / 1.80k on the 7851's FIL1-3,
     follows a width changed on the rig within about 2 s, and a FIL change at once.
     Also 2026-11-14: wfserver built from wfview v3 (main) works; the CW decoder holds
@@ -785,6 +775,16 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     The dist README now starts with the key step; install.sh says what to do when ssh
     refuses.
 
+54. The rig on / off from the head (2026-11-15; not on a rig yet): CI-V 18 01 / 18 00 to
+    the address the rig gave at login, as a frame of our own, as wfview's powerOn /
+    powerOff over the network (no FE preamble there); in standby the rig answers no ID,
+    so no rig file and the core would refuse it. Needs the rig's LAN kept alive in
+    standby (its network setting for power on over LAN). Core: RIG panel, MFK held on
+    the line of the rig in use: on at once, off after a second hold within 3 s (HOLD
+    AGAIN: RIG OFF); the panel shows OFF after it; console rig on / rig off (no second
+    ask). The state is ours (the rig reports none in standby): the last command, else on
+    while the rig answers. Test: the 7851 off from the head (standby, link stays), on
+    again (REMOTE: WAIT FOR, then the rig file, scope and audio come back).
 ## Next steps (suggested order)
 
 1. Radio checks above; the 2026-10-27 evening checklist (scope panel, fixed edges, wfview
