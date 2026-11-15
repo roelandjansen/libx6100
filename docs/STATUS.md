@@ -826,7 +826,7 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     so a fast reconnect gets through without a second try by hand. Verified on the
     7851 (2026-11-15): fast stop / start reconnects by itself.
 
-56. Birdie scan FULL RANGE (2026-11-15; not on the radio yet): next to THIS BAND and ALL
+56. Birdie scan FULL RANGE (2026-11-15; run on the radio): next to THIS BAND and ALL
     BANDS, the radio's whole RX range (FREQ MIN - MAX, 148.5 kHz - 75 MHz unless set
     otherwise) as one stretch: about 2080 windows, about 50 min; birdies between the
     bands are kept too (ALL BANDS keeps only those inside a band). GEN BIRDIE SCAN
@@ -836,6 +836,12 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     load; time taken, count, whether the list was full (the end message says so).
     The GEN push went THIS BAND <-> ALL BANDS only (the row was handled as two values);
     it now steps through all three, round. A turn reached FULL RANGE already.
+    First full scan (2026-11-15, dummy load): 1015 birdies, 79 kHz - 75 MHz (list not
+    full), 105 from 30 dB. One source dominates: about 6395.68 kHz and all its harmonics
+    1-11 (nine of them 47-56 dB), with sidebands every about 99.93 kHz. The 7.58 kHz comb
+    of the 2026-11-06 / 07 scans is gone (40 m, 20 m), its two strongest (51165.4, 70352.4
+    kHz) were harmonics of 6395.68 kHz and stay. Analysis and list:
+    docs/x6100_birdies_full_20261115.md.
 
 57. Dual watch audio (2026-11-15; not on a rig yet): a 2-channel stream from an Icom has
     main left, sub right. Dual watch was heard right (main left, sub right), a single
