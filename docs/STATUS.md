@@ -787,6 +787,8 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     again (REMOTE: WAIT FOR, then the rig file, scope and audio come back).
     App (libx6100_app): a tap on the rig name at the top, Power on / Power off (off
     asks again); native console power on|off. Same frame.
+    A rig in standby kept the "reading radio state" overlay over the rig name: the
+    overlay now has its own Power on button while no state comes.
 
 ## Next steps (suggested order)
 
