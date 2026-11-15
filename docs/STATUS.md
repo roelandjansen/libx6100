@@ -834,6 +834,8 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     list grew from 1024 to 4096 entries (334 in the bands alone in the 2026-11-06 scan).
     A full scan replaces the whole list. Test: `birdiescan full quiet` with a dummy
     load; time taken, count, whether the list was full (the end message says so).
+    The GEN push went THIS BAND <-> ALL BANDS only (the row was handled as two values);
+    it now steps through all three, round. A turn reached FULL RANGE already.
 
 57. Dual watch audio (2026-11-15; not on a rig yet): a 2-channel stream from an Icom has
     main left, sub right. Dual watch was heard right (main left, sub right), a single

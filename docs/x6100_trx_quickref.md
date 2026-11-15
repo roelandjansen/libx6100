@@ -322,7 +322,7 @@ kill or a power loss keeps them; a row set in `x6100_trx.conf` cannot be changed
 | BLUETOOTH | ON / OFF; kept (state `bt`) and applied at the next start: the image switches it on at every boot. Off when not used: on the shared WiFi / Bluetooth chip it costs WiFi airtime (wfview audio dropouts over WiFi) | at once |
 | BT PAIRING | turn right: visible as X6100 for 120 s, for a phone that pairs from its side; left: hidden. A headset never searches: pair it from the radio with `bluetoothctl` (scan on, scan off, pair, trust, connect in one session), WiFi briefly off for the scan: with WiFi on the scan finds nothing | at once |
 | BT DEVICE | edit (push), turn: choose a paired device, hold MFK: connect / disconnect. A headset connected here (or seen connected) is connected again by itself every 20 s while it is not: after Bluetooth off / on, the headset off / on, at start (`btauto`, state); disconnecting it here stops that | at once |
-| BIRDIE SCAN | push: THIS BAND / ALL BANDS / FULL RANGE, hold MFK: start (antenna off); any key stops | at once |
+| BIRDIE SCAN | push (round) or turn: THIS BAND / ALL BANDS / FULL RANGE, hold MFK: start (antenna off); any key stops | at once |
 | BIRDIE MARKS | ON / OFF (ON): yellow ticks on the scope | at once |
 | BIRDIE NOTCH | ON / OFF (OFF): automatic notch on a birdie in USB / LSB / AM | at once |
 

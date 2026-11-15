@@ -8089,8 +8089,10 @@ static bool gen_toggle(int row)
 		on = g_sys.bt_visible && now_ms() < g_sys.bt_visible_until;
 		break;
 	case GEN_BSCAN:
-		on = g_bscan_mode != BSCAN_BAND;
-		break;
+		// Three values: a push steps THIS BAND, ALL BANDS, FULL RANGE, round (the toggle
+		// went between the first two only, 2026-11-15)
+		gen_adjust(row, g_bscan_mode == BSCAN_FULL ? BSCAN_BAND - BSCAN_FULL : 1, false);
+		return true;
 	case GEN_BMARK:
 		on = g_bmarks;
 		break;
