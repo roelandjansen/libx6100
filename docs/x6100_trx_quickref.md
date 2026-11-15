@@ -322,7 +322,7 @@ kill or a power loss keeps them; a row set in `x6100_trx.conf` cannot be changed
 | BLUETOOTH | ON / OFF; kept (state `bt`) and applied at the next start: the image switches it on at every boot. Off when not used: on the shared WiFi / Bluetooth chip it costs WiFi airtime (wfview audio dropouts over WiFi) | at once |
 | BT PAIRING | turn right: visible as X6100 for 120 s, for a phone that pairs from its side; left: hidden. A headset never searches: pair it from the radio with `bluetoothctl` (scan on, scan off, pair, trust, connect in one session), WiFi briefly off for the scan: with WiFi on the scan finds nothing | at once |
 | BT DEVICE | edit (push), turn: choose a paired device, hold MFK: connect / disconnect. A headset connected here (or seen connected) is connected again by itself every 20 s while it is not: after Bluetooth off / on, the headset off / on, at start (`btauto`, state); disconnecting it here stops that | at once |
-| BIRDIE SCAN | push: THIS BAND / ALL BANDS, hold MFK: start (antenna off); any key stops | at once |
+| BIRDIE SCAN | push: THIS BAND / ALL BANDS / FULL RANGE, hold MFK: start (antenna off); any key stops | at once |
 | BIRDIE MARKS | ON / OFF (ON): yellow ticks on the scope | at once |
 | BIRDIE NOTCH | ON / OFF (OFF): automatic notch on a birdie in USB / LSB / AM | at once |
 
@@ -443,7 +443,7 @@ The status line starts with the VFO in use (A / B); with split, RIT or XIT it ad
 | `memr` | list the used memory channels |
 | `memr 5`, `memw 5`, `memc 5` | recall / write the VFO into / clear memory channel 5 |
 | `mem 5 7074000 lsb fil1 [tx 7076000 lsb] [dupoff \| dup- 100 \| dup+ 100] [name text]` | set a memory channel (as in memories.conf) |
-| `birdiescan [all] [quiet]`, `birdiestop`, `birdies`, `birdieclear` | birdie scan (this band / all), stop, list, clear. `quiet`: WiFi and Bluetooth off for the scan (they may be the source), WiFi back on when it is done (Bluetooth if it was on); the ssh session goes with the WiFi, x6100_trx carries on: log in again afterwards |
+| `birdiescan [all\|full] [quiet]`, `birdiestop`, `birdies`, `birdieclear` | birdie scan (this band / all bands / the full RX range), stop, list, clear. `quiet`: WiFi and Bluetooth off for the scan (they may be the source), WiFi back on when it is done (Bluetooth if it was on); the ssh session goes with the WiFi, x6100_trx carries on: log in again afterwards |
 | `birdiemarks`, `nobirdiemarks`, `birdienotch`, `nobirdienotch` | birdie ticks, automatic notch on / off |
 | `vfob 7074000 lsb fil1`, `vfo a\|b` | the VFO not in use; which one is in use (state file) |
 | `region r1\|r2\|r3\|nl\|uk` | transmit allocations for the TX check and the OOB marker (default r1); nl and uk also have 4 m (70.0-70.5 MHz); uk has the 11 UK 60 m segments (Ofcom, 5258.5-5264, 5276-5284, 5288.5-5292, 5298-5307, 5313-5323, 5333-5338, 5354-5358, 5362-5374.5, 5378-5382, 5395-5401.5, 5403.5-5406.5 kHz; FST CH steps through their lower edges; 2026-11-07) |
@@ -528,11 +528,12 @@ Birdies are carriers from the radio's own oscillators: fixed narrow lines on the
 a whistle in SSB. A receive-only scan finds them; disconnect the antenna or use a dummy
 load, and keep PRE / ATT as you normally listen.
 
-- Start: GEN, row BIRDIE SCAN, turn for THIS BAND or ALL BANDS, hold MFK. Console:
-  `birdiescan` (this band) or `birdiescan all`. Any key or `birdiestop` stops; TX is
+- Start: GEN, row BIRDIE SCAN, turn for THIS BAND, ALL BANDS or FULL RANGE, hold MFK. Console:
+  `birdiescan` (this band), `birdiescan all` or `birdiescan full`. Any key or `birdiestop` stops; TX is
   refused and the tuner is out (straight through) while it runs; the VFO and the tuner
   come back at the end.
-- The scan steps 36 kHz windows over the band (80 m about 20 s, all bands about 6 min),
+- The scan steps 36 kHz windows over the band (80 m about 20 s, all bands about 6 min,
+  FULL RANGE the radio's whole RX range, FREQ MIN - MAX: 148.5 kHz - 75 MHz, about 50 min),
   averages 32 spectrum frames per window and keeps narrow peaks at least 16 dB over the
   noise (10 dB until 2026-11-07: two scans agreed on all from 16 dB, the weaker ones came
   and went; weaker entries in an older list are dropped when it is read). Progress shows

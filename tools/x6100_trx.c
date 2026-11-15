@@ -2381,7 +2381,7 @@ static x6100_mode_t tx_mode(const rx_t *rx)
 //
 
 #define BIRDIE_PATH	"/etc/x6100/birdies.conf"
-#define BIRDIE_MAX	1024	/* 2026-11-06: 256 filled up on 6 m, 6 m from 52.7 MHz and 4 m were lost */
+#define BIRDIE_MAX	4096	/* 2026-11-06: 256 filled up on 6 m; 1024 to 4096 for the full range scan (2026-11-15) */
 #define BIRDIE_NOTCH_W	40		/* notch width, Hz */
 
 typedef struct
@@ -6097,10 +6097,12 @@ static void remote_scope_feed(screen_t *scr, const rx_t *rx, const x6100_remote_
 #define BS_SNR_DB	16		/* 2026-11-07: two scans agree on all from 16 dB; 10-15 dB came and went (noise) */
 #define BS_WIDE_BINS	3
 
+enum { BSCAN_BAND, BSCAN_ALL, BSCAN_FULL };	/* this band, all bands, the whole RX range */
+
 typedef struct
 {
 	bool on;
-	bool all;
+	int mode;			/* BSCAN_* */
 	int band;			/* band being scanned */
 	int last;			/* last band to scan */
 	uint32_t hz;			/* window centre */
@@ -6121,11 +6123,28 @@ static bool bscan_running(void)
 {
 	return g_bs.on;
 }
-static bool g_bscan_all;		/* GEN BIRDIE SCAN: this band or all bands */
+static int g_bscan_mode;		/* GEN BIRDIE SCAN: this band, all bands, full range */
 
-static int bscan_windows(int band)
+// The stretch being scanned: the band, or for FULL RANGE the radio's RX range (FREQ
+// MIN / MAX, 148.5 kHz - 75 MHz unless set otherwise; 2026-11-15), as one stretch
+static uint32_t bscan_low(void)
 {
-	return (int) ((g_bands[band].high - g_bands[band].low + BS_STEP_HZ - 1) / BS_STEP_HZ) + 1;	/* low .. first one >= high */
+	return g_bs.mode == BSCAN_FULL ? g_freq_min : g_bands[g_bs.band].low;
+}
+
+static uint32_t bscan_high(void)
+{
+	return g_bs.mode == BSCAN_FULL ? g_freq_max : g_bands[g_bs.band].high;
+}
+
+static const char *bscan_name(void)
+{
+	return g_bs.mode == BSCAN_FULL ? "FULL" : g_bands[g_bs.band].name;
+}
+
+static int bscan_windows(uint32_t low, uint32_t high)
+{
+	return (int) ((high - low + BS_STEP_HZ - 1) / BS_STEP_HZ) + 1;	/* low .. first one >= high */
 }
 
 static void bscan_tune(rx_t *rx, uint32_t hz)
@@ -6138,21 +6157,23 @@ static void bscan_tune(rx_t *rx, uint32_t hz)
 	g_bs.settle_until = now_ms() + BS_SETTLE_MS;
 }
 
-static bool bscan_start(rx_t *rx, bool all)
+static bool bscan_start(rx_t *rx, int mode)
 {
+	static const char *const C_WHAT[] = { NULL, "all bands", "full range" };
+
 	if (g_bs.on || rx->ptt || rx->tuning || rx->bb_tx)
 		return false;
 
-	if (!all && rx->band < 0) {
+	if (mode == BSCAN_BAND && rx->band < 0) {
 		toast("NOT ON A BAND");
 		return false;
 	}
 
 	memset(&g_bs, 0, sizeof(g_bs));
 	g_bs.on = true;
-	g_bs.all = all;
-	g_bs.band = all ? 0 : rx->band;
-	g_bs.last = all ? BAND_COUNT - 1 : rx->band;
+	g_bs.mode = mode;
+	g_bs.band = mode == BSCAN_BAND ? rx->band : 0;
+	g_bs.last = mode == BSCAN_ALL ? BAND_COUNT - 1 : g_bs.band;	/* FULL: one stretch */
 	g_bs.ret_freq = rx->freq;
 	g_bs.ret_band = rx->band;
 	g_bs.ret_rit = rx->rit;
@@ -6160,14 +6181,23 @@ static bool bscan_start(rx_t *rx, bool all)
 	rx->rit = false;
 	rx->atu_on = false;	/* straight through: no relay switching between windows */
 
-	for (int b = g_bs.band; b <= g_bs.last; b++) {
-		birdie_clear(g_bands[b].low, g_bands[b].high);
-		g_bs.steps += bscan_windows(b);
+	if (mode == BSCAN_FULL) {
+		birdie_clear(g_freq_min, g_freq_max);
+		g_bs.steps = bscan_windows(g_freq_min, g_freq_max);
+	} else {
+		for (int b = g_bs.band; b <= g_bs.last; b++) {
+			birdie_clear(g_bands[b].low, g_bands[b].high);
+			g_bs.steps += bscan_windows(g_bands[b].low, g_bands[b].high);
+		}
 	}
 
 	g_birdie_full = 0;
-	printf("\nbirdie scan: %s, antenna off or a dummy load; any key stops\n", all ? "all bands" : g_bands[g_bs.band].name);
-	bscan_tune(rx, g_bands[g_bs.band].low);
+	printf("\nbirdie scan: %s, antenna off or a dummy load; any key stops\n",
+		mode == BSCAN_BAND ? g_bands[g_bs.band].name : C_WHAT[mode]);
+	if (mode == BSCAN_FULL)
+		printf("birdie scan: %.4f - %.4f MHz, %d windows, about %d min\n", g_freq_min / 1e6, g_freq_max / 1e6,
+			g_bs.steps, (g_bs.steps * 14 / 10 + 59) / 60);
+	bscan_tune(rx, bscan_low());
 
 	return true;
 }
@@ -6222,7 +6252,7 @@ static void bscan_window(void)
 	}
 
 	float noise = sorted[m / 2];
-	const band_t *b = &g_bands[g_bs.band];
+	const uint32_t low = bscan_low(), high = bscan_high();
 
 	for (int i = c - BS_EDGE_BINS + BS_WIDE_BINS; i <= c + BS_EDGE_BINS - BS_WIDE_BINS; i++) {
 		if (abs(i - c) <= BS_DC_BINS + 1 || db[i] <= db[i - 1] || db[i] < db[i + 1] || db[i] - noise < BS_SNR_DB
@@ -6235,7 +6265,7 @@ static void bscan_window(void)
 			* (double) SPAN_HZ / n);
 		int snr = (int) lround(db[i] - noise);
 
-		if (hz < b->low || hz > b->high)
+		if (hz < low || hz > high)
 			continue;
 
 		int before = g_nbirdie;
@@ -6281,7 +6311,7 @@ static void bscan_feed(rx_t *rx, const x6100_flow_frame_t *f)
 	g_bs.step++;
 
 	// Next window, next band, or done
-	if (g_bs.hz < g_bands[g_bs.band].high) {
+	if (g_bs.hz < bscan_high()) {
 		bscan_tune(rx, g_bs.hz + BS_STEP_HZ);
 	} else if (g_bs.band < g_bs.last) {
 		g_bs.band++;
@@ -6294,7 +6324,7 @@ static void bscan_feed(rx_t *rx, const x6100_flow_frame_t *f)
 // Progress for the scope and the GEN row
 static void bscan_text(char *s, size_t n)
 {
-	snprintf(s, n, "BIRDIE SCAN %s %d %%  %d FOUND", g_bands[g_bs.band].name,
+	snprintf(s, n, "BIRDIE SCAN %s %d %%  %d FOUND", bscan_name(),
 		g_bs.steps > 0 ? g_bs.step * 100 / g_bs.steps : 0, g_bs.found);
 }
 
@@ -7800,9 +7830,9 @@ static void gen_value(int row, char *s, size_t n)
 		break;
 	case GEN_BSCAN:
 		if (bscan_running())
-			snprintf(s, n, "%s %d %%", g_bands[g_bs.band].name, g_bs.steps > 0 ? g_bs.step * 100 / g_bs.steps : 0);
+			snprintf(s, n, "%s %d %%", bscan_name(), g_bs.steps > 0 ? g_bs.step * 100 / g_bs.steps : 0);
 		else
-			snprintf(s, n, "%s", g_bscan_all ? "ALL BANDS" : "THIS BAND");
+			snprintf(s, n, "%s", g_bscan_mode == BSCAN_FULL ? "FULL RANGE" : g_bscan_mode == BSCAN_ALL ? "ALL BANDS" : "THIS BAND");
 		break;
 	case GEN_BMARK:
 		snprintf(s, n, "%s", g_bmarks ? "ON" : "OFF");
@@ -7992,7 +8022,7 @@ static void gen_adjust(int row, int dir, bool def)
 		if (def)
 			g_bscan_req = 1;	/* started by the main loop */
 		else
-			g_bscan_all = dir > 0;
+			g_bscan_mode = clampi(g_bscan_mode + dir, BSCAN_BAND, BSCAN_FULL);
 		break;
 	case GEN_BMARK:
 		g_bmarks = def ? true : dir > 0;
@@ -8050,7 +8080,7 @@ static bool gen_toggle(int row)
 		on = g_sys.bt_visible && now_ms() < g_sys.bt_visible_until;
 		break;
 	case GEN_BSCAN:
-		on = g_bscan_all;
+		on = g_bscan_mode != BSCAN_BAND;
 		break;
 	case GEN_BMARK:
 		on = g_bmarks;
@@ -10959,7 +10989,7 @@ static void help_console(void)
 		"            af3 af6   hold on|off   fixedge <range> <edge> <lo> <hi>\n"
 		"  memory    memr [n]   memw n   memc n   mem n <Hz> <mode> fil<n> [...] [name text]\n"
 		"  messages  msg   msg n cw <text> | voice <file> | clear   msgsend n   msgstop   msgrepeat <s>\n"
-		"  birdies   birdiescan [all] [quiet]   birdiestop   birdies   birdieclear   birdiemarks   birdienotch\n"
+		"  birdies   birdiescan [all|full] [quiet]   birdiestop   birdies   birdieclear   birdiemarks   birdienotch\n"
 		"  cat       cat <baud>|off   catpty on|off   civaddr a4|61   catmem ro|rw   cattime off|unsynced|on\n"
 		"            modin mic|usb mic|usb\n"
 		"  system    layout portrait|landscape   portraitrot 0|180   autolock <s>   bright 5-100\n"
@@ -11827,10 +11857,10 @@ static bool console_line(rx_t *rx, char *line)
 			continue;
 		}
 
-		// birdiescan [all] [quiet]: quiet switches WiFi and Bluetooth off for the scan
+		// birdiescan [all | full] [quiet]: quiet switches WiFi and Bluetooth off for the scan
 		// (they could be the source), and WiFi back on when it is done
 		if (strcasecmp(t, "birdiescan") == 0) {
-			g_bscan_all = false;
+			g_bscan_mode = BSCAN_BAND;
 			g_bscan_quiet = false;
 
 			for (int k = 0; k < 2; k++) {
@@ -11840,11 +11870,13 @@ static bool console_line(rx_t *rx, char *line)
 					break;
 
 				if (strcasecmp(as, "all") == 0)
-					g_bscan_all = true;
+					g_bscan_mode = BSCAN_ALL;
+				else if (strcasecmp(as, "full") == 0)
+					g_bscan_mode = BSCAN_FULL;	/* the whole RX range, about 50 min */
 				else if (strcasecmp(as, "quiet") == 0)
 					g_bscan_quiet = true;
 				else
-					fprintf(stderr, "\nbirdiescan [all] [quiet]: %s?\n", as);
+					fprintf(stderr, "\nbirdiescan [all | full] [quiet]: %s?\n", as);
 			}
 
 			g_bscan_req = 1;
@@ -14728,7 +14760,7 @@ int main(int argc, char **argv)
 
 		// Birdie scan asked for (GEN row, console): start / stop here, with rx at hand
 		if (g_bscan_req != 0) {
-			if (g_bscan_req > 0 && bscan_start(&rx, g_bscan_all) && g_bscan_quiet) {
+			if (g_bscan_req > 0 && bscan_start(&rx, g_bscan_mode) && g_bscan_quiet) {
 				// birdiescan ... quiet: WiFi and Bluetooth off for the scan, back on after
 				// it (WiFi always, Bluetooth if it was on); the ssh session goes with the
 				// WiFi, x6100_trx goes on without it (2026-11-07)

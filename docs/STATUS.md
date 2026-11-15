@@ -821,6 +821,15 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     Result on the 7851: stop / start works without the 90 s. Within about 1 s the rig
     still reports busy (it is still closing the old session); a moment later it connects.
 
+56. Birdie scan FULL RANGE (2026-11-15; not on the radio yet): next to THIS BAND and ALL
+    BANDS, the radio's whole RX range (FREQ MIN - MAX, 148.5 kHz - 75 MHz unless set
+    otherwise) as one stretch: about 2080 windows, about 50 min; birdies between the
+    bands are kept too (ALL BANDS keeps only those inside a band). GEN BIRDIE SCAN
+    turns THIS BAND / ALL BANDS / FULL RANGE; console `birdiescan full [quiet]`. The
+    list grew from 1024 to 4096 entries (334 in the bands alone in the 2026-11-06 scan).
+    A full scan replaces the whole list. Test: `birdiescan full quiet` with a dummy
+    load; time taken, count, whether the list was full (the end message says so).
+
 ## Next steps (suggested order)
 
 1. Radio checks above; the 2026-10-27 evening checklist (scope panel, fixed edges, wfview
