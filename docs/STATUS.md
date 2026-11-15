@@ -776,17 +776,19 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     refuses.
 
 54. The rig on / off from the head (2026-11-15; not on a rig yet): CI-V 18 01 / 18 00 to
-    the address the rig gave at login, as a frame of our own, as wfview's powerOn /
-    powerOff over the network (no FE preamble there); in standby the rig answers no ID,
-    so no rig file and the core would refuse it. Needs the rig's LAN kept alive in
-    standby (its network setting for power on over LAN). Core: RIG panel, MFK held on
+    the address the rig gave at login, as a frame of our own (in standby the rig answers
+    no ID, so no rig file and the core would refuse it). Power on sends a run of FE
+    first to wake the rig's CPU, as wfview's powerOn (150 at 115200, 75 / 50 / 25 / 13 /
+    7 at 57600 / 38400 / 19200 / 9600 / 4800); without it the 7851 stayed in standby.
+    One function for all: session_power() in the libx6100_app core. Needs the rig's LAN
+    kept alive in standby (its network setting for power on over LAN). Core: RIG panel, MFK held on
     the line of the rig in use: on at once, off after a second hold within 3 s (HOLD
     AGAIN: RIG OFF); the panel shows OFF after it; console rig on / rig off (no second
     ask). The state is ours (the rig reports none in standby): the last command, else on
     while the rig answers. Test: the 7851 off from the head (standby, link stays), on
     again (REMOTE: WAIT FOR, then the rig file, scope and audio come back).
     App (libx6100_app): a tap on the rig name at the top, Power on / Power off (off
-    asks again); native console power on|off. Same frame.
+    asks again); native console power on|off. Same function.
     A rig in standby kept the "reading radio state" overlay over the rig name: the
     overlay now has its own Power on button while no state comes.
     With it the app stayed on "switching on": the core's ID query went to all (00) and

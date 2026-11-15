@@ -1080,29 +1080,14 @@ int x6100_remote_tune(x6100_remote_t *r)
 }
 
 //
-// The rig on or off (2026-11-15): CI-V 18 01 / 18 00 to the address it gave at login,
-// as a frame of our own, as wfview's powerOn / powerOff over the network (no FE
-// preamble there): in standby the rig answers no CI-V ID, so no rig file is loaded and
-// the core would refuse the command. Works only with the rig's LAN kept alive in
-// standby (its network setting for power on over LAN)
+// The rig on or off (2026-11-15): session_power in the app core, CI-V 18 01 / 18 00 to
+// the address the rig gave at login, as a frame of its own (in standby the rig answers
+// no CI-V ID, so no rig file is loaded). Power on sends a run of FE first to wake the
+// CPU, as wfview does. Works only with the rig's LAN kept alive in standby (its
+// network setting for power on over LAN)
 //
 
 int x6100_remote_power(x6100_remote_t *r, bool on)
 {
-	struct session_info info;
-	uint8_t f[7];
-
-	session_get_info(r->s, &info);
-
-	if (info.civ_addr == 0x00)
-		return -1;
-
-	f[0] = 0xFE;
-	f[1] = 0xFE;
-	f[2] = info.civ_addr;
-	f[3] = RIG_CONTROLLER_ADDR;
-	f[4] = 0x18;
-	f[5] = on ? 0x01 : 0x00;
-	f[6] = 0xFD;
-	return session_civ_send(r->s, f, sizeof(f));
+	return session_power(r->s, on ? 1 : 0);
 }
