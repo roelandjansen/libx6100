@@ -846,6 +846,17 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     until the sub opens. Test: single RX on both sides, dual watch main left / sub
     right, switching between them on the rig.
 
+58. App TX level (2026-11-15; DATA OFF MOD not on a rig yet): with Bluetooth buds TX
+    stayed at about 10 W of 200 on speech. Found on the way: the buds' mic is only used
+    in call mode (now a per-connection Microphone choice, Phone / Bluetooth headset;
+    mic gain 100-400 %; mic peak on the PTT button; a 1 kHz test tone). The real cause:
+    the rig's DATA OFF MOD stood on MIC, and the app never set it (x6100_trx does, for
+    --remote-tx-dummy). Now the session core does it with profile.lan_mod: asked once
+    the rig file is in, set to LAN, the old value back before the disconnect. The app
+    has it per connection (on by default). x6100_trx keeps its own lanmod_* for now;
+    it could move onto the core's. Test: the rig on MIC, connect from the app: LAN;
+    disconnect: MIC again; TX power with the buds.
+
 ## Next steps (suggested order)
 
 1. Radio checks above; the 2026-10-27 evening checklist (scope panel, fixed edges, wfview
