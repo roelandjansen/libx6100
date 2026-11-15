@@ -785,6 +785,7 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     ask). The state is ours (the rig reports none in standby): the last command, else on
     while the rig answers. Test: the 7851 off from the head (standby, link stays), on
     again (REMOTE: WAIT FOR, then the rig file, scope and audio come back).
+
 ## Next steps (suggested order)
 
 1. Radio checks above; the 2026-10-27 evening checklist (scope panel, fixed edges, wfview
