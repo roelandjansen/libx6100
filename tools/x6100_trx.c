@@ -6142,6 +6142,14 @@ typedef struct
 
 static bscan_t g_bs;
 
+// Two windows (bscan_candidate): the peaks waiting for the next window
+#define BS_SAME_HZ	150
+#define BS_CAND_MAX	512
+
+static struct { uint32_t hz; int snr; int win; bool used; } g_bs_cand[BS_CAND_MAX];
+static int g_bs_ncand;
+static int g_bs_dropped;		/* peaks seen in one window only (moved with the oscillator) */
+
 static bool bscan_running(void)
 {
 	return g_bs.on;
@@ -6215,6 +6223,8 @@ static bool bscan_start(rx_t *rx, int mode)
 	}
 
 	g_birdie_full = 0;
+	g_bs_ncand = 0;
+	g_bs_dropped = 0;
 	printf("\nbirdie scan: %s, antenna off or a dummy load; any key stops\n",
 		mode == BSCAN_BAND ? g_bands[g_bs.band].name : C_WHAT[mode]);
 	if (mode == BSCAN_FULL)
@@ -6243,9 +6253,73 @@ static void bscan_stop(rx_t *rx, bool done)
 	toast(s);
 	printf("\nbirdie scan %s: %d found, %d stored in %s\n", done ? "done" : "stopped", g_bs.found, g_nbirdie, BIRDIE_PATH);
 
+	// Peaks in one window only: they moved with the oscillator (images, beat harmonics,
+	// LO spurs), not kept
+	for (int i = 0; i < g_bs_ncand; i++)
+		if (!g_bs_cand[i].used)
+			g_bs_dropped++;
+	g_bs_ncand = 0;
+	printf("birdie scan: %d peaks seen in one window only (moved with the oscillator): not kept\n", g_bs_dropped);
+
 	if (g_birdie_full > 0)
 		printf("birdie scan: the list (%d) was full %d times: the weakest gave way to stronger ones\n", BIRDIE_MAX,
 			g_birdie_full);
+}
+
+//
+// Two windows (2026-11-15): a peak counts as a birdie only when the overlapping window,
+// the receiver's oscillator 36 kHz on, finds it at the same frequency (BS_SAME_HZ). A
+// real birdie stays put; what is made in the receiver moves with the oscillator: the
+// IQ mirror image (72 kHz a window), the harmonics of a beat in the baseband (the
+// "7.58 kHz combs": one line plus its products, the spacing its distance from the
+// window centre) and the local oscillator's own spurs (on 40, 20 and 4 m at 7.575 kHz
+// below the window centres 7036, 14072 and 70360 kHz). Each frequency of a band is in
+// at least two windows (36 kHz steps, about 77 kHz used)
+//
+
+
+static void bscan_candidate(uint32_t hz, int snr)
+{
+	const int win = g_bs.step;
+	int keep = 0;
+
+	// The ones from two windows back and older had their chance: counted as dropped
+	for (int i = 0; i < g_bs_ncand; i++) {
+		if (g_bs_cand[i].win < win - 2) {
+			if (!g_bs_cand[i].used)
+				g_bs_dropped++;
+			continue;
+		}
+		g_bs_cand[keep++] = g_bs_cand[i];
+	}
+	g_bs_ncand = keep;
+
+	// The same frequency from an earlier window: a birdie (the mean place, the stronger level)
+	for (int i = 0; i < g_bs_ncand; i++) {
+		uint32_t d = g_bs_cand[i].hz > hz ? g_bs_cand[i].hz - hz : hz - g_bs_cand[i].hz;
+
+		if (g_bs_cand[i].win != win && !g_bs_cand[i].used && d <= BS_SAME_HZ) {
+			const uint32_t f = (uint32_t) (((uint64_t) g_bs_cand[i].hz + hz) / 2);
+			const int s = snr > g_bs_cand[i].snr ? snr : g_bs_cand[i].snr;
+			int before = g_nbirdie;
+
+			g_bs_cand[i].used = true;
+			birdie_add(f, s);
+			if (g_nbirdie > before) {
+				g_bs.found++;
+				printf("\nbirdie %.3f kHz, %d dB over the noise\n", f / 1000.0, s);
+			}
+			return;
+		}
+	}
+
+	if (g_bs_ncand < BS_CAND_MAX) {
+		g_bs_cand[g_bs_ncand].hz = hz;
+		g_bs_cand[g_bs_ncand].snr = snr;
+		g_bs_cand[g_bs_ncand].win = win;
+		g_bs_cand[g_bs_ncand].used = false;
+		g_bs_ncand++;
+	}
 }
 
 // One averaged window: peaks into the birdie list
@@ -6291,14 +6365,7 @@ static void bscan_window(void)
 		if (hz < low || hz > high)
 			continue;
 
-		int before = g_nbirdie;
-
-		birdie_add((uint32_t) hz, snr);
-
-		if (g_nbirdie > before) {
-			g_bs.found++;
-			printf("\nbirdie %.3f kHz, %d dB over the noise\n", hz / 1000.0, snr);
-		}
+		bscan_candidate((uint32_t) hz, snr);
 	}
 }
 

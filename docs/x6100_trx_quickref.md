@@ -538,7 +538,11 @@ load, and keep PRE / ATT as you normally listen.
   FULL RANGE the radio's whole RX range, FREQ MIN - MAX: 148.5 kHz - 75 MHz, about 50 min),
   averages 32 spectrum frames per window and keeps narrow peaks at least 16 dB over the
   noise (10 dB until 2026-11-07: two scans agreed on all from 16 dB, the weaker ones came
-  and went; weaker entries in an older list are dropped when it is read). Progress shows
+  and went; weaker entries in an older list are dropped when it is read). A peak counts
+  only when the overlapping window (the oscillator 36 kHz on) finds it at the same
+  frequency (within 150 Hz; 2026-11-15): mirror images, harmonics of a beat in the
+  baseband and the oscillator's own spurs move with it and are dropped (the count is
+  printed at the end). Progress shows
   on the scope (cyan); the console prints each birdie. A scan started on the console goes
   on when the ssh session closes (WiFi gone): x6100_trx keeps running without a console.
 - Kept in `/etc/x6100/birdies.conf` (`birdie <Hz> <dB over the noise>`); a scan of a

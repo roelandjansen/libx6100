@@ -849,6 +849,12 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     Hz: 99934.4): the IQ is 99.93 kHz wide. spancal now keeps it (state: iqrate; console
     iqrate [Hz], 0 for 100000); every bin / Hz conversion uses it (scope, tap-to-tune,
     scan, markers). Next: spancal again, then birdiescan on a band; cold / warm.
+    The 7.58 kHz combs were scan artefacts: one strong line per window plus the harmonics
+    of its beat (LO + k x beat, within about 10 Hz) and their images; on 40 / 20 / 4 m the
+    line sits 7.575 kHz below window centres 7036 / 14072 / 70360 kHz. The scan now keeps
+    a peak only when the overlapping window finds it within 150 Hz (bscan_candidate);
+    the dropped count is printed. Not on the radio yet: a 20 m scan should keep
+    14064.4 kHz only if it is real, and none of its comb.
 
 57. Dual watch audio (2026-11-15; not on a rig yet): a 2-channel stream from an Icom has
     main left, sub right. Dual watch was heard right (main left, sub right), a single

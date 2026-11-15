@@ -37,6 +37,20 @@ regulator in the radio runs at, or modulates with, about 7.58 kHz (and 8.44 kHz)
 known, and can it be moved or filtered?
 
 The full list (about 130 birdies from 16 dB, 1.8-70.5 MHz) is available on request.
+**Correction (2026-11-15).** The comb above is an artefact of the scan, not a 7.58 kHz
+source. Each run is one strong line plus the harmonics of its beat in the baseband (and
+their IQ mirror images): LO + k x (line - LO), k = -5 ... +5, within about 10 Hz, the LO
+being the scan window's centre. On 40, 20 and 4 m that line sits 7.575 kHz below a
+window centre (7036, 14072, 70360 kHz: 1x, 2x and 10x 7036 kHz), so the spacing came out
+the same in Hz on every band; a scan with other window centres (148.5 kHz + n x 36 kHz)
+showed none of it. Tuning by hand, the comb narrows as the VFO nears the line. The
+questions now: (a) does the local oscillator synthesizer make spurs at a fixed offset
+from the LO at certain settings (here 7.575 kHz below LO = n x 7036 kHz)? (b) the
+harmonics k x the beat point to a non-linear stage in the I / Q baseband before the
+CS4272: is that known? 70352.4 kHz (54 dB) is besides the 11th harmonic of 6395.68 kHz,
+the CS4272 bit clock (`x6100_birdies_full_20261115.md`). The scan now keeps only lines
+found at the same frequency in two overlapping windows.
+
 
 ## 2. Baseband
 
