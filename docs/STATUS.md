@@ -846,7 +846,8 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     until the sub opens. Test: single RX on both sides, dual watch main left / sub
     right, switching between them on the rig.
 
-58. App TX level (2026-11-15; DATA OFF MOD not on a rig yet): with Bluetooth buds TX
+58. App TX level (2026-11-15; DATA OFF MOD verified on the IC-7851: LAN on connect, MIC
+    back at the disconnect): with Bluetooth buds TX
     stayed at about 10 W of 200 on speech. Found on the way: the buds' mic is only used
     in call mode (now a per-connection Microphone choice, Phone / Bluetooth headset;
     mic gain 100-400 %; mic peak on the PTT button; a 1 kHz test tone). The real cause:
