@@ -775,7 +775,8 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     The dist README now starts with the key step; install.sh says what to do when ssh
     refuses.
 
-54. The rig on / off from the head (2026-11-15; not on a rig yet): CI-V 18 01 / 18 00 to
+54. The rig on / off from the head (2026-11-15; verified on the IC-7851 and IC-7760: on
+    from standby, core and app): CI-V 18 01 / 18 00 to
     the address the rig gave at login, as a frame of our own (in standby the rig answers
     no ID, so no rig file and the core would refuse it). Power on sends a run of FE
     first to wake the rig's CPU, as wfview's powerOn (150 at 115200, 75 / 50 / 25 / 13 /
