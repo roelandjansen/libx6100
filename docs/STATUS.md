@@ -822,7 +822,8 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     still reports busy (it is still closing the old session); a moment later it connects.
     Since then: busy without another client logs out and in again by itself (at least
     1 s apart, up to 10 times; status "Radio busy (old session), login again n/10"),
-    so a fast reconnect gets through without a second try by hand.
+    so a fast reconnect gets through without a second try by hand. Verified on the
+    7851 (2026-11-15): fast stop / start reconnects by itself.
 
 56. Birdie scan FULL RANGE (2026-11-15; not on the radio yet): next to THIS BAND and ALL
     BANDS, the radio's whole RX range (FREQ MIN - MAX, 148.5 kHz - 75 MHz unless set
