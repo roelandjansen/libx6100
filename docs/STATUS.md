@@ -775,7 +775,7 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     The dist README now starts with the key step; install.sh says what to do when ssh
     refuses.
 
-54. The rig on / off from the head (2026-11-15; verified on the IC-7851 and IC-7760: on
+54. The rig on / off from the head (2026-11-15; verified on the IC-7851, IC-7760 and IC-9700: on
     from standby): CI-V 18 01 / 18 00 to
     the address the rig gave at login, as a frame of our own (in standby the rig answers
     no ID, so no rig file and the core would refuse it). Power on sends a run of FE
