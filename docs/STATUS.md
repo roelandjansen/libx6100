@@ -870,6 +870,13 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     later (no Command29, other addressing). Test: DW on / off from the app and on the
     rig (the label follows within about a second), the sub line follows the sub's
     frequency and mode, the three audio routes.
+    Step 2 (2026-11-15; not on a rig yet): the big frequency is the active receiver
+    (Icom's selected one), tagged MAIN or SUB; the line over the spectrum the other one;
+    a tap swaps (VFO Main/Sub Band 07 D2 and Scope Main/Sub 27 12 together). Tuning,
+    mode and filter follow the selected receiver; the scope draws the newest row of
+    either receiver. Test: tap the SUB line: tag SUB, the line MAIN, the scope shows the
+    sub's band; tune and change mode: the sub changes; tap MAIN: back; a switch made on
+    the rig shows within about a second.
 
 ## Next steps (suggested order)
 
