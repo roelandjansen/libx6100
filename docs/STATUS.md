@@ -878,6 +878,9 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     either receiver. Test: tap the SUB line: tag SUB, the line MAIN, the scope shows the
     sub's band; tune and change mode: the sub changes; tap MAIN: back; a switch made on
     the rig shows within about a second.
+    Mode, DATA and filter changes made on the rig were slow (RX Mode at the rig files'
+    Medium: every several seconds); now polled at High, about once a second per
+    receiver; DW asked once a second. Verified on the 7851 (2026-11-15).
 
 ## Next steps (suggested order)
 
