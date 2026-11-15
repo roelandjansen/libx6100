@@ -798,6 +798,26 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     path and no Power on. The control stream now says why it waits (no radio list,
     busy without another client, more than one radio) instead of nothing.
 
+55. The IC-7851 held a session some 90 s after a disconnect (2026-11-15; not on a rig
+    yet): kill, then sleep 90 before a new start worked, less did not (wfview main
+    the same). Seen meanwhile: LAN indication off, no scope, audio still heard: the
+    7851 dropped control and CI-V and kept audio going, and the session counted any
+    datagram as a live link. Changed in the libx6100_app core (x6100_trx and the app):
+    a. Link loss per stream: control (once heard) or CI-V (once open) silent 15 s, or a
+       disconnect from the rig on any stream; audio alone no longer keeps the link.
+       Status "No control / CI-V from the radio" or "Radio closed the ... stream".
+    b. Teardown with a wait: after the shutdown up to 1 s before the sockets close;
+       the rig's retransmit requests (CI-V close, token remove) are answered, its
+       pings too, the disconnect goes out 3 times on each stream (250 ms apart); ends
+       early when the rig closes control.
+    c. The token goes back whenever the login took (wfview: only with streams open),
+       so a rig in standby (no streams) is released as well.
+    Not helped: kill -9, or Android ending the process without onDestroy; the rig
+    then times out on its own. Test: x6100_trx stop / start on the 7851 without the
+    90 s wait; the same in the app (disconnect / connect); a cable pull: REMOTE lost
+    within 15 s and back without the wait. Loopback test checks token remove, 3
+    disconnects per stream and a rig-side close.
+
 ## Next steps (suggested order)
 
 1. Radio checks above; the 2026-10-27 evening checklist (scope panel, fixed edges, wfview
