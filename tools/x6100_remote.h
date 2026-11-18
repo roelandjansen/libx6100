@@ -195,6 +195,9 @@ bool x6100_remote_has_tuner(const x6100_remote_t *r);
 // The rig file is in and has no tuner (not the same as !has_tuner: unknown until then)
 bool x6100_remote_no_tuner(const x6100_remote_t *r);
 
+// The receiver in use on a rig with main and sub: "MAIN" / "SUB"; NULL for a rig without
+const char *x6100_remote_vfo_name(const x6100_remote_t *r);
+
 // The rig on / off (CI-V 18 01 / 18 00; also in standby, without a rig file): 0 sent
 int x6100_remote_power(x6100_remote_t *r, bool on);
 

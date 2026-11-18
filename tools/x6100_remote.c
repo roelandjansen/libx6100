@@ -131,6 +131,8 @@ struct x6100_remote
 	int64_t fil_hold_ms;		/* mode / filter changed then: the Filter Width before it not used for C_FIL_HOLD_MS */
 	int64_t tune_ms;		/* our tune sent then, 0 none: its tuner watched (C_TUNE_WATCH_MS) */
 	int64_t tune_ask_ms;		/* the tuner last asked (each second, each 0.5 s while tuning) */
+	int64_t rxsel_ask_ms;		/* the active receiver (VFO Main/Sub Band) last asked, each second */
+	int rx_sub;			/* the rig's sub is the active receiver: 1, main 0, -1 not known */
 	uint64_t row_width;		/* width of the last scope row, 0: none yet */
 	bool smeter_valid;
 	double smeter_dbm;
@@ -747,6 +749,14 @@ void x6100_remote_poll(x6100_remote_t *r, x6100_remote_status_t *st)
 
 	st->rig_tuning = rs.tuner.valid && rs.tuner.value == 2;
 
+	// The active receiver of a rig with main and sub (2026-11-18): once a second, as the
+	// app does (the rig files do not poll it); x6100_remote_vfo_name shows it
+	if (rs.rig_valid && x6100_remote_vfo_name(r) != NULL && t - r->rxsel_ask_ms >= 1000) {
+		session_get_value(r->s, "VFO Main/Sub Band", 0);
+		r->rxsel_ask_ms = t;
+	}
+	r->rx_sub = rs.rx_selected.valid ? (rs.rx_selected.value != 0) : -1;
+
 	// A tune started on the rig (its TUNER key) watched the same way as ours, so TUNE
 	// goes off when it is done, not at the next turn of our poll (about 2.3 s)
 	if (st->rig_tuning && r->tune_ms == 0) {
@@ -1072,6 +1082,21 @@ bool x6100_remote_has_tuner(const x6100_remote_t *r)
 	const struct rig_def *def = session_rig_def(r->s);
 
 	return def != NULL && rigfile_cmd(def, "Tuner/ATU Status") != NULL;
+}
+
+//
+// The receiver in use on a rig with main and sub (two receivers and VFO Main/Sub Band in
+// its rig file: 785x, 7760, 7610, 9700): "MAIN" or "SUB" (2026-11-18); NULL for a rig
+// without, where the head shows its own A / B
+//
+
+const char *x6100_remote_vfo_name(const x6100_remote_t *r)
+{
+	const struct rig_def *def = session_rig_def(r->s);
+
+	if (def == NULL || def->receivers < 2 || rigfile_cmd(def, "VFO Main/Sub Band") == NULL)
+		return NULL;
+	return r->rx_sub == 1 ? "SUB" : "MAIN";
 }
 
 bool x6100_remote_no_tuner(const x6100_remote_t *r)

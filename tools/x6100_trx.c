@@ -9822,6 +9822,21 @@ static bool marker_shown(const rx_t *rx, int i)
 	return i == 0 || (i == 1 && (m == 1 || m == 3)) || (i == 2 && (m == 2 || m == 3));
 }
 
+// The VFO in use as shown (2026-11-18): remote with a rig that has main and sub, MAIN or
+// SUB (its active receiver, x6100_remote_vfo_name); else A or B
+static const char *vfo_label(const rx_t *rx)
+{
+#ifdef X6100_REMOTE
+	if (REMOTE_ON && g_remote != NULL) {
+		const char *n = x6100_remote_vfo_name(g_remote);
+
+		if (n != NULL)
+			return n;
+	}
+#endif
+	return rx->on_b ? "B" : "A";
+}
+
 static void draw_markers(x6100_lcd_t *lcd, const rx_t *rx, const view_t *v, int sw)
 {
 	const uint32_t col[3] = { MARK_M, MARK_S, MARK_T };
@@ -10070,7 +10085,7 @@ static void draw_portrait(screen_t *scr, const rx_t *rx)
 
 	x6100_lcd_text(lcd, 12, 6, 3, rx->tuning ? "TUNE" : scr->tx ? "TX" : "RX", on ? 0xFFFFFF : 0x3CC83C);
 	snprintf(s, sizeof(s), "%s  %s", band_label(rx, "GEN"),
-		rx->mem_mode ? "M" : rx->on_b ? "B" : "A");
+		rx->mem_mode ? "M" : vfo_label(rx));
 	x6100_lcd_text(lcd, 110, 10, 2, s, on ? 0xFFFFFF : SCR_DIM);
 
 	{
@@ -10391,7 +10406,12 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 		x6100_lcd_text(lcd, 72, FREQ_Y + 12, 3, "M", SCR_WARN);
 		x6100_lcd_text(lcd, 72 + x6100_lcd_text_width("M", 3) + 2, FREQ_Y + 24, 2, mc + 1, SCR_WARN);
 	} else {
-		x6100_lcd_text(lcd, 72, FREQ_Y + 12, 3, rx->on_b ? "B" : "A", SCR_ACCENT);
+		const char *v = vfo_label(rx);
+
+		// One letter fits between the TX box and the digits: M / S for MAIN / SUB, as
+		// the IC-7851 marks them (2026-11-18)
+		x6100_lcd_text(lcd, 72, FREQ_Y + 12, 3, strcmp(v, "MAIN") == 0 ? "M" : strcmp(v, "SUB") == 0 ? "S" : v,
+			SCR_ACCENT);
 	}
 
 	//
