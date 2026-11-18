@@ -901,6 +901,15 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     Medium: every several seconds); now polled at High, about once a second per
     receiver; DW asked once a second. Verified on the 7851 (2026-11-15).
 
+60. No audio now and then, every rig, the app (2026-11-18; not on a rig yet): a new
+    connect by hand brought it back. Now: no audio data for 5 s while control and CI-V
+    run (rig file in, not around TX) is a lost link ("No audio from the radio"), and
+    both the app and x6100_trx connect again 2 s after a lost link (the new session
+    first; x6100_trx stayed down until a rig switch before). The app's status bar shows
+    NO AUDIO (no packets for 2 s) or NO OUTPUT (packets, but the phone plays none).
+    Test: when it happens again, which of the two shows, and whether it comes back by
+    itself within about 7 s.
+
 ## Next steps (suggested order)
 
 1. Radio checks above; the 2026-10-27 evening checklist (scope panel, fixed edges, wfview

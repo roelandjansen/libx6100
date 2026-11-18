@@ -141,6 +141,16 @@ struct x6100_remote
 	// Audio thread
 	//
 	pthread_t audio;
+
+	//
+	// Reconnect after a lost link (2026-11-18): the session as the audio thread sees it
+	// (counted in and out, so a reconnect waits for it), what it was opened with
+	//
+	_Atomic(struct session *) as;
+	atomic_int as_busy;
+	struct profile prof;
+	struct session_hooks hooks;
+	int64_t lost_ms;		/* the link found lost (0 not) */
 	bool audio_running;
 	atomic_bool stop;
 	x6100_pcm_t pcm;
@@ -254,7 +264,16 @@ static void *audio_main(void *arg)
 	int16_t out[C_PERIOD * 2];
 
 	while (!atomic_load(&r->stop)) {
-		session_audio_read(r->s, in, C_PERIOD);
+		struct session *s;
+
+		// The session through r->as, counted: a reconnect waits until it is not used
+		atomic_fetch_add(&r->as_busy, 1);
+		s = atomic_load(&r->as);
+		if (s != NULL)
+			session_audio_read(s, in, C_PERIOD);
+		else
+			memset(in, 0, sizeof(in));	/* reconnecting: silence */
+		atomic_fetch_sub(&r->as_busy, 1);
 
 		for (size_t i = 0; i < C_PERIOD * 2; i++) {
 			float v = in[i] * 32767.0f;
@@ -511,11 +530,17 @@ int x6100_remote_open(x6100_remote_t **out, const x6100_remote_cfg_t *cfg)
 
 	fprintf(stderr, "remote: playback %u Hz, stream %u Hz\n", r->pcm.rate, (unsigned) C_NET_RATE);
 
-	if (session_connect(&r->s, &p, &h) != 0) {
+	r->prof = p;
+	r->hooks = h;
+	atomic_init(&r->as_busy, 0);
+	atomic_init(&r->as, NULL);
+
+	if (session_connect(&r->s, &r->prof, &r->hooks) != 0) {
 		x6100_pcm_close(&r->pcm);
 		free(r);
 		return -EIO;
 	}
+	atomic_store(&r->as, r->s);
 
 	if ((rc = pthread_create(&r->audio, NULL, audio_main, r)) != 0) {
 		session_disconnect(r->s);
@@ -639,6 +664,37 @@ void x6100_remote_poll(x6100_remote_t *r, x6100_remote_status_t *st)
 	memset(st, 0, sizeof(*st));
 
 	session_get_info(r->s, &info);
+
+	// A lost link (or the radio gone): connect again after 2 s (2026-11-18; x6100_trx
+	// stayed down until a rig switch, the app until a new connect by hand). The DATA OFF
+	// MOD state stays: the rig's own value still goes back at the close
+	if (info.state == SESSION_LOST || info.state == SESSION_RADIO_GONE) {
+		if (r->lost_ms == 0) {
+			r->lost_ms = t;
+		} else if (t - r->lost_ms >= 2000) {
+			const struct timespec ms = { 0, 1000000 };
+			struct session *ns = NULL;
+
+			// The new one first: r->s is never left without a session (a failed
+			// connect keeps the old, lost one, and is tried again in 2 s)
+			fprintf(stderr, "\nremote: %s (%s): connecting again\n", session_state_name(info.state), info.status);
+			if (session_connect(&ns, &r->prof, &r->hooks) != 0) {
+				fprintf(stderr, "\nremote: connecting again failed, next try in 2 s\n");
+				r->lost_ms = t;
+			} else {
+				atomic_store(&r->as, NULL);
+				while (atomic_load(&r->as_busy) != 0)
+					nanosleep(&ms, NULL);
+				session_disconnect(r->s);
+				r->s = ns;
+				atomic_store(&r->as, ns);
+				r->lost_ms = 0;
+				session_get_info(r->s, &info);
+			}
+		}
+	} else {
+		r->lost_ms = 0;
+	}
 	st->connected = info.state == SESSION_CONNECTED;
 	snprintf(st->state, sizeof(st->state), "%s", session_state_name(info.state));
 	snprintf(st->radio, sizeof(st->radio), "%s", info.radio_name);
