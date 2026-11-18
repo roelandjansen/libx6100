@@ -9868,7 +9868,7 @@ static void draw_markers(x6100_lcd_t *lcd, const rx_t *rx, const view_t *v, int 
 	static const int prio[3] = { 2, 0, 1 };	/* which marker of a shared column draws it: T, then M, then S */
 	int64_t hz[3];
 	const int tag_h = 17, row_y = SPEC_Y + 20;
-	int x[3], tag_x[3], ntag = 0;
+	int x[3], tag_x[3], tag_wd[3], tag_row[3], ntag = 0;
 
 	marker_hz(rx, hz);
 
@@ -9876,12 +9876,12 @@ static void draw_markers(x6100_lcd_t *lcd, const rx_t *rx, const view_t *v, int 
 		x[i] = f_to_x(v, hz[i]);
 
 	//
-	// Lines and tags, in tag order: the markers on one column (within a pixel) are one
+	// Lines, in tag order: the markers on one column (within a pixel) are one
 	// group with one line, dashed 6 px a colour (a single marker: 6 px on, 3 off), and
-	// one tag; a tag that would cover one already drawn drops a row
+	// a tag of its own for each (below)
 	//
 	for (int p = 0; p < 3; p++) {
-		int i = prio[p], n = 0, row = 0;
+		int i = prio[p], n = 0;
 		uint32_t on[3];
 		bool lead = true;
 
@@ -9906,29 +9906,34 @@ static void draw_markers(x6100_lcd_t *lcd, const rx_t *rx, const view_t *v, int 
 
 			x6100_lcd_vline(lcd, x[i], y, y1, on[(y - SPEC_Y) / 6 % n]);	/* solid dashes: the gaps show the signal */
 		}
+	}
 
-		// The tag names every marker of the column, in the order A / M, B / S, T
-		// (2026-11-18: only the first, T, hid the A / M under it)
-		char tag[4];
-		size_t nt = 0;
+	//
+	// Tags: one per marker in its own colour, a letter on it; in tag order T, M / A,
+	// S / B, so a column stacks them T on top, as on the IC-7851 (2026-11-18). A tag
+	// drops below every tag it would cover (its own column's and one close by)
+	//
+	for (int p = 0; p < 3; p++) {
+		const int i = prio[p];
+		const int tag_w = x6100_lcd_text_width(name[i], 2) + 8;
+		int row = 0;
 
-		for (int k = 0; k < 3; k++)
-			if (marker_shown(rx, k) && abs(x[k] - x[i]) <= 1)
-				tag[nt++] = name[k][0];
-		tag[nt] = '\0';
+		if (!marker_shown(rx, i) || x[i] < LBL_W || x[i] >= sw)
+			continue;
 
-		const int tag_w = x6100_lcd_text_width(tag, 2) + 8;
 		int tx = x[i] - tag_w / 2;
 
 		tx = tx < LBL_W ? LBL_W : tx + tag_w > sw ? sw - tag_w : tx;
 
 		for (int k = 0; k < ntag; k++)
-			row += abs(tag_x[k] - tx) < tag_w + 2 ? 1 : 0;
+			if (tx < tag_x[k] + tag_wd[k] + 2 && tag_x[k] < tx + tag_w + 2 && tag_row[k] >= row)
+				row = tag_row[k] + 1;
 
-		tag_x[ntag++] = tx;
+		tag_x[ntag] = tx;
+		tag_wd[ntag] = tag_w;
+		tag_row[ntag++] = row;
 		x6100_lcd_fill(lcd, tx, row_y + row * (tag_h + 2), tag_w, tag_h, col[i]);
-		x6100_lcd_text(lcd, tx + (tag_w - x6100_lcd_text_width(tag, 2)) / 2, row_y + row * (tag_h + 2) + 2, 2,
-			tag, 0x000000);
+		x6100_lcd_text(lcd, tx + 4, row_y + row * (tag_h + 2) + 2, 2, name[i], 0x000000);
 	}
 
 	//

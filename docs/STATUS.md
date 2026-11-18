@@ -916,9 +916,10 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     to 500, then 100; AM 200; 50-3600 Hz, AM 200-10000), shown at once and held until
     the rig confirms it (at most 1.5 s). FM: none (Icom's FM filters have no width).
     The rig layer encodes Filter Width (Hz to the rig's index per mode; test_rig).
-    Markers: a tag names every marker on its column (MT, MST); a remote rig with main
-    and sub uses M / S / T, as the app. Test: on the 7851, F5 long, BW: the rig's filter
-    narrows / widens, the label and the passband follow, the rig shows the same width.
+    Markers: each has a tag of its own in its colour; on one column they stack T, M, S
+    (as the IC-7851); a remote rig with main and sub uses M / S / T, as the app. Test:
+    on the 7851, F5 long, BW: the rig's filter narrows / widens, the label and the
+    passband follow, the rig shows the same width.
 
 ## Next steps (suggested order)
 
