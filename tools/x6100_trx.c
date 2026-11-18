@@ -2563,6 +2563,34 @@ static void atu_store(uint32_t hz, const x6100_atu_t *net)
 	g_atum[i].net = *net;
 }
 
+//
+// Start: the calibration read and the first refresh, each tried START_TRIES times
+// (START_WAIT_US apart) for a baseband that does not answer yet
+//
+
+static int start_cal_read(x6100_i2c_t *i2c, x6100_cal_t *cal)
+{
+	int rc;
+
+	for (int n = 1; (rc = x6100_cal_read(i2c, cal)) < 0 && n < START_TRIES; n++) {
+		fprintf(stderr, "calibration read: %s, again (%d/%d)\n", strerror(-rc), n, START_TRIES);
+		usleep(START_WAIT_US);
+	}
+	return rc;
+}
+
+static int start_refresh(x6100_ctl_t *ctl)
+{
+	int rc;
+
+	for (int n = 1; (rc = x6100_ctl_refresh(ctl)) < 0 && n < START_TRIES; n++) {
+		fprintf(stderr, "refresh: %s, again (%d/%d)\n", strerror(-rc), n, START_TRIES);
+		usleep(START_WAIT_US);
+	}
+	return rc;
+}
+
+
 static void apply_local(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 {
 	uint32_t low, high;
@@ -14725,8 +14753,11 @@ int main(int argc, char **argv)
 	}
 
 	// --bbreset: a baseband that hangs (no answer on I2C, no flow) reset before the start
+	bool bb_reset_done = false;
+
 	if (g_bb_reset_req) {
 		g_bb_reset_req = false;
+		bb_reset_done = true;
 		rc = bb_reset_pulse();
 		fprintf(stderr, "bbreset: %s\n", rc < 0 ? strerror(-rc) : "baseband reset");
 	}
@@ -14737,13 +14768,25 @@ int main(int argc, char **argv)
 	// garbage and the first refresh failed, x6100_trx did not start until a reboot
 	// (2026-11-01). Both are tried again for a few seconds first.
 	//
-	for (int n = 1; (rc = x6100_cal_read(&i2c, &cal)) < 0 && n < START_TRIES; n++) {
-		fprintf(stderr, "calibration read: %s, again (%d/%d)\n", strerror(-rc), n, START_TRIES);
-		usleep(START_WAIT_US);
+	// 2026-11-18: when it still does not answer, x6100_trx resets it once itself (as
+	// --bbreset; not for a calibration that answers but is bad, a reset does not mend
+	// that) and tries again. Right after a reset the baseband takes some 5 s to come up:
+	// no answer first, then a calibration still half there (Bad message); so when the
+	// first refresh works and the calibration was not read, it is read once more
+	//
+	rc = start_cal_read(&i2c, &cal);
+
+	if (rc < 0 && rc != -EBADMSG && !bb_reset_done) {
+		bb_reset_done = true;
+		rc = bb_reset_pulse();
+		fprintf(stderr, "bbreset: the baseband does not answer, %s\n", rc < 0 ? strerror(-rc) : "reset");
+		rc = start_cal_read(&i2c, &cal);
 	}
 
-	if (rc < 0) {
-		fprintf(stderr, "warning: calibration invalid (%s), using defaults\n", strerror(-rc));
+	bool cal_ok = rc == 0;
+
+	if (!cal_ok) {
+		fprintf(stderr, "warning: calibration invalid (%s), using defaults for now\n", strerror(-rc));
 		memset(&cal, 0, sizeof(cal));
 		cal.bias_drive = X6100_CAL_BIAS_DRIVE_DEF;
 		cal.bias_final = X6100_CAL_BIAS_FINAL_DEF;
@@ -14753,15 +14796,33 @@ int main(int argc, char **argv)
 	apply(&ctl, &cal, &rx);
 	x6100_ctl_set(&ctl, X6100_REG_FLAGS, 0);
 
-	for (int n = 1; (rc = x6100_ctl_refresh(&ctl)) < 0 && n < START_TRIES; n++) {
-		fprintf(stderr, "refresh: %s, again (%d/%d)\n", strerror(-rc), n, START_TRIES);
-		usleep(START_WAIT_US);
+	rc = start_refresh(&ctl);
+
+	if (rc < 0 && !bb_reset_done) {
+		bb_reset_done = true;
+		rc = bb_reset_pulse();
+		fprintf(stderr, "bbreset: the baseband does not answer, %s\n", rc < 0 ? strerror(-rc) : "reset");
+		rc = start_refresh(&ctl);
 	}
 
 	if (rc < 0) {
-		fprintf(stderr, "refresh: %s: the baseband does not answer on I2C; try x6100_trx --bbreset, else a power cycle\n",
+		fprintf(stderr, "refresh: %s: the baseband does not answer on I2C, also after a reset: power cycle the X6100\n",
 			strerror(-rc));
 		return 1;
+	}
+
+	// The baseband answers now: the calibration once more when it was not read
+	if (!cal_ok) {
+		x6100_cal_t c2;
+
+		if ((rc = start_cal_read(&i2c, &c2)) == 0) {
+			cal = c2;
+			apply(&ctl, &cal, &rx);
+			rc = x6100_ctl_refresh(&ctl);
+			fprintf(stderr, "calibration: read now%s\n", rc < 0 ? ", the registers not sent again" : "");
+		} else {
+			fprintf(stderr, "warning: calibration still invalid (%s), the defaults stay\n", strerror(-rc));
+		}
 	}
 
 #ifdef X6100_REMOTE

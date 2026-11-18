@@ -921,6 +921,17 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     on the 7851, F5 long, BW: the rig's filter narrows / widens, the label and the
     passband follow, the rig shows the same width.
 
+62. Baseband not answering at the start (2026-11-18; seen once: no answer on I2C at all,
+    `--bbreset` brought it back, but the calibration came half there, Bad message, and
+    the defaults were used although the baseband answered a second later). Now: when
+    the calibration read or the first refresh still fails after its 10 tries,
+    x6100_trx resets the baseband once itself (as `--bbreset`; not for a calibration
+    that answers but is bad) and tries again; when the refresh then works and the
+    calibration was not read, it is read once more and the registers sent again. Only
+    when it still does not answer: "power cycle the X6100". Test: next time it happens,
+    the console shows `bbreset: the baseband does not answer, reset` and then
+    `calibration: read now` (or no warning).
+
 ## Next steps (suggested order)
 
 1. Radio checks above; the 2026-10-27 evening checklist (scope panel, fixed edges, wfview

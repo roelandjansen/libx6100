@@ -22,7 +22,9 @@ quits (PWR) the GUI comes back. No file of the image is changed.
 
 Right after a GUI let the baseband go it may not answer on I2C for a moment: x6100_trx tries
 the calibration read and the first register write 10 times over 5 s (console: again n/10);
-if it still fails, `x6100_trx --bbreset` resets the baseband (else a power cycle).
+if it still fails, x6100_trx resets the baseband once itself (as `--bbreset`, 2026-11-18),
+tries again and reads the calibration once more when the baseband answers again (it takes
+some 5 s to come up after a reset); only when it still does not answer: power cycle the X6100.
 
 At the start the console names the CAT endpoints (CI-V on the DEV port and the pty, with
 the CI-V address) and the network: `network: wlan0 192.168.1.20; wfview (wfserver
