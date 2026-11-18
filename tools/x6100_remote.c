@@ -129,6 +129,8 @@ struct x6100_remote
 	int64_t scope_set_ms;		/* last scope mode / span sent */
 	int scope_tries;		/* scope mode / span sends so far (C_SCOPE_TRIES, then left alone) */
 	int64_t fil_hold_ms;		/* mode / filter changed then: the Filter Width before it not used for C_FIL_HOLD_MS */
+	int fil_set_hz;			/* a width set from the head (2026-11-18): shown until the rig confirms it */
+	int64_t fil_set_ms;		/* when (0 none), at most 1.5 s */
 	int64_t tune_ms;		/* our tune sent then, 0 none: its tuner watched (C_TUNE_WATCH_MS) */
 	int64_t tune_ask_ms;		/* the tuner last asked (each second, each 0.5 s while tuning) */
 	int64_t rxsel_ask_ms;		/* the active receiver (VFO Main/Sub Band) last asked, each second */
@@ -834,6 +836,15 @@ void x6100_remote_poll(x6100_remote_t *r, x6100_remote_status_t *st)
 	st->rf_power = rs.rf_power.valid ? rs.rf_power.value : -1;
 	st->filter_hz = rs.filter_width.valid && t - r->fil_hold_ms >= C_FIL_HOLD_MS ? rs.filter_width.value : 0;
 
+	// A width set from the head: shown until the rig reports it, at most 1.5 s (the poll
+	// still has the old one in between)
+	if (r->fil_set_ms != 0) {
+		if (t - r->fil_set_ms < 1500 && !(rs.filter_width.valid && rs.filter_width.value == r->fil_set_hz))
+			st->filter_hz = r->fil_set_hz;
+		else
+			r->fil_set_ms = 0;
+	}
+
 	// RF power each change, for the log (2026-11-14: 0 % shown with the 7851 at 200 W)
 	if (st->rf_power != r->log_rfpwr) {
 		fprintf(stderr, "\nremote: rig RF power %d (0-255)\n", st->rf_power);
@@ -1138,6 +1149,23 @@ bool x6100_remote_has_tuner(const x6100_remote_t *r)
 	const struct rig_def *def = session_rig_def(r->s);
 
 	return def != NULL && rigfile_cmd(def, "Tuner/ATU Status") != NULL;
+}
+
+//
+// The rig's filter width for its mode and filter in use (2026-11-18: the head's filter
+// panel BW while remote; before it changed the head's own table only): Filter Width in
+// Hz, the rig layer makes the rig's index of it. 0 sent, < 0 refused
+//
+
+int x6100_remote_filter_width(x6100_remote_t *r, int hz)
+{
+	const int rc = session_set_value(r->s, "Filter Width", 0, hz);
+
+	if (rc == 0) {
+		r->fil_set_hz = hz;
+		r->fil_set_ms = now_ms();
+	}
+	return rc;
 }
 
 //

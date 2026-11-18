@@ -5682,6 +5682,28 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 			fgroup_t g = mode_group(rx->mode);
 
 			if (rx->fedit_par == 0) {
+#ifdef X6100_REMOTE
+				// Remote (2026-11-18): the rig's own width, in the steps it takes (50 Hz to
+				// 500, then 100; AM 200), sent as its Filter Width; before, BW changed the
+				// head's table only. FM: Icom's FM filters give no width
+				if (REMOTE_ON && g_remote != NULL && g_remote_fil_hz > 0 && g != FG_FM) {
+					const int s = value * X6100_DIR_MFK;
+					int w = g_remote_fil_hz;
+
+					if (g == FG_AM)
+						w = clampi(w + s * 200, 200, 10000);
+					else if (w + (s > 0 ? 0 : -1) < 500)
+						w = clampi(w + s * 50, 50, 3600);
+					else
+						w = clampi(w + s * 100, 50, 3600);
+					if (x6100_remote_filter_width(g_remote, w) == 0) {
+						g_remote_fil_hz = w;
+						g_remote_fil_kept[g][clampi(rx->fil, 0, 2)] = w;
+					}
+					rx->fedit_since = now_ms();
+					return true;
+				}
+#endif
 				fil_bw(g, rx->fil, value * X6100_DIR_MFK);
 			} else if (rx->fedit_par == 1) {
 				fil_sft(g, rx->fil, value * X6100_DIR_MFK);
@@ -9840,10 +9862,12 @@ static const char *vfo_label(const rx_t *rx)
 static void draw_markers(x6100_lcd_t *lcd, const rx_t *rx, const view_t *v, int sw)
 {
 	const uint32_t col[3] = { MARK_M, MARK_S, MARK_T };
-	const char *const name[3] = { "A", "B", "T" };	/* VFO A, VFO B, TX (the IC-7851: M, S, T) */
-	static const int prio[3] = { 2, 0, 1 };	/* the tag a shared column shows: T, then M, then S */
+	// VFO A, VFO B, TX; a remote rig with main and sub: M, S, T as the IC-7851 (2026-11-18)
+	const bool ms = strcmp(vfo_label(rx), "MAIN") == 0 || strcmp(vfo_label(rx), "SUB") == 0;
+	const char *const name[3] = { ms ? "M" : "A", ms ? "S" : "B", "T" };
+	static const int prio[3] = { 2, 0, 1 };	/* which marker of a shared column draws it: T, then M, then S */
 	int64_t hz[3];
-	const int tag_w = 16, tag_h = 17, row_y = SPEC_Y + 20;
+	const int tag_h = 17, row_y = SPEC_Y + 20;
 	int x[3], tag_x[3], ntag = 0;
 
 	marker_hz(rx, hz);
@@ -9883,6 +9907,17 @@ static void draw_markers(x6100_lcd_t *lcd, const rx_t *rx, const view_t *v, int 
 			x6100_lcd_vline(lcd, x[i], y, y1, on[(y - SPEC_Y) / 6 % n]);	/* solid dashes: the gaps show the signal */
 		}
 
+		// The tag names every marker of the column, in the order A / M, B / S, T
+		// (2026-11-18: only the first, T, hid the A / M under it)
+		char tag[4];
+		size_t nt = 0;
+
+		for (int k = 0; k < 3; k++)
+			if (marker_shown(rx, k) && abs(x[k] - x[i]) <= 1)
+				tag[nt++] = name[k][0];
+		tag[nt] = '\0';
+
+		const int tag_w = x6100_lcd_text_width(tag, 2) + 8;
 		int tx = x[i] - tag_w / 2;
 
 		tx = tx < LBL_W ? LBL_W : tx + tag_w > sw ? sw - tag_w : tx;
@@ -9892,8 +9927,8 @@ static void draw_markers(x6100_lcd_t *lcd, const rx_t *rx, const view_t *v, int 
 
 		tag_x[ntag++] = tx;
 		x6100_lcd_fill(lcd, tx, row_y + row * (tag_h + 2), tag_w, tag_h, col[i]);
-		x6100_lcd_text(lcd, tx + (tag_w - x6100_lcd_text_width(name[i], 2)) / 2, row_y + row * (tag_h + 2) + 2, 2,
-			name[i], 0x000000);
+		x6100_lcd_text(lcd, tx + (tag_w - x6100_lcd_text_width(tag, 2)) / 2, row_y + row * (tag_h + 2) + 2, 2,
+			tag, 0x000000);
 	}
 
 	//

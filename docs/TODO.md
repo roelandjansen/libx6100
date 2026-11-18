@@ -399,8 +399,6 @@ Open from the receive side (handover 2026-11-12):
 - The rigs' places (frequency, mode and so on) are kept only while x6100_trx runs: not
   in the state yet (one line per rig would do).
 - remote.conf passwords in plain text (mode 600): an encrypted form later.
-- Filter widths: the rig's are shown (STATUS 52), but a width set in the head's filter
-  panel only changes the head's table: send it to the rig (its Filter Width).
 - The tuning range while remote is one for all rigs (10 kHz - 1300 MHz; past the top
   the dial goes round to 10 kHz): take each rig's bands from its wfview rig file.
 - Band keys and band memories are the X6100's (160 m - 4 m): on a VHF / UHF rig 2 m,

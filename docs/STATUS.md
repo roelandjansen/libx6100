@@ -910,6 +910,16 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     Test: when it happens again, which of the two shows, and whether it comes back by
     itself within about 7 s.
 
+61. Filter width from the head on a remote rig (2026-11-18; not on a rig yet): the filter
+    panel's BW (F5 long, MFK turn) changed only the head's table; now, remote, it sets
+    the rig's own Filter Width for its mode and filter, in the steps the rig takes (50 Hz
+    to 500, then 100; AM 200; 50-3600 Hz, AM 200-10000), shown at once and held until
+    the rig confirms it (at most 1.5 s). FM: none (Icom's FM filters have no width).
+    The rig layer encodes Filter Width (Hz to the rig's index per mode; test_rig).
+    Markers: a tag names every marker on its column (MT, MST); a remote rig with main
+    and sub uses M / S / T, as the app. Test: on the 7851, F5 long, BW: the rig's filter
+    narrows / widens, the label and the passband follow, the rig shows the same width.
+
 ## Next steps (suggested order)
 
 1. Radio checks above; the 2026-10-27 evening checklist (scope panel, fixed edges, wfview

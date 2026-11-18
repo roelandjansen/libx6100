@@ -198,6 +198,9 @@ bool x6100_remote_no_tuner(const x6100_remote_t *r);
 // The receiver in use on a rig with main and sub: "MAIN" / "SUB"; NULL for a rig without
 const char *x6100_remote_vfo_name(const x6100_remote_t *r);
 
+// The rig's filter width for its mode and filter in use, in Hz: 0 sent, < 0 refused
+int x6100_remote_filter_width(x6100_remote_t *r, int hz);
+
 // The rig on / off (CI-V 18 01 / 18 00; also in standby, without a rig file): 0 sent
 int x6100_remote_power(x6100_remote_t *r, bool on);
 
