@@ -31,6 +31,7 @@ transceive). **x6100_trx**: the same function there.
 | LAN audio | TX audio over the LAN (wfserver) | **fails**: none at all, though wfview PTT keys the radio | ok (DATA OFF MOD / DATA MOD LAN) |
 | 00 / 05 | frequency, both ways | ok | ok |
 | 25 / 26 | selected / unselected VFO | **fails**: the receiver tunes the VFO not shown (radio and wfview show 80 m, the audio is MW, and the other way round) | ok |
+| 07 00 / 01 | select VFO A / B | works both ways, but the radio does odd things after it | ok |
 | 07 B0 | exchange A / B | ok | ok |
 | 01 / 06 | mode, FIL1-3 | ok from wfview; a change on the radio **slow** | ok, transceive |
 | 1A 06 | data mode (USB-D, LSB-D) | ok from wfview | ok |
@@ -49,6 +50,7 @@ transceive). **x6100_trx**: the same function there.
 | 21 00 / 01 | RIT | ok | ok |
 | 18 00 / 01 | power off / on | ok | 18 01 ok, 18 00 NG (by choice) |
 | 27 | scope and waterfall, reference level | ok | ok |
+| 27 17 | scope hold | **fails** | ok (freezes the radio's own scope too) |
 
 ## Known gaps in the Xiegu reference
 

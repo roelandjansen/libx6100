@@ -33,6 +33,8 @@ Broken or wrong:
   the radio shows ATU on (1C 01 read answers off or not at all)
 - **Filter width**: wfview shows one fixed width, does not follow the radio's (1A 03; to
   confirm: the passband in wfview, or the scope width)
+- **VFO A / B select** (07 00 / 01): works both ways, but the radio does odd things after it
+- **Scope hold** (27 17): does not work
 - **Memories**: the memory window does not work (1A 00; possibly wfview's own IC-705.rig
   bug, see section 2)
 - **Transceive missing**: changes made on the radio do not reach wfview for AGC, tuning
@@ -44,7 +46,7 @@ the radio, the radio's TX seen in wfview), power on / off, spectrum and waterfal
 ATT, PRE, NB, NR (all wfview -> X6100), reference level, TX state seen in wfview.
 
 Not tested yet (what is left): setup checks,
-VFO A / B select, A=B, duplex, TX frequency (1C 03), memory mode /
+A=B, duplex, TX frequency (1C 03), memory mode /
 write; the other levels (NR level, PBT, CW pitch, RF power, mic gain, key speed, notch
 position, compressor, break-in delay, NB level, monitor, VOX); the other meters (Po,
 SWR, ALC, Vd, OVF, squelch status); notch, compressor, monitor, VOX, break-in, lock
@@ -69,7 +71,7 @@ the scope apart from the display and the reference level; behaviour (NG, reconne
 - [x] Mode changed on the X6100 shows in wfview (01): **slowly** (wfview's poll, no transceive 01)
 - [x] Filter FIL1 / FIL2 / FIL3 from wfview (06 with filter byte)
 - [x] Data mode: USB-D and LSB-D from wfview (1A 06)
-- [ ] VFO A / B select (07 00 / 01)
+- [x] VFO A / B select (07 00 / 01): works both ways, **but the radio does odd things** after it (what exactly: to note)
 - [ ] A=B button (07 A0): *not in the Xiegu reference*
 - [x] A<->B button (07 B0)
 - [x] Split on / off (0F 00 / 01)
@@ -190,7 +192,7 @@ should play it into the X6100's TX path.
 - [ ] Center / fixed / scroll mode (27 14)
 - [ ] Span (27 15)
 - [ ] Fixed edges (27 16, 27 1E)
-- [ ] Hold (27 17)
+- [-] Hold (27 17): **does not work**
 - [x] Reference level (27 19)
 - [ ] Sweep speed (27 1A)
 - [ ] Scope during TX (27 1B)
