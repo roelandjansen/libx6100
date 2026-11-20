@@ -937,6 +937,19 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     before, the head always played as received. Test: on the 7851 with DW, the SUB
     selected: the sub is heard; MAIN selected: the main.
 
+64. Scan (2026-11-20; not on the radio yet): GEN row SCAN, MEMORY / BAND, hold MFK
+    starts. Memory scan through the stored channels (memory mode, as V/M), band scan over
+    the band the VFO is in, in the tuning step. The squelch decides: a level above SQL
+    after the step settles (band 120 ms, channel 250 ms) holds the scan, on again 2 s
+    after the signal went (resume on, default; CI-V 0E D0: the scan ends there). Without
+    a squelch it does not start. Any key, a VFO or MFK turn or PTT stops it; VOL and its
+    push still work, so the squelch can be set while it runs. On the scope MEMORY SCAN n
+    / BAND SCAN, HOLD on a signal, in green. CI-V 0E 00 / 01 / 02 / 22 / D0 / D3 as the
+    IC-705 (civ test). Also fixed: the birdie scan progress on the scope showed only
+    with split / RIT / XIT on (the text sat inside that block). Test: SQL set, a few
+    channels stored, memory scan stops on the busy one and goes on after it; band scan
+    on 40 m; hamlib `rigctl U ... G SCAN` / wfview off (its X6100.rig has no Scanning).
+
 ## Next steps (suggested order)
 
 1. Radio checks above; the 2026-10-27 evening checklist (scope panel, fixed edges, wfview

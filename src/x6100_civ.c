@@ -985,6 +985,30 @@ static size_t cmd_mem_content(req_t *r)
 	return out_end(r->o);
 }
 
+// 0E: scan, IC-705 style (2026-11-20): 00 stop, 01 programmed scan (here: the band the
+// VFO is in), 02 memory scan, 22 select memory scan (here: memory scan, no select
+// marks), D0 / D3 resume off / on. Not readable; the other forms (fine scan, delta-f
+// spans, select marks) NG
+static size_t cmd_scan(req_t *r)
+{
+	if (r->n != 1)
+		return reply_ng(r);
+
+	switch (r->d[0]) {
+	case 0x00:
+	case 0x01:
+	case 0x02:
+		return reply_ok(r, set(r, X6100_CIV_SCAN, 0, r->d[0]));
+	case 0x22:
+		return reply_ok(r, set(r, X6100_CIV_SCAN, 0, 2));
+	case 0xD0:
+	case 0xD3:
+		return reply_ok(r, set(r, X6100_CIV_SCAN_RESUME, 0, r->d[0] == 0xD3));
+	default:
+		return reply_ng(r);
+	}
+}
+
 // 28 00: voice TX, IC-705 style: 28 00 01-08 sends voice memory T1-T8 (here message
 // M1-M8), 28 00 00 stops; 28 00 reads the one going out (00: none)
 static size_t cmd_voice(req_t *r)
@@ -1553,6 +1577,9 @@ size_t x6100_civ_process(x6100_civ_t *civ, const uint8_t *frame, size_t len, uin
 		break;
 	case 0x0B:
 		n = cmd_mem_action(&r, X6100_CIV_MEM_CLEAR);
+		break;
+	case 0x0E:
+		n = cmd_scan(&r);
 		break;
 	case 0x0F:
 		n = cmd_split(&r);

@@ -158,6 +158,8 @@ typedef enum
 	X6100_CIV_DATE,		/* 1A 05 0165: local date YYYYMMDD */
 	X6100_CIV_TIME,		/* 1A 05 0166: local time HHMM */
 	X6100_CIV_UTC_OFS,		/* 1A 05 0170: UTC offset in minutes, local = UTC + offset */
+	X6100_CIV_SCAN,			/* 0E: 0 stop, 1 band (programmed) scan, 2 memory scan */
+	X6100_CIV_SCAN_RESUME,		/* 0E D0 / D3: resume off / on */
 	X6100_CIV_ITEM_COUNT
 } x6100_civ_item_t;
 

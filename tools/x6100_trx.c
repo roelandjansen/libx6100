@@ -154,6 +154,7 @@ static uint64_t g_vol_fn_ms;
 #define SQL_HANG_MS	300
 static bool g_sql_open = true;	/* the squelch lets the audio through */
 static uint64_t g_sql_below;	/* below the threshold since (ms), 0 = not below */
+static bool g_sql_level;	/* the level above SQL now, without the hang (the scan, 2026-11-20) */
 
 //
 // Baseband reset line (2026-11-05): GPIO 204 on gpiochip1, high = the STM32 in reset, as
@@ -774,7 +775,7 @@ static bool cat_time_set(bool date, int32_t v)
 }
 
 enum { GEN_BRIGHT, GEN_LAYOUT, GEN_VFOFAST, GEN_CAT, GEN_CIVADDR, GEN_CATMEM, GEN_CATTIME, GEN_MODOFF, GEN_MODDATA, GEN_WFS, GEN_NTP, GEN_WIFI, GEN_WNET, GEN_BT, GEN_BTPAIR,
-	GEN_BTDEV, GEN_BSCAN, GEN_BMARK, GEN_BNOTCH, GEN_ROWS };	/* GEN rows */
+	GEN_BTDEV, GEN_RSCAN, GEN_BSCAN, GEN_BMARK, GEN_BNOTCH, GEN_ROWS };	/* GEN rows */
 
 static void gen_adjust(int row, int dir, bool def);
 static uint64_t g_gen_save_at;	/* GEN setting changed: the state goes to disk at this time (ms), 0 none */
@@ -2397,6 +2398,8 @@ static int g_birdie_full;		/* birdies that found the list full in this scan */
 static bool g_bmarks = true;		/* ticks on the scope */
 static bool g_bnotch;			/* automatic notch; off until checked on the radio */
 static int g_bscan_req;			/* GEN / console: 1 start a scan, -1 stop it (main loop) */
+static bool rscan_running(void);	/* the memory / band scan (below) */
+static void rscan_stop(const char *why);
 static bool g_bscan_quiet;		/* console birdiescan ... quiet: WiFi and Bluetooth off meanwhile */
 
 static void passband(const rx_t *rx, int *lo, int *hi);
@@ -4725,6 +4728,13 @@ static bool on_key(rx_t *rx, int key)
 		return true;
 	}
 
+	// The memory / band scan: a key stops it and does nothing else; VOL push (the knob to
+	// SQL) still works, so the squelch can be set while it runs (2026-11-20)
+	if (rscan_running() && key != X6100_KEY_VOL_PUSH) {
+		rscan_stop("SCAN STOPPED");
+		return true;
+	}
+
 	if (bscan_running()) {
 		g_bscan_req = -1;	/* any key stops a birdie scan, and does nothing else */
 		return true;
@@ -5177,6 +5187,13 @@ static bool has_long(int key)
 
 static bool on_long_key(rx_t *rx, int key)
 {
+	// The memory / band scan: a key stops it and does nothing else; VOL push (the knob to
+	// SQL) still works, so the squelch can be set while it runs (2026-11-20)
+	if (rscan_running() && key != X6100_KEY_VOL_PUSH) {
+		rscan_stop("SCAN STOPPED");
+		return true;
+	}
+
 	if (bscan_running()) {
 		g_bscan_req = -1;	/* any key stops a birdie scan */
 		return true;
@@ -5540,6 +5557,11 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 
 	if (!rx->lock)
 		g_last_turn_ms = now_ms();
+
+	if (rscan_running() && in != IN_VOL) {
+		rscan_stop("SCAN STOPPED");	/* a VFO or MFK turn stops the scan (2026-11-20) */
+		return true;
+	}
 
 	if (bscan_running() && in != IN_VOL)
 		return true;	/* the scan owns the VFO; volume still works */
@@ -6872,6 +6894,8 @@ static double meter_frac(double dbm)
 
 static void sql_update(const rx_t *rx, double dbm, bool tx)
 {
+	g_sql_level = rx->sql > 0 && !tx && meter_frac(dbm) >= rx->sql / 100.0 - 1e-9;
+
 	if (rx->sql <= 0 || tx || meter_frac(dbm) >= rx->sql / 100.0 - 1e-9) {	/* S6 on SQL 40: open */
 		g_sql_open = true;
 		g_sql_below = 0;
@@ -6882,6 +6906,164 @@ static void sql_update(const rx_t *rx, double dbm, bool tx)
 		g_sql_below = now_ms();
 	else if (now_ms() - g_sql_below >= SQL_HANG_MS)
 		g_sql_open = false;
+}
+
+//
+// Scan (2026-11-20; CI-V 0E as the IC-705): memory scan through the stored channels
+// (memory mode, as V/M) or band scan from the band's low to its high edge in the
+// tuning step. The squelch decides: a channel or step with the level above SQL holds
+// the scan. Resume on (default, 0E D3): on 2 s after the signal went; off (0E D0): the
+// scan ends on the signal. Each step is given time to settle before the level counts.
+// A key, a VFO or MFK turn, PTT or 0E 00 stops it; VOL (and its push) still work, so the
+// squelch can be set while it runs. Without a squelch (SQL 0) it does not start.
+//
+
+enum { RSCAN_OFF, RSCAN_BAND, RSCAN_MEM };
+
+#define RSCAN_SETTLE_BAND_MS	120	/* a step: the level counts after this */
+#define RSCAN_SETTLE_MEM_MS	250	/* a channel (mode and filter may change) */
+#define RSCAN_RESUME_MS		2000	/* resume on: on again this long after the signal */
+
+static struct {
+	int mode;			/* RSCAN_* */
+	bool resume;			/* 0E D3 (default) / D0 */
+	bool holding;			/* on a signal */
+	uint64_t t_step;		/* tuned at (ms) */
+	uint64_t t_gone;		/* holding: the signal below the squelch since (ms), 0 above */
+	uint32_t lo, hi;		/* band scan range */
+	int ch;				/* memory scan: the channel on now */
+} g_rs = { .resume = true };
+
+static int g_rscan_req;			/* GEN / CI-V: RSCAN_* to start, -1 stop (main loop) */
+static int g_rscan_sel = RSCAN_MEM;	/* GEN SCAN: what MFK hold starts */
+
+static bool rscan_running(void)
+{
+	return g_rs.mode != RSCAN_OFF;
+}
+
+static void rscan_stop(const char *why)
+{
+	if (g_rs.mode == RSCAN_OFF)
+		return;
+
+	g_rs.mode = RSCAN_OFF;
+	g_rs.holding = false;
+	if (why != NULL)
+		toast(why);
+}
+
+static bool rscan_start(rx_t *rx, int mode)
+{
+	if (rx->ptt || rx->tuning || rx->bb_tx || bscan_running() || spancal_running())
+		return false;
+
+	if (rx->sql <= 0) {
+		toast("SCAN: SET THE SQUELCH");
+		return false;
+	}
+
+	if (mode == RSCAN_MEM) {
+		int c = mem_used_from(rx->mem_mode ? rx->medit_ch : 1);
+
+		if (c == 0) {
+			toast("SCAN: NO CHANNELS");
+			return false;
+		}
+		mem_mode_on(rx, c);
+		g_rs.ch = c;
+	} else {
+		if (rx->band < 0) {
+			toast("SCAN: NOT ON A BAND");
+			return false;
+		}
+		mem_mode_off(rx);
+		g_rs.lo = g_bands[rx->band].low;
+		g_rs.hi = g_bands[rx->band].high;
+	}
+
+	g_rs.mode = mode;
+	g_rs.holding = false;
+	g_rs.t_step = now_ms();
+	g_rs.t_gone = 0;
+	toast(mode == RSCAN_MEM ? "MEMORY SCAN" : "BAND SCAN");
+	return true;
+}
+
+// The next channel or step
+static void rscan_next(rx_t *rx)
+{
+	if (g_rs.mode == RSCAN_MEM) {
+		int c = mem_used_from(rx->medit_ch % MEM_COUNT + 1);
+
+		if (c == 0) {
+			rscan_stop("SCAN: NO CHANNELS");
+			return;
+		}
+		mem_mode_on(rx, c);
+		g_rs.ch = c;
+	} else {
+		uint32_t step = rx->step > 0 && rx->step != STEP_CH ? (uint32_t) rx->step : 1000u;
+		uint64_t f = (uint64_t) rx->freq - rx->freq % step + step;
+
+		if (f > g_rs.hi || f < g_rs.lo)
+			f = g_rs.lo + (step - g_rs.lo % step) % step;
+		set_freq(rx, (int64_t) f);
+	}
+
+	g_rs.t_step = now_ms();
+	g_rs.holding = false;
+	g_rs.t_gone = 0;
+}
+
+// Each flow frame, after sql_update
+static void rscan_tick(rx_t *rx)
+{
+	const uint64_t t = now_ms();
+	const uint64_t settle = g_rs.mode == RSCAN_MEM ? RSCAN_SETTLE_MEM_MS : RSCAN_SETTLE_BAND_MS;
+
+	if (g_rs.mode == RSCAN_OFF)
+		return;
+
+	if (rx->ptt || rx->tuning || rx->bb_tx) {
+		rscan_stop(NULL);	/* TX stops the scan */
+		return;
+	}
+
+	if (t - g_rs.t_step < settle)
+		return;
+
+	if (!g_rs.holding) {
+		if (!g_sql_level) {
+			rscan_next(rx);
+			return;
+		}
+		if (!g_rs.resume) {
+			rscan_stop("SCAN: SIGNAL");
+			return;
+		}
+		g_rs.holding = true;
+		g_rs.t_gone = 0;
+		return;
+	}
+
+	// Holding: on again RSCAN_RESUME_MS after the signal went
+	if (g_sql_level) {
+		g_rs.t_gone = 0;
+	} else if (g_rs.t_gone == 0) {
+		g_rs.t_gone = t;
+	} else if (t - g_rs.t_gone >= RSCAN_RESUME_MS) {
+		rscan_next(rx);
+	}
+}
+
+// For the screen: "MEMORY SCAN 12", "BAND SCAN HOLD"
+static void rscan_text(char *s, size_t n)
+{
+	if (g_rs.mode == RSCAN_MEM)
+		snprintf(s, n, "MEMORY SCAN %d%s", g_rs.ch, g_rs.holding ? " HOLD" : "");
+	else
+		snprintf(s, n, "BAND SCAN%s", g_rs.holding ? " HOLD" : "");
 }
 
 //
@@ -7517,7 +7699,7 @@ static void draw_filter_panel(x6100_lcd_t *lcd, const rx_t *rx)
 
 static const char *g_gen_name[GEN_ROWS] = {
 	"BRIGHTNESS", "LAYOUT", "VFO SPEED", "CAT CI-V", "CI-V ADDRESS", "CAT MEMORIES", "CAT CLOCK", "DATA OFF MOD", "DATA MOD",
-	"WFSERVER", "NTP SYNC", "WIFI", "WIFI NETWORK", "BLUETOOTH", "BT PAIRING", "BT DEVICE", "BIRDIE SCAN",
+	"WFSERVER", "NTP SYNC", "WIFI", "WIFI NETWORK", "BLUETOOTH", "BT PAIRING", "BT DEVICE", "SCAN", "BIRDIE SCAN",
 	"BIRDIE MARKS", "BIRDIE NOTCH",
 };
 static const int g_cat_rates[] = { 0, 4800, 9600, 19200 };	/* the DEV port carries no more than 19200 */
@@ -8158,6 +8340,12 @@ static void gen_value(int row, char *s, size_t n)
 		else
 			snprintf(s, n, "%s", g_sys.bt_visible ? "VISIBLE" : "OFF");
 		break;
+	case GEN_RSCAN:
+		if (rscan_running())
+			rscan_text(s, n);
+		else
+			snprintf(s, n, "%s%s", g_rscan_sel == RSCAN_MEM ? "MEMORY" : "BAND", g_rs.resume ? "" : ", NO RESUME");
+		break;
 	case GEN_BSCAN:
 		if (bscan_running())
 			snprintf(s, n, "%s %d %%", bscan_name(), g_bs.steps > 0 ? g_bs.step * 100 / g_bs.steps : 0);
@@ -8240,6 +8428,9 @@ static void gen_hint(int row, char *s, size_t n)
 			snprintf(s, n, "%s", g_sys.dev_conn[g_sys.dev_sel] ? "CONNECTED, HOLD: DISCONNECT" : "HOLD MFK: CONNECT");
 		else
 			s[0] = '\0';
+		break;
+	case GEN_RSCAN:
+		snprintf(s, n, "%s", rscan_running() ? "ANY KEY STOPS, VOL STILL WORKS" : "SQL SET, HOLD MFK: START");
 		break;
 	case GEN_BSCAN:
 		snprintf(s, n, "%s", bscan_running() ? "ANY KEY STOPS" : "ANTENNA OFF, HOLD MFK: START");
@@ -8348,6 +8539,12 @@ static void gen_adjust(int row, int dir, bool def)
 			g_sys.bt_visible_until = 0;
 		}
 		break;
+	case GEN_RSCAN:
+		if (def)
+			g_rscan_req = g_rscan_sel;	/* started by the main loop */
+		else
+			g_rscan_sel = dir > 0 ? RSCAN_BAND : RSCAN_MEM;
+		break;
 	case GEN_BSCAN:
 		if (def)
 			g_bscan_req = 1;	/* started by the main loop */
@@ -8409,6 +8606,10 @@ static bool gen_toggle(int row)
 	case GEN_BTPAIR:
 		on = g_sys.bt_visible && now_ms() < g_sys.bt_visible_until;
 		break;
+	case GEN_RSCAN:
+		// A push steps MEMORY / BAND
+		gen_adjust(row, g_rscan_sel == RSCAN_MEM ? 1 : -1, false);
+		return true;
 	case GEN_BSCAN:
 		// Three values: a push steps THIS BAND, ALL BANDS, FULL RANGE, round (the toggle
 		// went between the first two only, 2026-11-15)
@@ -10954,6 +11155,18 @@ overlays:
 
 		x6100_lcd_fill(lcd, LBL_W + 4, SPEC_Y + 22, x6100_lcd_text_width(m, 2) + 8, 18, 0x000000);
 		x6100_lcd_text(lcd, LBL_W + 8, SPEC_Y + 24, 2, m, 0xFFB020);
+	}
+
+	//
+	// Memory / band scan running (2026-11-20): at the same place, green
+	//
+	if (rscan_running()) {
+		char m[48];
+
+		rscan_text(m, sizeof(m));
+		x6100_lcd_fill(lcd, LBL_W + 4, SPEC_Y + 44, x6100_lcd_text_width(m, 2) + 8, 18, 0x000000);
+		x6100_lcd_text(lcd, LBL_W + 8, SPEC_Y + 46, 2, m, 0x40E070);
+	}
 
 	//
 	// Birdie scan running: progress under the split note, cyan
@@ -10964,7 +11177,6 @@ overlays:
 		bscan_text(m, sizeof(m));
 		x6100_lcd_fill(lcd, LBL_W + 4, SPEC_Y + 44, x6100_lcd_text_width(m, 2) + 8, 18, 0x000000);
 		x6100_lcd_text(lcd, LBL_W + 8, SPEC_Y + 46, 2, m, 0x40C0FF);
-	}
 	}
 
 	//
@@ -13389,6 +13601,12 @@ static bool cat_get(void *ctx, x6100_civ_item_t item, int vfo, int32_t *v)
 	case X6100_CIV_DASH_RATIO:	/* 1A 05 0252: the keyer RATIO, x10 */
 		*v = rx->ratio;
 		return true;
+	case X6100_CIV_SCAN:		/* 0E: the scan running (RSCAN_*: 1 band, 2 memory), 0 none */
+		*v = g_rs.mode;
+		return true;
+	case X6100_CIV_SCAN_RESUME:
+		*v = g_rs.resume;
+		return true;
 	case X6100_CIV_VOICE_TX:	/* 28 00: the message going out (CI-V 17 text is 0: none) */
 		*v = rx->send == SEND_MSG ? g_send.msg : 0;
 		return true;
@@ -13451,6 +13669,21 @@ static bool cat_set(void *ctx, x6100_civ_item_t item, int vfo, int32_t v)
 	case X6100_CIV_TIME:
 		if (!cat_time_set(item == X6100_CIV_DATE, v))
 			return false;
+		break;
+	case X6100_CIV_SCAN:		/* 0E 00 / 01 / 02: stop, band scan, memory scan (now: NG when
+				   it cannot start, no squelch or no channels) */
+		if (v == 0) {
+			rscan_stop("SCAN STOPPED");
+			break;
+		}
+
+		if (rscan_running())
+			rscan_stop(NULL);
+		if (!rscan_start(rx, v == 2 ? RSCAN_MEM : RSCAN_BAND))
+			return false;
+		break;
+	case X6100_CIV_SCAN_RESUME:	/* 0E D0 / D3 */
+		g_rs.resume = v != 0;
 		break;
 	case X6100_CIV_VOICE_TX:	/* 28 00 01-08: message M1-M8 as the MSG key (voice: not in CW;
 				   CW: CW mode only); 00 stops a message going out */
@@ -15207,6 +15440,16 @@ int main(int argc, char **argv)
 			dirty = true;
 		}
 
+		// Memory / band scan asked for (GEN row, CI-V 0E): start / stop here
+		if (g_rscan_req != 0) {
+			if (g_rscan_req > 0)
+				rscan_start(&rx, g_rscan_req);
+			else
+				rscan_stop("SCAN STOPPED");
+			g_rscan_req = 0;
+			dirty = true;
+		}
+
 		// Birdie scan asked for (GEN row, console): start / stop here, with rx at hand
 		if (g_bscan_req != 0) {
 			if (g_bscan_req > 0 && bscan_start(&rx, g_bscan_mode) && g_bscan_quiet) {
@@ -15888,6 +16131,10 @@ int main(int argc, char **argv)
 			}
 
 			sql_update(&rx, scr.sig_dbm, scr.tx || rx.ptt);
+			if (rscan_running()) {
+				rscan_tick(&rx);
+				dirty = true;
+			}
 			sql_capture();	/* the audio to Linux (wfserver) as well */
 
 			if (!scr.tx)

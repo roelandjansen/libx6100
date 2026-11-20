@@ -461,6 +461,27 @@ int main(void)
 		check(&civ, "28 01 01", "FA");
 		check(&civ, "28", "FA");
 
+		// 0E: scan (2026-11-20): stop, band, memory, select memory, resume off / on
+		check(&civ, "0E 02", "FB");
+		g_run++;
+		if (m.v[X6100_CIV_SCAN][0] != 2) {
+			g_fail++;
+			printf("FAIL 0E 02: scan %d\n", m.v[X6100_CIV_SCAN][0]);
+		}
+		check(&civ, "0E 22", "FB");
+		check(&civ, "0E 01", "FB");
+		check(&civ, "0E 00", "FB");
+		check(&civ, "0E D0", "FB");
+		g_run++;
+		if (m.v[X6100_CIV_SCAN_RESUME][0] != 0) {
+			g_fail++;
+			printf("FAIL 0E D0: resume %d\n", m.v[X6100_CIV_SCAN_RESUME][0]);
+		}
+		check(&civ, "0E D3", "FB");
+		check(&civ, "0E", "FA");			/* not readable */
+		check(&civ, "0E 03", "FA");			/* fine scan: none */
+		check(&civ, "0E A1", "FA");			/* delta-f span: none */
+
 		// 1A 05 0165 / 0166 / 0170: date, time, UTC offset (wfview set clock)
 		check(&civ, "1A 05 01 70 01 00 00", "FB");		/* +01:00 */
 		check(&civ, "1A 05 01 70", "1A 05 01 70 01 00 00");
