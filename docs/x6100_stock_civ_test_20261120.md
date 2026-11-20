@@ -7,9 +7,44 @@ The stock X6100 (Xiegu firmware, original UI), its own wfserver, wfview as an IC
 `x6100_civ_compare.md` (the Xiegu column: what the stock firmware really answers, not
 what the Xiegu reference lists) and to send to Jin with the known gaps.
 
-Tick `[x]` when it works, `[-]` when it does not, and note what was seen. For a
-command wfview has no button for, the hamlib line (`rigctl -m 3085 -r <port>`, IC-705)
-or the raw CI-V frame is given.
+Marks: `[x]` works, `[-]` does not, `[ ]` not tested yet. Two directions where it
+matters: **wfview -> X6100** (wfview sets it, the radio follows) and **X6100 -> wfview**
+(changed on the radio, wfview shows it: transceive or wfview's poll). For a command
+wfview has no button for, the hamlib line (`rigctl -m 3085 -r <port>`, IC-705) or the
+raw CI-V frame is given.
+
+## Results 20261120 (first round, wfview IC-705 rig file)
+
+Broken or wrong:
+
+- **RX audio**: AF gain from wfview works on the radio, but no audio is heard in wfview
+- **TX audio** from wfview: does not work (details in section 8 still to fill in)
+- **VFO A / B swapped** in wfview: it shows 3630 kHz while 1179 kHz is heard, and the
+  other way round (25 00 / 01 selected / unselected answered the wrong way round)
+- **AGC values shifted**: wfview MID sets SLOW, SLOW sets AUTO, FAST sets FAST
+  (16 12: 02 / 03 mapped differently from the IC-705 01 fast, 02 mid, 03 slow)
+- **Tuning step** from wfview: no effect (10)
+- **ATU**: tune from wfview works, but the ATU on state does not stay on in wfview while
+  the radio shows ATU on (1C 01 read answers off or not at all)
+- **Filter width**: wfview shows one fixed width, does not follow the radio's (1A 03; to
+  confirm: the passband in wfview, or the scope width)
+- **Memories**: the memory window does not work (1A 00; possibly wfview's own IC-705.rig
+  bug, see section 2)
+- **Transceive missing**: changes made on the radio do not reach wfview for AGC, tuning
+  step, RF gain, PRE, ATT, NR, NB; the squelch does, but slowly (only wfview's poll, no
+  transceive)
+
+Works: A <-> B, RIT, FIL1 / 2 / 3, mode select, split on / off, AF gain, RF gain, SQL,
+ATT, PRE, NB, NR (all wfview -> X6100), reference level, TX state seen in wfview.
+
+Not tested yet (what is left): setup checks, frequency both ways, mode from the
+radio, data mode, VFO A / B select, A=B, duplex, TX frequency (1C 03), memory mode /
+write; the other levels (NR level, PBT, CW pitch, RF power, mic gain, key speed, notch
+position, compressor, break-in delay, NB level, monitor, VOX); all meters (S, Po,
+SWR, ALC, Vd, OVF, squelch status); notch, compressor, monitor, VOX, break-in, lock
+switches; ID, band buttons, transceive off / on, DATA OFF MOD / DATA MOD, dash ratio,
+clock, CW text, voice memory, scan; PTT from wfview, XIT; TX audio in steps (section
+8); the scope apart from the reference level; behaviour (NG, power, reconnect).
 
 ## 0. Setup
 
@@ -17,41 +52,44 @@ or the raw CI-V frame is given.
 - [ ] wfserver running on the X6100; wfview connects (Network, the X6100's address, its control port)
 - [ ] wfview finds the radio as IC-705 with the CI-V address on auto (19 00 to a broadcast answered)
 - [ ] The same with the address set by hand to `A4`
-- [ ] RX audio in wfview: heard, no dropouts over a few minutes
+- [-] RX audio in wfview: **nothing heard** (AF gain from wfview does change the radio)
 - [ ] wfview stays connected 10 minutes without "Radio not responding"
 
 ## 1. Frequency, mode, VFO, split
 
 - [ ] Frequency follows the X6100 VFO knob in wfview (transceive 00)
 - [ ] wfview tunes the X6100 (05 / 00); a frequency outside the range gives NG, not a hang
-- [ ] Mode from wfview: LSB, USB, CW, CW-R, AM, FM (06); the X6100 follows
+- [x] Mode from wfview (06); the X6100 follows
 - [ ] Mode changed on the X6100 shows in wfview (01)
-- [ ] Filter FIL1 / FIL2 / FIL3 from wfview (06 with filter byte)
+- [x] Filter FIL1 / FIL2 / FIL3 from wfview (06 with filter byte)
 - [ ] Data mode: USB-D from wfview (1A 06)
 - [ ] VFO A / B select (07 00 / 01)
 - [ ] A=B button (07 A0): *not in the Xiegu reference*
-- [ ] A<->B button (07 B0)
-- [ ] Split on / off (0F 00 / 01); TX on the other VFO
+- [x] A<->B button (07 B0)
+- [x] Split on / off (0F 00 / 01)
 - [ ] Duplex - / + / simplex (0F 11 / 12 / 10): *not in the Xiegu reference*; hamlib `R -` / `R +` / `R None`
-- [ ] Both VFOs shown in wfview (25 00 / 01, 26 00 / 01)
+- [-] Both VFOs shown in wfview (25 00 / 01, 26 00 / 01): **swapped**, wfview shows 3630 kHz while 1179 kHz is heard, and the other way round
 - [ ] TX frequency read (1C 03): *not in the Xiegu reference*; with split on, wfview shows the TX side
-- [ ] Tuning step (10); hamlib `N 1000`, `n`
+- [-] Tuning step from wfview (10): **no effect**; hamlib `N 1000`, `n`
+- [-] Tuning step changed on the X6100 shows in wfview: **not seen**
 
 ## 2. Memories
 
-- [ ] wfview memory window opens and lists the channels (1A 00). Note: wfview's own IC-705.rig has a broken Memory Contents string (`\\x1a\\00`): if the window times out on every channel, it may be that, not the X6100
+- [-] wfview memory window opens and lists the channels (1A 00): **does not work**. Note: wfview's own IC-705.rig has a broken Memory Contents string (`\\x1a\\00`): if the window times out on every channel, it may be that, not the X6100. To check with hamlib: `rigctl ... E` / channel read
 - [ ] Memory mode on a channel (08 0001); back to VFO (07)
 - [ ] Memory to VFO (0A)
 - [ ] Memory write (09) and clear (0B): careful, overwrites a channel
 
 ## 3. Levels (14)
 
-For each: the wfview slider moves the X6100 setting, and a change on the X6100 shows in
-wfview.
+For each: the wfview slider moves the X6100 setting (wfview -> X6100), and a change on
+the X6100 shows in wfview (X6100 -> wfview).
 
-- [ ] AF gain (14 01)
-- [ ] RF gain (14 02)
-- [ ] Squelch (14 03)
+- [x] AF gain (14 01), wfview -> X6100
+- [x] RF gain (14 02), wfview -> X6100
+- [-] RF gain, X6100 -> wfview: **not seen**
+- [x] Squelch (14 03), wfview -> X6100
+- [x] Squelch, X6100 -> wfview: seen, **slowly** (wfview's poll only, no transceive)
 - [ ] NR level (14 06)
 - [ ] Twin PBT inner / outer (14 07 / 08)
 - [ ] CW pitch (14 09)
@@ -75,10 +113,14 @@ wfview.
 
 ## 5. Switches (16)
 
-- [ ] Preamp (16 02)
-- [ ] AGC fast / mid / slow (16 12)
-- [ ] NB on / off (16 22)
-- [ ] NR on / off (16 40)
+- [x] Preamp (16 02), wfview -> X6100
+- [-] Preamp, X6100 -> wfview: **not seen**
+- [-] AGC (16 12), wfview -> X6100: **shifted**, wfview MID sets SLOW, SLOW sets AUTO, FAST sets FAST
+- [-] AGC, X6100 -> wfview: **not seen**
+- [x] NB on / off (16 22), wfview -> X6100
+- [-] NB, X6100 -> wfview: **not seen**
+- [x] NR on / off (16 40), wfview -> X6100
+- [-] NR, X6100 -> wfview: **not seen**
 - [ ] Notch / DNF (16 41; IC-705 manual notch 16 48)
 - [ ] Compressor / monitor / VOX (16 44 / 45 / 46)
 - [ ] Break-in (16 47; wfview polls it in CW)
@@ -86,11 +128,12 @@ wfview.
 
 ## 6. Attenuator, ID, CW, misc
 
-- [ ] ATT on / off (11)
+- [x] ATT on / off (11), wfview -> X6100
+- [-] ATT, X6100 -> wfview: **not seen**
 - [ ] Transceiver ID (19 00) answers A4
 - [ ] Xiegu radio ID (1D 19)
 - [ ] Band buttons in wfview (1A 01, band stacking register)
-- [ ] IF filter width (1A 03)
+- [-] IF filter width (1A 03): **wfview shows one fixed width**, does not follow the radio (to confirm: the passband in wfview, or the scope)
 - [ ] CI-V transceive off / on (1A 05 0131)
 - [ ] DATA OFF MOD / DATA MOD input (1A 05 0118 / 0119): which values the X6100 takes (MIC, USB, MIC+USB, WLAN)
 - [ ] Dash ratio (1A 05 0252)
@@ -104,15 +147,18 @@ wfview.
 Into a dummy load, low power.
 
 - [ ] PTT from wfview keys the X6100 (1C 00 01) and unkeys it (1C 00 00)
-- [ ] TX state read back (1C 00): wfview shows TX also when keyed on the radio
-- [ ] Tuner on / off / tune (1C 01)
-- [ ] RIT offset and on / off (21 00 / 01)
+- [x] TX state read back (1C 00): wfview shows TX when keyed on the radio
+- [x] Tuner tune from wfview (1C 01 02)
+- [-] Tuner on state (1C 01 read): **does not stay on in wfview** while the radio shows ATU on
+- [x] RIT offset and on / off (21 00 / 01)
 - [ ] XIT on / off (21 02)
 
 ## 8. TX audio over the LAN (reported broken by many users)
 
+Result 20261120: **does not work** from wfview. The steps below show where it stops.
+
 wfview sends the PC microphone (or a digital mode program's audio) to wfserver, which
-should play it into the X6100's TX path. Check each step so we know where it stops.
+should play it into the X6100's TX path.
 
 - [ ] wfview Settings, Audio: a TX device chosen, TX codec noted: ______, sample rate: ______
 - [ ] wfview's TX level meter moves while talking (the PC side works)
@@ -136,14 +182,14 @@ should play it into the X6100's TX path. Check each step so we know where it sto
 - [ ] Span (27 15)
 - [ ] Fixed edges (27 16, 27 1E)
 - [ ] Hold (27 17)
-- [ ] Reference level (27 19)
+- [x] Reference level (27 19)
 - [ ] Sweep speed (27 1A)
 - [ ] Scope during TX (27 1B)
 - [ ] Center type (27 1C), VBW (27 1D)
 
 ## 10. Behaviour
 
-- [ ] A change on the X6100 (any level or switch above) shows in wfview without waiting for its poll (transceive)
+- [-] A change on the X6100 shows in wfview without waiting for its poll (transceive): **no** for AGC, step, RF gain, PRE, ATT, NR, NB; SQL only by wfview's poll
 - [ ] An unsupported command gets NG (FA), not silence: wfview does not stall on it
 - [ ] Power on / off from wfview (18 01 / 18 00): what happens
 - [ ] wfview disconnects and connects again without restarting wfserver or the radio
