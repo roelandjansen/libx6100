@@ -18,7 +18,8 @@ raw CI-V frame is given.
 Broken or wrong:
 
 - **RX audio**: AF gain from wfview works on the radio, but no audio is heard in wfview
-- **TX audio** from wfview: does not work (details in section 8 still to fill in)
+- **TX audio** from wfview: does not work, although wfview PTT keys the radio (section 8:
+  the steps after keying still to fill in)
 - **VFO A / B**: the radio and wfview both show 80 m (3630 kHz) but the audio is MW (1179
   kHz), and the other way round: the receiver tunes the VFO not shown (the VFO knob works
   both ways)
@@ -36,17 +37,18 @@ Broken or wrong:
   step, RF gain, PRE, ATT, NR, NB; the squelch and the mode do, but slowly (only wfview's poll, no
   transceive)
 
-Works: frequency both ways (VFO knob, wfview tuning), spectrum and waterfall, A <-> B, RIT, FIL1 / 2 / 3, mode select, split on / off, AF gain, RF gain, SQL,
+Works: frequency both ways (VFO knob, wfview tuning), S-meter, PTT both ways (wfview keys
+the radio, the radio's TX seen in wfview), power on / off, spectrum and waterfall, A <-> B, RIT, FIL1 / 2 / 3, mode select, split on / off, AF gain, RF gain, SQL,
 ATT, PRE, NB, NR (all wfview -> X6100), reference level, TX state seen in wfview.
 
 Not tested yet (what is left): setup checks, the
 data mode, VFO A / B select, A=B, duplex, TX frequency (1C 03), memory mode /
 write; the other levels (NR level, PBT, CW pitch, RF power, mic gain, key speed, notch
-position, compressor, break-in delay, NB level, monitor, VOX); all meters (S, Po,
+position, compressor, break-in delay, NB level, monitor, VOX); the other meters (Po,
 SWR, ALC, Vd, OVF, squelch status); notch, compressor, monitor, VOX, break-in, lock
 switches; ID, band buttons, transceive off / on, DATA OFF MOD / DATA MOD, dash ratio,
-clock, CW text, voice memory, scan; PTT from wfview, XIT; TX audio in steps (section
-8); the scope apart from the display and the reference level; behaviour (NG, power, reconnect).
+clock, CW text, voice memory, scan; XIT; TX audio in steps (section
+8); the scope apart from the display and the reference level; behaviour (NG, reconnect).
 
 ## 0. Setup
 
@@ -107,7 +109,7 @@ the X6100 shows in wfview (X6100 -> wfview).
 
 ## 4. Meters (15)
 
-- [ ] S-meter moves with the signal and matches the X6100 (15 02; S9 = 0120)
+- [x] S-meter moves with the signal and matches the X6100 (15 02; S9 = 0120)
 - [ ] Squelch status (15 01 / 05)
 - [ ] OVF (15 07)
 - [ ] While transmitting into a dummy load: Po (15 11), SWR (15 12), ALC (15 13)
@@ -149,7 +151,7 @@ the X6100 shows in wfview (X6100 -> wfview).
 
 Into a dummy load, low power.
 
-- [ ] PTT from wfview keys the X6100 (1C 00 01) and unkeys it (1C 00 00)
+- [x] PTT from wfview keys the X6100 (1C 00 01) and unkeys it (1C 00 00)
 - [x] TX state read back (1C 00): wfview shows TX when keyed on the radio
 - [x] Tuner tune from wfview (1C 01 02)
 - [-] Tuner on state (1C 01 read): **does not stay on in wfview** while the radio shows ATU on
@@ -165,7 +167,7 @@ should play it into the X6100's TX path.
 
 - [ ] wfview Settings, Audio: a TX device chosen, TX codec noted: ______, sample rate: ______
 - [ ] wfview's TX level meter moves while talking (the PC side works)
-- [ ] USB mode, wfview PTT: the X6100 keys (TX shown on the radio)
+- [x] USB mode, wfview PTT: the X6100 keys (TX shown on the radio); TX audio still none
 - [ ] While keyed and talking: ALC moves on the X6100 / in wfview
 - [ ] While keyed and talking: Po rises above the idle level
 - [ ] The audio is heard on a second receiver (clean, no chopping, no wrong speed / pitch)
@@ -194,5 +196,5 @@ should play it into the X6100's TX path.
 
 - [-] A change on the X6100 shows in wfview without waiting for its poll (transceive): **no** for AGC, step, RF gain, PRE, ATT, NR, NB; SQL only by wfview's poll
 - [ ] An unsupported command gets NG (FA), not silence: wfview does not stall on it
-- [ ] Power on / off from wfview (18 01 / 18 00): what happens
+- [x] Power on / off from wfview (18 01 / 18 00): works
 - [ ] wfview disconnects and connects again without restarting wfserver or the radio
