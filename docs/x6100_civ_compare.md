@@ -33,6 +33,7 @@ transceive). **x6100_trx**: the same function there.
 | 25 / 26 | selected / unselected VFO | **fails**: the receiver tunes the VFO not shown (radio and wfview show 80 m, the audio is MW, and the other way round) | ok |
 | 07 B0 | exchange A / B | ok | ok |
 | 01 / 06 | mode, FIL1-3 | ok from wfview; a change on the radio **slow** | ok, transceive |
+| 1A 06 | data mode (USB-D, LSB-D) | ok from wfview | ok |
 | 0F 00 / 01 | split | ok | ok |
 | 10 | tuning step | **fails** both ways | ok |
 | 1A 01 | band stacking register (wfview band buttons) | **fails**: 40 m to 20 m sends the radio to 500 kHz; band up / down on the radio with wfview connected makes the radio fail (once the UI restarted) | ok (IC-705 band codes) |

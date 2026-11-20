@@ -39,12 +39,12 @@ Broken or wrong:
   step, RF gain, PRE, ATT, NR, NB; the squelch and the mode do, but slowly (only wfview's poll, no
   transceive)
 
-Works: frequency both ways (VFO knob, wfview tuning), S-meter, PTT both ways (wfview keys
+Works: frequency both ways (VFO knob, wfview tuning), USB-D / LSB-D from wfview, S-meter, PTT both ways (wfview keys
 the radio, the radio's TX seen in wfview), power on / off, spectrum and waterfall, A <-> B, RIT, FIL1 / 2 / 3, mode select, split on / off, AF gain, RF gain, SQL,
 ATT, PRE, NB, NR (all wfview -> X6100), reference level, TX state seen in wfview.
 
-Not tested yet (what is left): setup checks, the
-data mode, VFO A / B select, A=B, duplex, TX frequency (1C 03), memory mode /
+Not tested yet (what is left): setup checks,
+VFO A / B select, A=B, duplex, TX frequency (1C 03), memory mode /
 write; the other levels (NR level, PBT, CW pitch, RF power, mic gain, key speed, notch
 position, compressor, break-in delay, NB level, monitor, VOX); the other meters (Po,
 SWR, ALC, Vd, OVF, squelch status); notch, compressor, monitor, VOX, break-in, lock
@@ -68,7 +68,7 @@ the scope apart from the display and the reference level; behaviour (NG, reconne
 - [x] Mode from wfview (06); the X6100 follows
 - [x] Mode changed on the X6100 shows in wfview (01): **slowly** (wfview's poll, no transceive 01)
 - [x] Filter FIL1 / FIL2 / FIL3 from wfview (06 with filter byte)
-- [ ] Data mode: USB-D from wfview (1A 06)
+- [x] Data mode: USB-D and LSB-D from wfview (1A 06)
 - [ ] VFO A / B select (07 00 / 01)
 - [ ] A=B button (07 A0): *not in the Xiegu reference*
 - [x] A<->B button (07 B0)
