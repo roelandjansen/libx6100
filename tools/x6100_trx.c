@@ -5997,9 +5997,23 @@ typedef struct
 // follow the same side (they showed the RX band and mode next to the TX frequency)
 //
 
+// Our own PTT or tune released: the RX side at once, not when the baseband (or the rig)
+// reports RX a moment later (2026-11-20); a TX keyed by the hand mic still shows
+#define C_DISP_RELEASE_MS	1500
+
 static bool disp_tx(const rx_t *rx, const screen_t *scr)
 {
-	return scr->tx || rx->tuning;
+	static bool own_was;
+	static uint64_t own_release;
+	const bool own = rx->ptt || rx->tuning || rx->send != SEND_NONE;
+
+	if (own_was && !own)
+		own_release = now_ms();
+	own_was = own;
+
+	if (own)
+		return true;
+	return scr->tx && (own_release == 0 || now_ms() - own_release >= C_DISP_RELEASE_MS);
 }
 
 static uint32_t disp_hz(const rx_t *rx, const screen_t *scr)
