@@ -35,6 +35,8 @@ Broken or wrong:
   confirm: the passband in wfview, or the scope width)
 - **VFO A / B select** (07 00 / 01): works both ways, but the radio does odd things after it
 - **Scope hold** (27 17): does not work
+- **Scope mode** (27 14): center on / off on the radio reaches wfview's scope, but its
+  mode drop-down does not show it and choosing a mode there does nothing
 - **Memories**: the memory window does not work (1A 00; possibly wfview's own IC-705.rig
   bug, see section 2)
 - **Transceive missing**: changes made on the radio do not reach wfview for AGC, tuning
@@ -189,7 +191,7 @@ should play it into the X6100's TX path.
 ## 9. Scope (27)
 
 - [x] Spectrum and waterfall show, in wfview and on the radio (27 00, 27 10 / 11)
-- [ ] Center / fixed / scroll mode (27 14)
+- [-] Center / fixed / scroll mode (27 14): center on / off on the radio **is seen by wfview** (its scope follows), but wfview's mode drop-down does not show it and **choosing a mode there does nothing**
 - [ ] Span (27 15)
 - [ ] Fixed edges (27 16, 27 1E)
 - [-] Hold (27 17): **does not work**

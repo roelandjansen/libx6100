@@ -50,6 +50,7 @@ transceive). **x6100_trx**: the same function there.
 | 21 00 / 01 | RIT | ok | ok |
 | 18 00 / 01 | power off / on | ok | 18 01 ok, 18 00 NG (by choice) |
 | 27 | scope and waterfall, reference level | ok | ok |
+| 27 14 | scope center / fixed / scroll | radio -> wfview seen, but not in wfview's drop-down; **set from wfview fails** | ok |
 | 27 17 | scope hold | **fails** | ok (freezes the radio's own scope too) |
 
 ## Known gaps in the Xiegu reference
