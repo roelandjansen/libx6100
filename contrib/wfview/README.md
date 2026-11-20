@@ -21,11 +21,13 @@ With `civaddr a4` (the default) x6100_trx stays an IC-705 and wfview uses its IC
 ## What differs from the IC-705 file
 
 The X6100 works the Icom way: the IC-705 commands and polls stay in the file, except for
-the 25 functions the X6100 does not have (2026-11-02; before, they stayed and x6100_trx
+the 23 functions the X6100 does not have (2026-11-02; before, they stayed and x6100_trx
 answered NG): tones / CTCSS / DTCS (16 42 43 5D, 1B 00 01 02 07), APF and twin peak
 (14 05, 16 32 4F), DIGI-SEL, drive gain, the COMP and Id meters, RX antenna, filter
-shape, SSB TX bandwidth, power control (18), REF adjust, USB / LAN mod level, XFC,
-CI-V Output, scope RBW, scan (0E). wfview
+shape, SSB TX bandwidth, REF adjust, USB / LAN mod level, XFC, CI-V Output, scope RBW.
+Scan (0E) and power control (18) were dropped too until 2026-11-20: x6100_trx has a
+scan now and answers 18 01 (18 00, power off, NG by choice), and the stock firmware
+switches on / off from CAT. wfview
 polled some of them every few seconds for an FA (16 5D, the FM tones) and showed the
 others as controls that did nothing. Every command left is answered by x6100_trx (a
 read without its parameter, as 1A 00, answers NG).
