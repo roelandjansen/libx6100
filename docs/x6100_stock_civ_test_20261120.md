@@ -24,8 +24,8 @@ Broken or wrong:
   kHz), and the other way round: the receiver tunes the VFO not shown (the VFO knob works
   both ways)
 - **Band change**, with wfview connected: band up / down on the X6100 makes **the radio
-  fail**; a band button in wfview (40 m to 20 m, 1A 01 band stacking register) sends the
-  radio to **500 kHz**
+  fail** (once the stock UI restarted); a band button in wfview (40 m to 20 m, 1A 01
+  band stacking register) sends the radio to **500 kHz**
 - **AGC values shifted**: wfview MID sets SLOW, SLOW sets AUTO, FAST sets FAST
   (16 12: 02 / 03 mapped differently from the IC-705 01 fast, 02 mid, 03 slow)
 - **Tuning step** from wfview: no effect (10)
@@ -138,7 +138,7 @@ the X6100 shows in wfview (X6100 -> wfview).
 - [-] ATT, X6100 -> wfview: **not seen**
 - [ ] Transceiver ID (19 00) answers A4
 - [ ] Xiegu radio ID (1D 19)
-- [-] Band up / down on the X6100 with wfview connected: **the radio fails**
+- [-] Band up / down on the X6100 with wfview connected: **the radio fails**; once the stock UI restarted
 - [-] Band buttons in wfview (1A 01, band stacking register): 40 m to 20 m sends the radio to **500 kHz**
 - [-] IF filter width (1A 03): **wfview shows one fixed width**, does not follow the radio (to confirm: the passband in wfview, or the scope)
 - [ ] CI-V transceive off / on (1A 05 0131)

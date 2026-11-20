@@ -17,6 +17,38 @@ Columns:
 - **x6100_trx**: **y** implemented, **v** implemented and verified with wfview / rigctl
   on the radio, **NG** answered NG (no such function on the X6100).
 
+## Stock firmware as tested (20261120)
+
+The stock X6100 (Xiegu firmware and UI) with its own wfserver, wfview as an IC-705 at
+`A4` over the LAN. What it really does, apart from what the Xiegu reference lists; the
+full list and what is not tested yet: `x6100_stock_civ_test_20261120.md`. **Stock**: as
+tested on the stock firmware (**ok**, **fails**, **slow**: only by wfview's poll, no
+transceive). **x6100_trx**: the same function there.
+
+| Cmd | Function | Stock | x6100_trx |
+|---|---|---|---|
+| LAN audio | RX audio over the LAN (wfserver) | **fails**: nothing heard (AF gain from wfview does change the radio) | ok |
+| LAN audio | TX audio over the LAN (wfserver) | **fails**: none at all, though wfview PTT keys the radio | ok (DATA OFF MOD / DATA MOD LAN) |
+| 00 / 05 | frequency, both ways | ok | ok |
+| 25 / 26 | selected / unselected VFO | **fails**: the receiver tunes the VFO not shown (radio and wfview show 80 m, the audio is MW, and the other way round) | ok |
+| 07 B0 | exchange A / B | ok | ok |
+| 01 / 06 | mode, FIL1-3 | ok from wfview; a change on the radio **slow** | ok, transceive |
+| 0F 00 / 01 | split | ok | ok |
+| 10 | tuning step | **fails** both ways | ok |
+| 1A 01 | band stacking register (wfview band buttons) | **fails**: 40 m to 20 m sends the radio to 500 kHz; band up / down on the radio with wfview connected makes the radio fail (once the UI restarted) | ok (IC-705 band codes) |
+| 1A 00 | memories (wfview memory window) | **fails** (maybe also wfview's IC-705.rig bug) | ok |
+| 1A 03 | filter width | **fails**: one fixed width in wfview | ok |
+| 14 01 / 02 / 03 | AF, RF gain, squelch | ok from wfview; RF gain on the radio not seen, SQL **slow** | ok, transceive |
+| 16 02, 11 | preamp, attenuator | ok from wfview; on the radio not seen | ok, transceive |
+| 16 12 | AGC | **fails**: wfview MID sets SLOW, SLOW sets AUTO (FAST ok); on the radio not seen | ok |
+| 16 22 / 40 | NB, NR on / off | ok from wfview; on the radio not seen | ok, transceive |
+| 15 02 | S-meter | ok | ok |
+| 1C 00 | PTT, TX state | ok both ways | ok |
+| 1C 01 | tuner | tune ok; the on state **fails** in wfview (the radio shows ATU on) | ok |
+| 21 00 / 01 | RIT | ok | ok |
+| 18 00 / 01 | power off / on | ok | 18 01 ok, 18 00 NG (by choice) |
+| 27 | scope and waterfall, reference level | ok | ok |
+
 ## Known gaps in the Xiegu reference
 
 Checked so far (section 1): these IC-705 commands are not in the Xiegu reference, while
