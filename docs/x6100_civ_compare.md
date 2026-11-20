@@ -51,8 +51,11 @@ transceive). **x6100_trx**: the same function there.
 | 18 00 / 01 | power off / on | ok | 18 01 ok, 18 00 NG (by choice) |
 | 27 | scope and waterfall, reference level | ok | ok |
 | 27 14 | scope center / fixed / scroll | radio -> wfview seen, but not in wfview's drop-down; **set from wfview fails** | ok |
+| reconnect | wfview disconnect / connect | **swaps VFO A and B** on the radio each time | ok |
 | 27 17 | scope hold | **fails** | ok (freezes the radio's own scope too) |
 
+With wfview's X6100 profile (address 61) instead of the IC-705 one: somewhat better, but
+VFO A / B, the band buttons (crash), LAN audio and the odd behaviour stay.
 ## Known gaps in the Xiegu reference
 
 Checked so far (section 1): these IC-705 commands are not in the Xiegu reference, while

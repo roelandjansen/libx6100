@@ -34,6 +34,7 @@ Broken or wrong:
 - **Filter width**: wfview shows one fixed width, does not follow the radio's (1A 03; to
   confirm: the passband in wfview, or the scope width)
 - **VFO A / B select** (07 00 / 01): works both ways, but the radio does odd things after it
+- **Reconnect**: each wfview disconnect / connect swaps VFO A and B on the radio
 - **Scope hold** (27 17): does not work
 - **Scope mode** (27 14): center on / off on the radio reaches wfview's scope, but its
   mode drop-down does not show it and choosing a mode there does nothing
@@ -205,4 +206,11 @@ should play it into the X6100's TX path.
 - [-] A change on the X6100 shows in wfview without waiting for its poll (transceive): **no** for AGC, step, RF gain, PRE, ATT, NR, NB; SQL only by wfview's poll
 - [ ] An unsupported command gets NG (FA), not silence: wfview does not stall on it
 - [x] Power on / off from wfview (18 01 / 18 00): works
-- [ ] wfview disconnects and connects again without restarting wfserver or the radio
+- [-] wfview disconnects and connects again: works, but **each connect swaps VFO A and B** on the radio
+
+## 11. wfview with the X6100 rig file (address 61)
+
+wfview's own X6100 profile (CI-V address `0x61`) instead of the IC-705 one.
+
+- [x] Somewhat better than as an IC-705 (which items improved: to note)
+- [-] Still wrong: VFO A / B, band buttons crash the radio, no LAN audio, the radio does odd things
