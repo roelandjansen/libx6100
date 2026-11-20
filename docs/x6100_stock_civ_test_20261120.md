@@ -33,14 +33,14 @@ Broken or wrong:
 - **Memories**: the memory window does not work (1A 00; possibly wfview's own IC-705.rig
   bug, see section 2)
 - **Transceive missing**: changes made on the radio do not reach wfview for AGC, tuning
-  step, RF gain, PRE, ATT, NR, NB; the squelch does, but slowly (only wfview's poll, no
+  step, RF gain, PRE, ATT, NR, NB; the squelch and the mode do, but slowly (only wfview's poll, no
   transceive)
 
 Works: frequency both ways (VFO knob, wfview tuning), spectrum and waterfall, A <-> B, RIT, FIL1 / 2 / 3, mode select, split on / off, AF gain, RF gain, SQL,
 ATT, PRE, NB, NR (all wfview -> X6100), reference level, TX state seen in wfview.
 
-Not tested yet (what is left): setup checks, mode from the
-radio, data mode, VFO A / B select, A=B, duplex, TX frequency (1C 03), memory mode /
+Not tested yet (what is left): setup checks, the
+data mode, VFO A / B select, A=B, duplex, TX frequency (1C 03), memory mode /
 write; the other levels (NR level, PBT, CW pitch, RF power, mic gain, key speed, notch
 position, compressor, break-in delay, NB level, monitor, VOX); all meters (S, Po,
 SWR, ALC, Vd, OVF, squelch status); notch, compressor, monitor, VOX, break-in, lock
@@ -62,7 +62,7 @@ clock, CW text, voice memory, scan; PTT from wfview, XIT; TX audio in steps (sec
 - [x] Frequency follows the X6100 VFO knob in wfview (transceive 00)
 - [x] wfview tunes the X6100 (05 / 00) (out of range NG: not tested)
 - [x] Mode from wfview (06); the X6100 follows
-- [ ] Mode changed on the X6100 shows in wfview (01)
+- [x] Mode changed on the X6100 shows in wfview (01): **slowly** (wfview's poll, no transceive 01)
 - [x] Filter FIL1 / FIL2 / FIL3 from wfview (06 with filter byte)
 - [ ] Data mode: USB-D from wfview (1A 06)
 - [ ] VFO A / B select (07 00 / 01)
