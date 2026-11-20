@@ -19,8 +19,10 @@ Broken or wrong:
 
 - **RX audio**: AF gain from wfview works on the radio, but no audio is heard in wfview
 - **TX audio** from wfview: does not work (details in section 8 still to fill in)
-- **VFO A / B swapped** in wfview: it shows 3630 kHz while 1179 kHz is heard, and the
-  other way round (25 00 / 01 selected / unselected answered the wrong way round)
+- **VFO A / B**: the radio and wfview both show 80 m (3630 kHz) but the audio is MW (1179
+  kHz), and the other way round: the receiver tunes the VFO not shown (the VFO knob works
+  both ways)
+- **Band change on the X6100**: wfview does not follow, and crashes (to confirm which)
 - **AGC values shifted**: wfview MID sets SLOW, SLOW sets AUTO, FAST sets FAST
   (16 12: 02 / 03 mapped differently from the IC-705 01 fast, 02 mid, 03 slow)
 - **Tuning step** from wfview: no effect (10)
@@ -34,17 +36,17 @@ Broken or wrong:
   step, RF gain, PRE, ATT, NR, NB; the squelch does, but slowly (only wfview's poll, no
   transceive)
 
-Works: A <-> B, RIT, FIL1 / 2 / 3, mode select, split on / off, AF gain, RF gain, SQL,
+Works: frequency both ways (VFO knob, wfview tuning), spectrum and waterfall, A <-> B, RIT, FIL1 / 2 / 3, mode select, split on / off, AF gain, RF gain, SQL,
 ATT, PRE, NB, NR (all wfview -> X6100), reference level, TX state seen in wfview.
 
-Not tested yet (what is left): setup checks, frequency both ways, mode from the
+Not tested yet (what is left): setup checks, mode from the
 radio, data mode, VFO A / B select, A=B, duplex, TX frequency (1C 03), memory mode /
 write; the other levels (NR level, PBT, CW pitch, RF power, mic gain, key speed, notch
 position, compressor, break-in delay, NB level, monitor, VOX); all meters (S, Po,
 SWR, ALC, Vd, OVF, squelch status); notch, compressor, monitor, VOX, break-in, lock
 switches; ID, band buttons, transceive off / on, DATA OFF MOD / DATA MOD, dash ratio,
 clock, CW text, voice memory, scan; PTT from wfview, XIT; TX audio in steps (section
-8); the scope apart from the reference level; behaviour (NG, power, reconnect).
+8); the scope apart from the display and the reference level; behaviour (NG, power, reconnect).
 
 ## 0. Setup
 
@@ -57,8 +59,8 @@ clock, CW text, voice memory, scan; PTT from wfview, XIT; TX audio in steps (sec
 
 ## 1. Frequency, mode, VFO, split
 
-- [ ] Frequency follows the X6100 VFO knob in wfview (transceive 00)
-- [ ] wfview tunes the X6100 (05 / 00); a frequency outside the range gives NG, not a hang
+- [x] Frequency follows the X6100 VFO knob in wfview (transceive 00)
+- [x] wfview tunes the X6100 (05 / 00) (out of range NG: not tested)
 - [x] Mode from wfview (06); the X6100 follows
 - [ ] Mode changed on the X6100 shows in wfview (01)
 - [x] Filter FIL1 / FIL2 / FIL3 from wfview (06 with filter byte)
@@ -68,7 +70,7 @@ clock, CW text, voice memory, scan; PTT from wfview, XIT; TX audio in steps (sec
 - [x] A<->B button (07 B0)
 - [x] Split on / off (0F 00 / 01)
 - [ ] Duplex - / + / simplex (0F 11 / 12 / 10): *not in the Xiegu reference*; hamlib `R -` / `R +` / `R None`
-- [-] Both VFOs shown in wfview (25 00 / 01, 26 00 / 01): **swapped**, wfview shows 3630 kHz while 1179 kHz is heard, and the other way round
+- [-] VFO A / B (25 00 / 01, 26 00 / 01): **the receiver is on the other VFO**: the radio and wfview both show 80 m (3630 kHz), the audio is MW (1179 kHz), and the other way round. Both displays agree, so the receiver itself tunes the VFO not shown
 - [ ] TX frequency read (1C 03): *not in the Xiegu reference*; with split on, wfview shows the TX side
 - [-] Tuning step from wfview (10): **no effect**; hamlib `N 1000`, `n`
 - [-] Tuning step changed on the X6100 shows in wfview: **not seen**
@@ -132,6 +134,7 @@ the X6100 shows in wfview (X6100 -> wfview).
 - [-] ATT, X6100 -> wfview: **not seen**
 - [ ] Transceiver ID (19 00) answers A4
 - [ ] Xiegu radio ID (1D 19)
+- [-] Band change on the X6100: **wfview does not follow, and crashes** (to confirm: wfview or the radio, and which band)
 - [ ] Band buttons in wfview (1A 01, band stacking register)
 - [-] IF filter width (1A 03): **wfview shows one fixed width**, does not follow the radio (to confirm: the passband in wfview, or the scope)
 - [ ] CI-V transceive off / on (1A 05 0131)
@@ -177,7 +180,7 @@ should play it into the X6100's TX path.
 
 ## 9. Scope (27)
 
-- [ ] Waterfall / spectrum shows in wfview (27 00, 27 10 / 11)
+- [x] Spectrum and waterfall show, in wfview and on the radio (27 00, 27 10 / 11)
 - [ ] Center / fixed / scroll mode (27 14)
 - [ ] Span (27 15)
 - [ ] Fixed edges (27 16, 27 1E)
