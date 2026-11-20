@@ -932,6 +932,11 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     the console shows `bbreset: the baseband does not answer, reset` and then
     `calibration: read now` (or no warning).
 
+63. Remote audio on a rig with dual watch (2026-11-20, with the app): the selected
+    receiver on both sides of the stream (main left, sub right), following MAIN / SUB;
+    before, the head always played as received. Test: on the 7851 with DW, the SUB
+    selected: the sub is heard; MAIN selected: the main.
+
 ## Next steps (suggested order)
 
 1. Radio checks above; the 2026-10-27 evening checklist (scope panel, fixed edges, wfview

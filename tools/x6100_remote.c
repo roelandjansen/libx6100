@@ -23,6 +23,7 @@
 #include "x6100_pcm.h"
 
 #include "core/audio_decode.h"
+#include "core/audio_rx.h"	/* AUDIO_ROUTE_*: the selected receiver on both sides */
 #include "core/rig.h"		/* RIG_CONTROLLER_ADDR, for our own ID query */
 #include "core/rigfile.h"	/* rigfile_cmd: the rig has a tuner */
 #include "core/session.h"
@@ -135,6 +136,7 @@ struct x6100_remote
 	int64_t tune_ask_ms;		/* the tuner last asked (each second, each 0.5 s while tuning) */
 	int64_t rxsel_ask_ms;		/* the active receiver (VFO Main/Sub Band) last asked, each second */
 	int rx_sub;			/* the rig's sub is the active receiver: 1, main 0, -1 not known */
+	int route_sent;			/* AUDIO_ROUTE_* last sent to the session (it starts at AUTO) */
 	uint64_t row_width;		/* width of the last scope row, 0: none yet */
 	bool smeter_valid;
 	double smeter_dbm;
@@ -689,6 +691,7 @@ void x6100_remote_poll(x6100_remote_t *r, x6100_remote_status_t *st)
 					nanosleep(&ms, NULL);
 				session_disconnect(r->s);
 				r->s = ns;
+				r->route_sent = AUDIO_ROUTE_AUTO;	/* the new session starts there */
 				atomic_store(&r->as, ns);
 				r->lost_ms = 0;
 				session_get_info(r->s, &info);
@@ -814,6 +817,21 @@ void x6100_remote_poll(x6100_remote_t *r, x6100_remote_status_t *st)
 		r->rxsel_ask_ms = t;
 	}
 	r->rx_sub = rs.rx_selected.valid ? (rs.rx_selected.value != 0) : -1;
+
+	// Audio on a rig with dual watch (2026-11-20, as the app): the selected receiver on
+	// both sides, following MAIN / SUB (the stream has main left, sub right)
+	{
+		const struct rig_def *def = session_rig_def(r->s);
+
+		if (def != NULL && def->receivers >= 2 && rigfile_cmd(def, "VFO Dual Watch") != NULL) {
+			const int want = r->rx_sub == 1 ? AUDIO_ROUTE_SUB : AUDIO_ROUTE_MAIN;
+
+			if (want != r->route_sent) {
+				session_set_audio_route(r->s, want);
+				r->route_sent = want;
+			}
+		}
+	}
 
 	// A tune started on the rig (its TUNER key) watched the same way as ours, so TUNE
 	// goes off when it is done, not at the next turn of our poll (about 2.3 s)
