@@ -50,11 +50,13 @@ BEGIN {
 	# have: those wfview would poll for an FA (16 5D, 1B 00 .. every few seconds) or show
 	# as a control that does nothing (2026-11-02). Their polls go with them. Bands, modes
 	# and the other capabilities are the X6100's.
+	# Scanning (0E) and Power Control (18) back in (2026-11-20): x6100_trx has a scan now
+	# and answers 18 01; the stock firmware switches on / off from CAT too
 	all["Commands"] = 1
 	all["Periodic"] = 1
-	n = split("Scanning|APF Type Level|DIGI-SEL Shift|Drive Gain|Comp Meter|Id Meter|" \
+	n = split("APF Type Level|DIGI-SEL Shift|Drive Gain|Comp Meter|Id Meter|" \
 		"Audio Peak Filter|Repeater Tone|Repeater TSQL|Twin Peak Filter|RX Antenna|" \
-		"Filter Shape|SSB TX Bandwidth|Tone Squelch Type|Power Control|REF Adjust|" \
+		"Filter Shape|SSB TX Bandwidth|Tone Squelch Type|REF Adjust|" \
 		"USB Mod Level|LAN Mod Level|Tone Frequency|TSQL Frequency|DTCS Code/Polarity|" \
 		"CSQL Code|XFC Status|CI-V Output|Scope RBW", a, "|")
 	for (i = 1; i <= n; i++)

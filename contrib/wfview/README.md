@@ -37,7 +37,7 @@ data are the IC-705's. Only the identity and what the radio can do differ:
 | Model, CI-V address | IC-705, A4 | X6100, 61 (odd: never a real Icom; the Xiegu ID 1D 19 is 61 00) |
 | rigctld model | 3085 | 3087 (hamlib `RIG_MODEL_X6100`) |
 | LAN, WiFi | yes | no (network: wfserver on the radio over `cat pty`) |
-| Commands | 124 | 99 of them (the 25 the X6100 lacks dropped), plus Notch Filter (14 0D, notch position) |
+| Commands | 124 | 101 of them (the 23 the X6100 lacks dropped), plus Notch Filter (14 0D, notch position) |
 | CI-V transceive | 1A 05 0112 | 1A 05 0131 (the IC-705 item, as hamlib has it; 0112 is the IC-7610's) |
 | Tuning step | codes 0-8 | 0-13 (as the IC-705's step list in the same file) |
 | Scope spans | ±2.5-500 kHz | ±1.5, 3, 6, 12, 24, 48 kHz (the 96 kHz IQ); Scope Span max 5 |
