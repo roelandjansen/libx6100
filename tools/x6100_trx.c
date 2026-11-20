@@ -883,6 +883,25 @@ static int band_of(uint32_t freq)
 	return -1;
 }
 
+// The band name for any frequency (the tune panel's TX frequency, 2026-11-20: with split
+// it showed the RX band and frequency, 70 MHz, while the tune went out on 28 MHz)
+static const char *band_label_hz(uint32_t hz, const char *none)
+{
+	static const struct { const char *name; uint32_t low, high; } vu[] = {
+		{ "2m", 144000000, 148000000 }, { "70cm", 420000000, 450000000 }, { "23cm", 1240000000, 1325000000 },
+	};
+	const int b = band_of(hz);
+
+	if (b >= 0)
+		return g_bands[b].name;
+
+	for (size_t i = 0; i < sizeof(vu) / sizeof(vu[0]); i++)
+		if (hz >= vu[i].low && hz <= vu[i].high)
+			return vu[i].name;
+
+	return none;
+}
+
 // The band name shown; above the X6100's bands (a remote rig, 2026-11-14) 2m, 70cm or
 // 23cm for the label only (no band memory, no band key), else none
 static const char *band_label(const rx_t *rx, const char *none)
@@ -9301,8 +9320,8 @@ static void draw_tune_panel(x6100_lcd_t *lcd, const rx_t *rx, const screen_t *sc
 	// Title, band / frequency, elapsed (or total) time
 	//
 	x6100_lcd_text(lcd, px + 12, py + 12, 2, done ? "TUNED" : "TUNING", accent);
-	snprintf(s, sizeof(s), "%s  %u.%03u.%03u", band_label(rx, "-"),
-		rx->freq / 1000000, rx->freq / 1000 % 1000, rx->freq % 1000);
+	snprintf(s, sizeof(s), "%s  %u.%03u.%03u", band_label_hz(tx_hz(rx), "-"),	/* where the tune goes out */
+		tx_hz(rx) / 1000000, tx_hz(rx) / 1000 % 1000, tx_hz(rx) % 1000);
 	x6100_lcd_text(lcd, px + 120, py + 12, 2, s, white);
 	snprintf(s, sizeof(s), "%2u.%u S", (unsigned) (ms / 1000), (unsigned) (ms / 100 % 10));
 	x6100_lcd_text(lcd, px + pw - 12 - x6100_lcd_text_width(s, 2), py + 12, 2, s, white);

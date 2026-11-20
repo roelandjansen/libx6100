@@ -954,6 +954,12 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     memory mode, else the band), as an Icom; 02 the programmed (band) scan, 22 / 23 the
     memory scan. wfview's scan button sends 01: in memory mode it scanned the band.
 
+65. Tune with split (2026-11-20, seen with RX on 4 m, TX on 10 m): the tune went out on
+    the TX frequency (28 MHz) and the tuner memory went there, as it should, but the tune
+    panel showed the RX band and frequency (4m 70.x MHz) while the main display showed
+    the TX frequency, as while keyed. The panel now shows where the tune goes out (TX
+    frequency and its band, with split, XIT or a duplex shift).
+
 ## Next steps (suggested order)
 
 1. Radio checks above; the 2026-10-27 evening checklist (scope panel, fixed edges, wfview
