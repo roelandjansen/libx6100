@@ -1,6 +1,7 @@
 # X6100 CI-V: Xiegu firmware and x6100_trx compared
 
-Status: 2026-11-03. For Xiegu, to bring the X6100 firmware's CI-V up to what clients
+Status: 2026-11-20 (the commands as of 2026-11-07, checked against `src/x6100_civ.c`).
+For Xiegu, to bring the X6100 firmware's CI-V up to what clients
 such as wfview, hamlib and loggers expect from an IC-705.
 
 x6100_trx (an open front end for the X6100, `tools/x6100_trx.c`, engine
@@ -27,6 +28,10 @@ x6100_trx has them and wfview uses them:
 
 Sections 2-8 are not yet checked against the Xiegu reference (Xiegu column **?**):
 every row there with **?** may be another gap.
+
+The Xiegu column is what the Xiegu reference document lists, not what the stock
+firmware actually answers: that needs the stock code (Jin's CI-V rewrite, TODO.md "From
+Xiegu") or a test of each **?** row against a stock X6100.
 
 ## 1. Frequency, mode, VFO, split
 
@@ -80,6 +85,7 @@ every row there with **?** may be another gap.
 | 14 12 | NB level | y | ? | v | wfview NB slider |
 | 14 15 | monitor level | y | ? | y | |
 | 14 16 / 17 | VOX gain / anti-VOX | y | ? | y | VOX itself does not key on BASE 1.1.9 |
+| 14 19 | backlight | y | ? | y | read 0000, set NG (no backlight level from CAT) |
 
 ## 4. Meters (15, read)
 
@@ -102,7 +108,8 @@ every row there with **?** may be another gap.
 | 16 12 | AGC | y | ? | y | 01 fast, 02 mid, 03 slow; in wfview rig files AGC Status (the IC-705 file has it as AGC Time Constant, which is 1A 04) |
 | 16 22 | NB on / off | y | ? | v | |
 | 16 40 | NR on / off | y | ? | v | |
-| 16 41 | notch (Xiegu: DNF) | y | y | y | |
+| 16 41 | notch (Xiegu: DNF; IC-705: auto notch) | y | y | y | |
+| 16 48 | manual notch (IC-705) | y | ? | y | same notch as 41 (the X6100 has one) |
 | 16 44 / 45 / 46 | compressor / monitor / VOX | y | ? | y | |
 | 16 47 | break-in (00 off, 01 semi, 02 full) | y | ? | y | semi only on the X6100; wfview polls it in CW |
 | 16 50 | dial lock | y | ? | y | |
@@ -118,7 +125,9 @@ every row there with **?** may be another gap.
 | 1A 01 | band stacking register | y | y (changelog) | v | wfview band buttons; IC-705 code 15 = GEN band |
 | 1A 03 | IF filter width | y | ? | y | |
 | 1A 05 0131 | CI-V transceive on / off | y | ? | y | |
-| 1A 05 0118 / 0119 | DATA OFF MOD / DATA MOD (MIC / USB) | y | ? | v | TX audio from the network for wfview |
+| 1A 05 0118 / 0119 | DATA OFF MOD / DATA MOD (00 MIC, 01 USB, 02 MIC,USB, 03 LAN) | y | ? | v | 03 LAN (the IC-705 WLAN): TX audio from the network for wfview when CAT keys, the mic for the PTT key; 02 also sets LAN (2026-11-07) |
+| 1A 05 0045 | Quick SPLIT | y | ? | y | read: off; fixed |
+| 18 01 / 18 00 | power on / off | y | ? | y | 18 01 accepted (it is on), 18 00 NG: x6100_trx does not switch the radio off from CAT |
 | 1A 05 0252 | dash ratio | y | ? | y | wfview polls it in CW |
 | 1A 05 0165 / 0166 / 0170 | date, time, UTC offset | y | ? | y | wfview Set Clock / set radio time on connect; x6100_trx sets the Linux clock only while NTP does not keep it (`cattime`) |
 | 1A 06 | data mode and filter | y | ? | y | |
@@ -187,4 +196,4 @@ These are not single commands but matter as much:
 0E scan; 0C / 0D, 1B, 1F-24 (duplex offset, tones, D-STAR, GPS); 13 speech;
 (these are also left out of the wfview rig file X6100.rig, with the other IC-705
 functions the X6100 lacks, so wfview neither polls them nor shows their controls);
-18 power on / off; 04 RTTY, 06 WFM, 08 RTTY-R, 17 DV modes; 15 14 / 16 meters.
+04 RTTY, 06 WFM, 08 RTTY-R, 17 DV modes; 15 14 / 16 meters.
