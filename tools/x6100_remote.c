@@ -38,7 +38,7 @@
 #define C_ATT_DB	12		/* ATT key on: the Icom attenuator step used (0 = off) */
 
 // The controls, as indices (send times, last rig values) and their X6100_REMOTE_C_* bits
-enum { C_AGC, C_ATT, C_PRE, C_RFG, C_NR, C_NB, C_ATU, C_CTLS };
+enum { C_AGC, C_ATT, C_PRE, C_RFG, C_NR, C_NB, C_ATU, C_SPLIT, C_CTLS };
 #define C_SCOPE_HALF	50000		/* the rig scope, centre mode +- 50 kHz: the X6100 IQ width (SPAN_HZ) */
 #define C_SCOPE_TRIES	5		/* scope mode / span sent so often after connecting at most, then left alone */
 #define C_FIL_HOLD_MS	700		/* after a mode / filter change: the old Filter Width answer not shown so long */
@@ -655,6 +655,12 @@ void x6100_remote_apply(x6100_remote_t *r, const x6100_remote_rx_t *rx)
 		r->ctl_sent_ms[C_ATU] = t;
 	}
 
+	// Split (2026-11-20): as the tuner, only a change on the head goes out
+	if (!all && rx->split != o->split) {
+		session_set_value(r->s, "Split/Duplex", 0, rx->split ? 1 : 0);
+		r->ctl_sent_ms[C_SPLIT] = t;
+	}
+
 	r->sent = *rx;
 	r->sent_valid = true;
 }
@@ -810,6 +816,21 @@ void x6100_remote_poll(x6100_remote_t *r, x6100_remote_status_t *st)
 
 	st->rig_tuning = rs.tuner.valid && rs.tuner.value == 2;
 
+	// The other VFO / receiver, where TX goes with split (2026-11-20): on a main / sub rig
+	// the second receiver (RX Frequency / RX Mode of receiver 1; its Unselected Freq can
+	// be the other VFO of the same receiver, IC-9700), else the unselected VFO
+	{
+		const bool ms = x6100_remote_vfo_name(r) != NULL;
+		const struct radio_rx *o = ms ? &rs.rx[1] : &rs.rx[0];
+		const int k = ms ? 0 : 1;
+		x6100_mode_t m;
+
+		st->other_valid = o->freq_valid[k];
+		st->other_hz = o->freq_valid[k] ? (uint32_t) o->freq_hz[k] : 0;
+		st->other_mode_valid = o->mode[k].valid && mode_from_icom(o->mode[k].num, o->mode[k].data, &m);
+		st->other_mode = st->other_mode_valid ? m : X6100_MODE_USB;
+	}
+
 	// The active receiver of a rig with main and sub (2026-11-18): once a second, as the
 	// app does (the rig files do not poll it); x6100_remote_vfo_name shows it
 	if (rs.rig_valid && x6100_remote_vfo_name(r) != NULL && t - r->rxsel_ask_ms >= 1000) {
@@ -925,10 +946,10 @@ void x6100_remote_poll(x6100_remote_t *r, x6100_remote_status_t *st)
 	//
 	{
 		static const unsigned bit[C_CTLS] = { X6100_REMOTE_C_AGC, X6100_REMOTE_C_ATT, X6100_REMOTE_C_PRE,
-			X6100_REMOTE_C_RFG, X6100_REMOTE_C_NR, X6100_REMOTE_C_NB, X6100_REMOTE_C_ATU };
+			X6100_REMOTE_C_RFG, X6100_REMOTE_C_NR, X6100_REMOTE_C_NB, X6100_REMOTE_C_ATU, X6100_REMOTE_C_SPLIT };
 		const struct radio_value *val[C_CTLS] = { &rs.agc, &rs.attenuator, &rs.preamp, &rs.rf_gain,
-			&rs.noise_reduction, &rs.noise_blanker, &rs.tuner };
-		static const char *const name[C_CTLS] = { "AGC", "ATT", "PRE", "RF gain", "NR", "NB", "ATU" };
+			&rs.noise_reduction, &rs.noise_blanker, &rs.tuner, &rs.split };
+		static const char *const name[C_CTLS] = { "AGC", "ATT", "PRE", "RF gain", "NR", "NB", "ATU", "split" };
 
 		for (int i = 0; i < C_CTLS; i++) {
 			if (!val[i]->valid || val[i]->value == r->rig_ctl[i])
@@ -972,6 +993,11 @@ void x6100_remote_poll(x6100_remote_t *r, x6100_remote_status_t *st)
 				if ((v != 0) == s->nr)
 					continue;
 				c->nr = s->nr = v != 0;
+				break;
+			case C_SPLIT:	/* 0F: 00 off, 01 on; 10-12 simplex / duplex: split off */
+				if ((v == 1) == s->split)
+					continue;
+				c->split = s->split = v == 1;
 				break;
 			case C_ATU:	/* 0 off, 1 on, 2 tuning (on too) */
 				if ((v != 0) == s->atu)
@@ -1242,4 +1268,16 @@ int x6100_remote_tune(x6100_remote_t *r)
 int x6100_remote_power(x6100_remote_t *r, bool on)
 {
 	return session_power(r->s, on ? 1 : 0);
+}
+
+int x6100_remote_vfo(x6100_remote_t *r, bool equal)
+{
+	static const char *const C_SWAP[] = { "VFO Swap A/B", "VFO Swap M/S" };
+	static const char *const C_EQUAL[] = { "VFO Equal AB", "VFO Equal MS" };
+	const char *const *n = equal ? C_EQUAL : C_SWAP;
+
+	for (size_t i = 0; i < 2; i++)
+		if (session_send_cmd(r->s, n[i]) == 0)
+			return 0;
+	return -1;
 }

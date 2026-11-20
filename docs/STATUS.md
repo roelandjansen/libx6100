@@ -966,6 +966,16 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     70.250 while TX was USB. Now all three follow the same side (disp_hz / disp_band /
     disp_mode), the TX side while keyed or tuning, the receiver otherwise.
 
+67. Remote split (2026-11-20; not on a rig yet): the rig's split is the head's (V/M long
+    switches it on the rig, 0F 00 / 01; a change on the rig comes back), and the rig's
+    other VFO (A / B rigs: the unselected one; main / sub rigs: the sub, RX Frequency /
+    RX Mode of receiver 1) is the head's VFO B, frequency and mode. So the split note,
+    the T marker, the TX frequency, band and mode while keyed and the band check follow
+    the rig. A/B in remote mode makes the rig swap its own VFOs (07 B0; A/B long: 07 A0 /
+    B1, the rig copies): the head's own swap would have been undone by the next poll.
+    Test: on the 705 and the 7851, split on from the head and from the rig, the note and
+    the T marker on the other VFO / the sub, keyed: the TX side on the big frequency.
+
 ## Next steps (suggested order)
 
 1. Radio checks above; the 2026-10-27 evening checklist (scope panel, fixed edges, wfview

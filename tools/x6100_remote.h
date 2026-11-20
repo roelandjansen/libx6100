@@ -70,11 +70,17 @@ typedef struct
 	// The rig's tuner on / off (2026-11-14; tune: x6100_remote_tune)
 	//
 	bool atu;
+
+	//
+	// Split on / off (2026-11-20): TX on the rig's other VFO / sub receiver; only a change
+	// on the head goes out (at connect the head takes the rig's state)
+	//
+	bool split;
 } x6100_remote_rx_t;
 
 // The controls the rig reports back (bits of x6100_remote_status_t.ctl_changed)
 enum { X6100_REMOTE_C_AGC = 1, X6100_REMOTE_C_ATT = 2, X6100_REMOTE_C_PRE = 4, X6100_REMOTE_C_RFG = 8,
-	X6100_REMOTE_C_NR = 16, X6100_REMOTE_C_NB = 32, X6100_REMOTE_C_ATU = 64 };
+	X6100_REMOTE_C_NR = 16, X6100_REMOTE_C_NB = 32, X6100_REMOTE_C_ATU = 64, X6100_REMOTE_C_SPLIT = 128 };
 
 typedef struct
 {
@@ -110,6 +116,15 @@ typedef struct
 	int rf_power;			/* the rig's RF power setting, Icom 0-255, -1 not known yet (the TX box shows it) */
 	int filter_hz;			/* the rig's filter width in Hz for its mode and filter (Filter Width), 0 not known */
 	bool rig_tuning;		/* the rig's tuner is tuning (Tuner/ATU Status 2) */
+
+	//
+	// The other VFO (A / B rigs: the unselected one) or the sub receiver (main / sub rigs),
+	// where TX goes with split (2026-11-20): the head shows it as its VFO B
+	//
+	bool other_valid;
+	uint32_t other_hz;
+	bool other_mode_valid;
+	x6100_mode_t other_mode;
 } x6100_remote_status_t;
 
 typedef struct x6100_remote x6100_remote_t;
@@ -203,6 +218,11 @@ int x6100_remote_filter_width(x6100_remote_t *r, int hz);
 
 // The rig on / off (CI-V 18 01 / 18 00; also in standby, without a rig file): 0 sent
 int x6100_remote_power(x6100_remote_t *r, bool on);
+
+// The rig's own VFOs (2026-11-20, with remote split: the head's VFO B is the rig's other
+// VFO / sub): swap them (07 B0), or the other takes the one in use (07 A0 / B1); A / B
+// or main / sub as the rig file has it. 0 sent, < 0 the rig has neither
+int x6100_remote_vfo(x6100_remote_t *r, bool equal);
 
 //
 // Bands

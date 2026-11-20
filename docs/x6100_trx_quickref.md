@@ -65,12 +65,12 @@ Out-of-range frequency arguments are refused (a stray `20` is not 20 Hz).
 | MFK push | RF gain 100 / TX power 5.0 W | switch RF gain <-> TX power |
 | BAND- / BAND+ | previous / next band (last frequency per band kept): 160m .. 6m, 4m (70.0-70.5 MHz; TX in region nl only, check the output first: it is past the 6 m low-pass filters) with GEN in between at its frequency (GEN 5450 kHz: .. 60m, GEN, 40m ..; below 160m or above 4m: between 4m and 160m); GEN is everything outside the ham bands (last frequency and mode there; 10.000 MHz AM out of the box; state `gen <Hz> <mode>`). On a remote rig (2026-11-14): the rig's bands from its rig file for the region instead (an IC-9700: 2m, 70cm, 23cm), round; each keeps its last frequency and mode while on that rig | |
 | SSB / CW / AM-FM | USB <-> LSB / CW <-> CWR / AM <-> NFM | |
-| A/B | VFO A <-> B (frequency, mode, filter) | A=B: the other VFO takes the one in use |
+| A/B | VFO A <-> B (frequency, mode, filter); remote: the rig swaps its own VFOs, A / B or main / sub (07 B0, 2026-11-20) | A=B: the other VFO takes the one in use; remote: the rig copies (07 A0 / B1) |
 | PRE | attenuator on / off (~12 dB) | preamp on / off |
 | DFN | NR (noise reduction) on / off | NB (noise blanker) on / off |
 | DFL | notch on / off | DSP panel (NR, NB, notch levels) |
 | AGC | off / slow / fast / auto, per mode group | RIT / XIT panel |
-| V/M | memory mode with the memory panel / back to the VFO (Icom style) | split on / off: RX on the VFO in use, TX on the other |
+| V/M | memory mode with the memory panel / back to the VFO (Icom style) | split on / off: RX on the VFO in use, TX on the other; remote: the rig's split (0F), TX on its other VFO / the sub, shown as VFO B (2026-11-20) |
 | F1 | next scope mode: CENTER -> SCROLL-C -> FIX -> SCROLL-F -> CENTER | scope panel: mode, VBW, averaging, waveform, colours, waterfall (see Scope panel) |
 | F2 | span ±48 / 24 / 12 / 6 / 3 / 1.5 kHz; FIX / SCROLL-F: next fixed edge 1-4; audio scope: 0-3 / 0-6 kHz | FIX / SCROLL-F: edge panel, lower and upper of the edge in use (see Fixed edges); else reference level: MFK turn = ±1 dB (±30), MFK push = RF <-> AF scope; F2 long, other key or 10 s idle closes |
 | F3 | audio scope on / off (RF <-> AF) | RF scope left (5/8) + audio scope right (3/8), on / off. While another program holds the codec capture (wfserver, the IU1WXY Bluetooth loopback) the audio scope does not open: AUDIO SCOPE: CODEC BUSY |

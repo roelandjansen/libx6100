@@ -2863,6 +2863,7 @@ static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 			x6100_remote_rx_t r = {
 				.freq_hz = rx->freq, .mode = rx->mode, .filter = rx->fil, .agc = rx->agc,
 				.att = rx->att, .pre = rx->pre, .rfg = rx->rfg, .nr = rx->nr, .nb = rx->nb, .atu = rx->atu_on,
+				.split = rx->split,
 			};
 
 			x6100_remote_apply(g_remote, &r);
@@ -5039,6 +5040,15 @@ static bool on_key(rx_t *rx, int key)
 		}
 		break;
 	case X6100_KEY_AB:	/* short: VFO A <-> B; long: A=B (the other VFO takes this one) */
+#ifdef X6100_REMOTE
+		// Remote (2026-11-20): the rig swaps its own VFOs (A / B or main / sub); the head
+		// takes the result from the poll (its VFO B is the rig's other VFO)
+		if (REMOTE_ON) {
+			if (g_remote == NULL || x6100_remote_vfo(g_remote, false) != 0)
+				toast("RIG: NO VFO SWAP");
+			break;
+		}
+#endif
 		vfo_swap(rx);
 		break;
 	case X6100_KEY_MSG:	/* short: message panel; long: repeat the selected message */
@@ -5439,6 +5449,13 @@ static bool on_long_key(rx_t *rx, int key)
 		rx->tedit_since = now_ms();
 		return true;
 	case X6100_KEY_AB:
+#ifdef X6100_REMOTE
+		if (REMOTE_ON) {	/* the rig copies its own VFO (2026-11-20) */
+			if (g_remote == NULL || x6100_remote_vfo(g_remote, true) != 0)
+				toast("RIG: NO VFO COPY");
+			return true;
+		}
+#endif
 		vfo_equal(rx);
 		return true;
 	case X6100_KEY_MSG:	/* long: send the message selected in the panel, again every msgrepeat s */
@@ -15771,6 +15788,22 @@ int main(int argc, char **argv)
 
 			if (rs.ctl_changed & X6100_REMOTE_C_ATU)
 				rx.atu_on = rs.ctl.atu;	/* the rig's tuner on / off */
+
+			// Split and the other VFO / receiver (2026-11-20): the rig's split is the
+			// head's, its other VFO (or the sub) the head's VFO B, so the split note, the
+			// T marker, the TX frequency while keyed and the band check follow the rig
+			if (rs.ctl_changed & X6100_REMOTE_C_SPLIT)
+				rx.split = rs.ctl.split;
+
+			if (rs.other_valid && rs.other_hz != rx.b_freq) {
+				rx.b_freq = rs.other_hz;
+				changed = true;
+			}
+
+			if (rs.other_mode_valid && rs.other_mode != rx.b_mode) {
+				rx.b_mode = rs.other_mode;
+				changed = true;
+			}
 
 			// No tuner on this rig (IC-9700): no ATU in the indicator, also not from
 			// this rig's place or the rig before (2026-11-15)
