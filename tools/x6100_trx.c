@@ -5974,6 +5974,37 @@ typedef struct
 } screen_t;
 
 //
+// What the frequency display shows (2026-11-20): while transmitting or tuning with split
+// or a duplex shift the TX side (frequency without XIT, as on Icom radios; during the SWR
+// scan the frequency it steps over), else the receiver; the band and mode beside it
+// follow the same side (they showed the RX band and mode next to the TX frequency)
+//
+
+static bool disp_tx(const rx_t *rx, const screen_t *scr)
+{
+	return scr->tx || rx->tuning;
+}
+
+static uint32_t disp_hz(const rx_t *rx, const screen_t *scr)
+{
+	if (rx->send == SEND_SCAN && rx->tx_hz_ovr != 0)
+		return rx->tx_hz_ovr;
+	if (!disp_tx(rx, scr))
+		return rx->freq;
+	return rx->split ? rx->b_freq : (uint32_t) ((int64_t) rx->freq + dup_shift(rx));
+}
+
+static x6100_mode_t disp_mode(const rx_t *rx, const screen_t *scr)
+{
+	return disp_tx(rx, scr) ? tx_mode(rx) : rx->mode;
+}
+
+static const char *disp_band(const rx_t *rx, const screen_t *scr, const char *none)
+{
+	return disp_tx(rx, scr) ? band_label_hz(disp_hz(rx, scr), none) : band_label(rx, none);
+}
+
+//
 // In-place radix-2 FFT, n a power of two
 //
 
@@ -10372,7 +10403,7 @@ static void draw_portrait(screen_t *scr, const rx_t *rx)
 		x6100_lcd_fill(lcd, 0, 0, W, P_BAR_H, red);
 
 	x6100_lcd_text(lcd, 12, 6, 3, rx->tuning ? "TUNE" : scr->tx ? "TX" : "RX", on ? 0xFFFFFF : 0x3CC83C);
-	snprintf(s, sizeof(s), "%s  %s", band_label(rx, "GEN"),
+	snprintf(s, sizeof(s), "%s  %s", disp_band(rx, scr, "GEN"),
 		rx->mem_mode ? "M" : vfo_label(rx));
 	x6100_lcd_text(lcd, 110, 10, 2, s, on ? 0xFFFFFF : SCR_DIM);
 
@@ -10440,8 +10471,7 @@ static void draw_portrait(screen_t *scr, const rx_t *rx)
 	// Frequency (the TX frequency while keyed with split or a duplex shift), centred
 	//
 	{
-		uint32_t f = rx->send == SEND_SCAN && rx->tx_hz_ovr != 0 ? rx->tx_hz_ovr
-			: !on ? rx->freq : rx->split ? rx->b_freq : (uint32_t) ((int64_t) rx->freq + dup_shift(rx));
+		uint32_t f = disp_hz(rx, scr);
 
 		// Always three digits after the kHz, so the width does not change with the step: the
 		// Hz digit with the 1 Hz step (FST long), else a 0 there (2026-11-07; before, two
@@ -10464,7 +10494,7 @@ static void draw_portrait(screen_t *scr, const rx_t *rx)
 
 		// Fixed widths (the font is monospaced), so a new mode or step does not move the
 		// line: centred on a width that stays the same (2026-11-05)
-		snprintf(s, sizeof(s), "%-5s  FIL%d  STEP %-4s", mode_name(rx->mode), rx->fil + 1, st);
+		snprintf(s, sizeof(s), "%-5s  FIL%d  STEP %-4s", mode_name(disp_mode(rx, scr)), rx->fil + 1, st);
 		x6100_lcd_text(lcd, (W - x6100_lcd_text_width(s, 3)) / 2, P_INFO_Y, 3, s, SCR_ACCENT);
 	}
 
@@ -10640,8 +10670,8 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 	// Status line, TX indicator, indicators right (TUNE while the tuner searches)
 	//
 	x6100_lcd_fill(lcd, 0, 0, W, TOP_H, SCR_BG);
-	snprintf(s, sizeof(s), "%4s %5s AGC %4s", band_label(rx, "GEN"),
-		mode_name(rx->mode), agc_name(rx->agc));
+	snprintf(s, sizeof(s), "%4s %5s AGC %4s", disp_band(rx, scr, "GEN"),
+		mode_name(disp_mode(rx, scr)), agc_name(rx->agc));
 	x6100_lcd_text(lcd, 12, TOP_Y, 3, s, SCR_ACCENT);
 
 	//
@@ -10719,14 +10749,12 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 	}
 
 	//
-	// Frequency, MHz.kHz.Hz; while transmitting with split or a duplex shift the TX
-	// frequency (without XIT, as on Icom radios), the scope stays on RX; during the SWR
-	// scan the frequency it steps over (2026-11-01: the dial stood still)
+	// Frequency, MHz.kHz.Hz (disp_hz: while transmitting with split or a duplex shift the TX
+	// frequency, without XIT; the scope stays on RX; during the SWR
+	// scan the frequency it steps over, 2026-11-01: the dial stood still)
 	//
 	{
-		bool on = scr->tx || rx->tuning;
-		uint32_t f = rx->send == SEND_SCAN && rx->tx_hz_ovr != 0 ? rx->tx_hz_ovr
-			: !on ? rx->freq : rx->split ? rx->b_freq : (uint32_t) ((int64_t) rx->freq + dup_shift(rx));
+		uint32_t f = disp_hz(rx, scr);
 
 		freq_draw(lcd, f, true, FREQ_X + 480, 0, FREQ_Y - 17, SCR_FREQ);
 	}

@@ -960,6 +960,12 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     the TX frequency, as while keyed. The panel now shows where the tune goes out (TX
     frequency and its band, with split, XIT or a duplex shift).
 
+66. While transmitting with split or a duplex shift (2026-11-20, seen with RX 10 m, TX
+    4 m on B): the big frequency showed the TX side, but the band and mode beside it
+    (landscape top line, portrait status and info lines) the RX ones: 10m NFM next to
+    70.250 while TX was USB. Now all three follow the same side (disp_hz / disp_band /
+    disp_mode), the TX side while keyed or tuning, the receiver otherwise.
+
 ## Next steps (suggested order)
 
 1. Radio checks above; the 2026-10-27 evening checklist (scope panel, fixed edges, wfview
