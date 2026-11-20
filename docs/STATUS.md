@@ -948,7 +948,8 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     IC-705 (civ test). Also fixed: the birdie scan progress on the scope showed only
     with split / RIT / XIT on (the text sat inside that block). Test: SQL set, a few
     channels stored, memory scan stops on the busy one and goes on after it; band scan
-    on 40 m; hamlib `rigctl U ... G SCAN` / wfview off (its X6100.rig has no Scanning).
+    on 40 m; hamlib (IC-705 model): `rigctl g MEM 0` / `g VFO 0`, `g STOP 0`; wfview has
+    no scan control (its X6100.rig leaves Scanning out).
 
 ## Next steps (suggested order)
 
