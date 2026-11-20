@@ -56,6 +56,7 @@ transceive). **x6100_trx**: the same function there.
 
 With wfview's X6100 profile (address 61) instead of the IC-705 one: somewhat better, but
 VFO A / B, the band buttons (crash), LAN audio and the odd behaviour stay.
+
 ## Known gaps in the Xiegu reference
 
 Checked so far (section 1): these IC-705 commands are not in the Xiegu reference, while
