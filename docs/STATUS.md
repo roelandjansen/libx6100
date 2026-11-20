@@ -944,12 +944,15 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     after the signal went (resume on, default; CI-V 0E D0: the scan ends there). Without
     a squelch it does not start. Any key, a VFO or MFK turn or PTT stops it; VOL and its
     push still work, so the squelch can be set while it runs. On the scope MEMORY SCAN n
-    / BAND SCAN, HOLD on a signal, in green. CI-V 0E 00 / 01 / 02 / 22 / D0 / D3 as the
+    / BAND SCAN, HOLD on a signal, in green. CI-V 0E 00 / 01 / 02 / 22 / 23 / D0 / D3 as the
     IC-705 (civ test). Also fixed: the birdie scan progress on the scope showed only
     with split / RIT / XIT on (the text sat inside that block). Test: SQL set, a few
     channels stored, memory scan stops on the busy one and goes on after it; band scan
     on 40 m; hamlib (IC-705 model): `rigctl g MEM 0` / `g VFO 0`, `g STOP 0`; X6100.rig has
     Scanning (0E) again since 2026-11-20 (wfview itself may show no scan control).
+    Fixed the same day: 0E 01 is programmed or memory scan by the mode (memory scan in
+    memory mode, else the band), as an Icom; 02 the programmed (band) scan, 22 / 23 the
+    memory scan. wfview's scan button sends 01: in memory mode it scanned the band.
 
 ## Next steps (suggested order)
 

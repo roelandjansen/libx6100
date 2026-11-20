@@ -985,10 +985,12 @@ static size_t cmd_mem_content(req_t *r)
 	return out_end(r->o);
 }
 
-// 0E: scan, IC-705 style (2026-11-20): 00 stop, 01 programmed scan (here: the band the
-// VFO is in), 02 memory scan, 22 select memory scan (here: memory scan, no select
-// marks), D0 / D3 resume off / on. Not readable; the other forms (fine scan, delta-f
-// spans, select marks) NG
+// 0E: scan, IC-705 style (2026-11-20; 01 / 02 corrected the same day): 00 stop, 01
+// programmed / memory scan (memory scan in memory mode, else the programmed range: here
+// the band the VFO is in; wfview's scan button sends this), 02 programmed scan, 22 memory
+// scan, 23 select memory scan (here: memory scan, no select marks), D0 / D3 resume off /
+// on. Not readable; the other forms (fine and delta-f scans, spans, select marks) NG.
+// X6100_CIV_SCAN: 0 stop, 1 programmed, 2 memory, 3 programmed / memory by the mode
 static size_t cmd_scan(req_t *r)
 {
 	if (r->n != 1)
@@ -996,10 +998,13 @@ static size_t cmd_scan(req_t *r)
 
 	switch (r->d[0]) {
 	case 0x00:
+		return reply_ok(r, set(r, X6100_CIV_SCAN, 0, 0));
 	case 0x01:
+		return reply_ok(r, set(r, X6100_CIV_SCAN, 0, 3));
 	case 0x02:
-		return reply_ok(r, set(r, X6100_CIV_SCAN, 0, r->d[0]));
+		return reply_ok(r, set(r, X6100_CIV_SCAN, 0, 1));
 	case 0x22:
+	case 0x23:
 		return reply_ok(r, set(r, X6100_CIV_SCAN, 0, 2));
 	case 0xD0:
 	case 0xD3:

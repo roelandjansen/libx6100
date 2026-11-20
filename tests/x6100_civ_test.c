@@ -461,16 +461,23 @@ int main(void)
 		check(&civ, "28 01 01", "FA");
 		check(&civ, "28", "FA");
 
-		// 0E: scan (2026-11-20): stop, band, memory, select memory, resume off / on
-		check(&civ, "0E 02", "FB");
-		g_run++;
-		if (m.v[X6100_CIV_SCAN][0] != 2) {
-			g_fail++;
-			printf("FAIL 0E 02: scan %d\n", m.v[X6100_CIV_SCAN][0]);
+		// 0E: scan (2026-11-20), as the IC-705: 01 programmed / memory (by the mode: 3),
+		// 02 programmed (1), 22 memory, 23 select memory (2), 00 stop, resume off / on
+		{
+			static const struct { const char *cmd; int32_t want; } C_SCAN[] = {
+				{ "0E 01", 3 }, { "0E 02", 1 }, { "0E 22", 2 }, { "0E 23", 2 }, { "0E 00", 0 },
+			};
+
+			for (size_t i = 0; i < sizeof(C_SCAN) / sizeof(C_SCAN[0]); i++) {
+				check(&civ, C_SCAN[i].cmd, "FB");
+				g_run++;
+				if (m.v[X6100_CIV_SCAN][0] != C_SCAN[i].want) {
+					g_fail++;
+					printf("FAIL %s: scan %d, not %d\n", C_SCAN[i].cmd, m.v[X6100_CIV_SCAN][0],
+							C_SCAN[i].want);
+				}
+			}
 		}
-		check(&civ, "0E 22", "FB");
-		check(&civ, "0E 01", "FB");
-		check(&civ, "0E 00", "FB");
 		check(&civ, "0E D0", "FB");
 		g_run++;
 		if (m.v[X6100_CIV_SCAN_RESUME][0] != 0) {

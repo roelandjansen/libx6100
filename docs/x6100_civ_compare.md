@@ -161,7 +161,7 @@ Xiegu") or a test of each **?** row against a stock X6100.
 | 11 | ATT off / on, read | y | ? | v | |
 | 17 | send CW (text), FF stops | y | ? | y | buffered as on an Icom |
 | 28 00 | voice TX memory T1-T8, 00 stops | y | ? | y | x6100_trx: message M1-M8 (voice WAV or CW); for hamlib `send_voice_mem`, the wfview GUI does not use it |
-| 0E 00 / 01 / 02 / 22 | scan stop / programmed / memory / select memory | y | ? | y | x6100_trx (2026-11-20): band scan over the band the VFO is in, memory scan through the stored channels; the squelch holds it. 0E D0 / D3 resume off / on. Fine scan, delta-f spans, select marks NG |
+| 0E 00 / 01 / 02 / 22 / 23 | scan stop / programmed or memory (by the mode) / programmed / memory / select memory | y | ? | y | x6100_trx (2026-11-20): 01 scans the memories in memory mode, else the band (wfview's scan button sends 01); band scan over the band the VFO is in, memory scan through the stored channels; the squelch holds it. 0E D0 / D3 resume off / on. Fine scan, delta-f spans, select marks NG |
 | 19 00 | transceiver ID | y | y | v | also answered to a broadcast (00): wfview auto-detect needs it |
 | 1A 01 | band stacking register | y | y (changelog) | v | wfview band buttons; IC-705 code 15 = GEN band |
 | 1A 03 | IF filter width | y | ? | y | |

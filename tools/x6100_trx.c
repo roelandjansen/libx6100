@@ -13670,8 +13670,8 @@ static bool cat_set(void *ctx, x6100_civ_item_t item, int vfo, int32_t v)
 		if (!cat_time_set(item == X6100_CIV_DATE, v))
 			return false;
 		break;
-	case X6100_CIV_SCAN:		/* 0E 00 / 01 / 02: stop, band scan, memory scan (now: NG when
-				   it cannot start, no squelch or no channels) */
+	case X6100_CIV_SCAN:		/* 0E: 0 stop, 1 band (02), 2 memory (22 / 23), 3 by the mode (01:
+				   memory scan in memory mode, else the band, as an Icom); NG when it cannot start */
 		if (v == 0) {
 			rscan_stop("SCAN STOPPED");
 			break;
@@ -13679,7 +13679,7 @@ static bool cat_set(void *ctx, x6100_civ_item_t item, int vfo, int32_t v)
 
 		if (rscan_running())
 			rscan_stop(NULL);
-		if (!rscan_start(rx, v == 2 ? RSCAN_MEM : RSCAN_BAND))
+		if (!rscan_start(rx, v == 2 || (v == 3 && rx->mem_mode) ? RSCAN_MEM : RSCAN_BAND))
 			return false;
 		break;
 	case X6100_CIV_SCAN_RESUME:	/* 0E D0 / D3 */

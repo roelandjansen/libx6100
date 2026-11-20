@@ -152,7 +152,7 @@ the X6100 shows in wfview (X6100 -> wfview).
 - [ ] wfview Set Clock (1A 05 0165 / 0166 / 0170)
 - [ ] Send CW text from wfview (17), and stop (17 FF)
 - [ ] Voice / message memory (28 00 01); hamlib `send_voice_mem 1`
-- [ ] Scan (0E 01 / 02 / 00): hamlib `g VFO 0`, `g MEM 0`, `g STOP 0`
+- [ ] Scan (0E 01 in VFO and in memory mode, 02, 22, 00; wfview's scan button sends 01): hamlib `g VFO 0`, `g MEM 0`, `g STOP 0`
 
 ## 7. TX, tuner, RIT / XIT
 
