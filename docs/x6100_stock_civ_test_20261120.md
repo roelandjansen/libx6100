@@ -23,7 +23,9 @@ Broken or wrong:
 - **VFO A / B**: the radio and wfview both show 80 m (3630 kHz) but the audio is MW (1179
   kHz), and the other way round: the receiver tunes the VFO not shown (the VFO knob works
   both ways)
-- **Band change on the X6100**: wfview does not follow, and crashes (to confirm which)
+- **Band change**, with wfview connected: band up / down on the X6100 makes **the radio
+  fail**; a band button in wfview (40 m to 20 m, 1A 01 band stacking register) sends the
+  radio to **500 kHz**
 - **AGC values shifted**: wfview MID sets SLOW, SLOW sets AUTO, FAST sets FAST
   (16 12: 02 / 03 mapped differently from the IC-705 01 fast, 02 mid, 03 slow)
 - **Tuning step** from wfview: no effect (10)
@@ -46,7 +48,7 @@ data mode, VFO A / B select, A=B, duplex, TX frequency (1C 03), memory mode /
 write; the other levels (NR level, PBT, CW pitch, RF power, mic gain, key speed, notch
 position, compressor, break-in delay, NB level, monitor, VOX); the other meters (Po,
 SWR, ALC, Vd, OVF, squelch status); notch, compressor, monitor, VOX, break-in, lock
-switches; ID, band buttons, transceive off / on, DATA OFF MOD / DATA MOD, dash ratio,
+switches; ID, transceive off / on, DATA OFF MOD / DATA MOD, dash ratio,
 clock, CW text, voice memory, scan; XIT;
 the scope apart from the display and the reference level; behaviour (NG, reconnect).
 
@@ -136,8 +138,8 @@ the X6100 shows in wfview (X6100 -> wfview).
 - [-] ATT, X6100 -> wfview: **not seen**
 - [ ] Transceiver ID (19 00) answers A4
 - [ ] Xiegu radio ID (1D 19)
-- [-] Band change on the X6100: **wfview does not follow, and crashes** (to confirm: wfview or the radio, and which band)
-- [ ] Band buttons in wfview (1A 01, band stacking register)
+- [-] Band up / down on the X6100 with wfview connected: **the radio fails**
+- [-] Band buttons in wfview (1A 01, band stacking register): 40 m to 20 m sends the radio to **500 kHz**
 - [-] IF filter width (1A 03): **wfview shows one fixed width**, does not follow the radio (to confirm: the passband in wfview, or the scope)
 - [ ] CI-V transceive off / on (1A 05 0131)
 - [ ] DATA OFF MOD / DATA MOD input (1A 05 0118 / 0119): which values the X6100 takes (MIC, USB, MIC+USB, WLAN)
