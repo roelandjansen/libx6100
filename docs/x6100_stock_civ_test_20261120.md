@@ -18,8 +18,8 @@ raw CI-V frame is given.
 Broken or wrong:
 
 - **RX audio**: AF gain from wfview works on the radio, but no audio is heard in wfview
-- **TX audio** from wfview: does not work, although wfview PTT keys the radio (section 8:
-  the steps after keying still to fill in)
+- **TX audio** from wfview: none at all, although wfview PTT keys the radio (not debugged
+  further on the stock firmware)
 - **VFO A / B**: the radio and wfview both show 80 m (3630 kHz) but the audio is MW (1179
   kHz), and the other way round: the receiver tunes the VFO not shown (the VFO knob works
   both ways)
@@ -47,8 +47,8 @@ write; the other levels (NR level, PBT, CW pitch, RF power, mic gain, key speed,
 position, compressor, break-in delay, NB level, monitor, VOX); the other meters (Po,
 SWR, ALC, Vd, OVF, squelch status); notch, compressor, monitor, VOX, break-in, lock
 switches; ID, band buttons, transceive off / on, DATA OFF MOD / DATA MOD, dash ratio,
-clock, CW text, voice memory, scan; XIT; TX audio in steps (section
-8); the scope apart from the display and the reference level; behaviour (NG, reconnect).
+clock, CW text, voice memory, scan; XIT;
+the scope apart from the display and the reference level; behaviour (NG, reconnect).
 
 ## 0. Setup
 
@@ -160,7 +160,9 @@ Into a dummy load, low power.
 
 ## 8. TX audio over the LAN (reported broken by many users)
 
-Result 20261120: **does not work** from wfview. The steps below show where it stops.
+Result 20261120: **no TX audio at all** from wfview (wfview PTT keys the radio; RX audio
+over the LAN does not work either). Not debugged further on the stock firmware: this is
+how it ships. The steps below are left for a later firmware (Jin's rewrite).
 
 wfview sends the PC microphone (or a digital mode program's audio) to wfserver, which
 should play it into the X6100's TX path.
