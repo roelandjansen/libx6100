@@ -5560,6 +5560,22 @@ static bool on_keypad(rx_t *rx, hold_t *hold, int key, int value)
 // (detents within the last VFO_FAST_WIN_MS, this one included). A turn back clears it.
 //
 
+// The frequency nsteps steps away at step Hz (2026-11-21: the same as the app's
+// rig_round_frequency). 8.333 kHz (airband) runs on the 25 kHz / 3 grid, not multiples of
+// 8333 Hz (900.000 went to 908.297 and drifted off the 25 kHz marks); every other step
+// floors to the step and adds
+static int64_t step_tune(uint32_t freq, int64_t nsteps, uint32_t step)
+{
+	if (step == 8333u) {
+		int64_t k = (int64_t)(((uint64_t)freq * 3u + 12500u) / 25000u) + nsteps;
+
+		if (k < 0)
+			k = 0;
+		return (int64_t)(((uint64_t)k * 25000u + 1u) / 3u);
+	}
+	return (int64_t)freq - (int64_t)(freq % step) + nsteps * (int64_t)step;
+}
+
 static int vfo_mult(int value, uint32_t step)
 {
 	uint64_t t = now_ms();
@@ -5606,7 +5622,7 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 	case IN_VFO: {
 		int mult = vfo_mult(value, rx->step == STEP_CH ? STEP_CH : (uint32_t) rx->step);	/* faster when turned fast */
 		int64_t f = rx->step == STEP_CH ? (int64_t) rx->freq - rx->freq % 100 + (int64_t) value * X6100_DIR_VFO * 100
-			: (int64_t) rx->freq - rx->freq % (uint32_t) rx->step + (int64_t) value * mult * X6100_DIR_VFO * rx->step;
+			: step_tune(rx->freq, (int64_t) value * mult * X6100_DIR_VFO, (uint32_t) rx->step);
 
 		// Past an end of the tuning range the dial goes round to the other end (2026-11-05;
 		// it stopped there). Only from the end itself: a turn that overshoots lands on it
@@ -11964,12 +11980,13 @@ static bool console_line(rx_t *rx, char *line)
 
 			st = strcasecmp(t, "ch") == 0 ? STEP_CH : st;
 
-			if (st == 1 || st == 10 || st == 100 || st == 1000 || st == 5000 || st == 9000 || st == 10000
-				|| st == 100000 || st == STEP_CH) {
+			if (st == 1 || st == 10 || st == 100 || st == 1000 || st == 5000 || st == 6250 || st == 8333
+				|| st == 9000 || st == 10000 || st == 100000 || st == STEP_CH) {
 				rx->step = st;
 				changed = true;
 			} else {
-				fprintf(stderr, "\nstep must be 1, 10, 100, 1000, 5000, 10000, 100000 (9000 on LW / MW)\n");
+				fprintf(stderr, "\nstep must be 1, 10, 100, 1000, 5000, 6250, 8333, 9000, 10000, 100000 "
+					"(airband 8333 on the 25 kHz / 3 grid; 9000 on LW / MW)\n");
 			}
 
 			continue;

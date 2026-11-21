@@ -976,6 +976,14 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     Test: on the 705 and the 7851, split on from the head and from the rig, the note and
     the T marker on the other VFO / the sub, keyed: the TX side on the big frequency.
 
+68. 8.333 kHz step on the 25 kHz / 3 grid (2026-11-21): the step rounded to multiples of
+    8333 Hz, so 900.000 went to 908.297 and drifted off the 25 kHz marks. Now channel =
+    round(freq * 3 / 25000), stepped and back to Hz: 900.000 -> 908.333 -> 916.667 ->
+    925.000, every third step on 25 kHz. Shared core/rig.c (the app) and x6100_trx's own
+    knob tuning (step_tune) use the same rule, so core and app match. x6100_trx takes
+    `step 8333` (and 6250) by console; it shows the step as raw Hz (fixed-width fields),
+    the app as 8.333k. For a remote head on a 705 (the X6100 itself is HF only).
+
 ## Next steps (suggested order)
 
 1. Radio checks above; the 2026-10-27 evening checklist (scope panel, fixed edges, wfview
