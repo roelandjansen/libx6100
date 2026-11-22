@@ -41,6 +41,11 @@
 #   oob  nolimit                    band check off / tune 10 kHz-100 MHz, as --oob /
 #                                   --no-limit: warned at every start, OOB on the dial;
 #                                   where you transmit stays your responsibility
+#   notx                            no TX at all (2026-11-22): PTT, tune, messages,
+#                                   CW text, SWR scan and CAT keying refused; TX enable
+#                                   off and the power at its floor every pass, the power
+#                                   setting locked; read at every start, so a restart
+#                                   keeps it (take the line out and restart to transmit)
 
 # Examples (remove the # to use):
 # vol 20

@@ -1224,6 +1224,7 @@ static void fil_default(fgroup_t g, int n)
 }
 
 static bool g_allow_oob;	/* --oob: skip the band check, enable TX in the baseband everywhere */
+static bool g_notx;		/* notx (conf) / --notx (2026-11-22): no TX at all, TX enable and power held at the floor; not undone at run time */
 static const char *g_remote_note = "REMOTE RX";	/* remote head: the note that stands on the scope */
 
 #ifdef X6100_REMOTE
@@ -2870,9 +2871,18 @@ static void apply(x6100_ctl_t *ctl, const x6100_cal_t *cal, const rx_t *rx)
 		}
 	}
 #endif
+
+	// notx (2026-11-22): TX enable off on both VFOs and the TX power at the baseband's
+	// floor (0.1 W: the register takes no 0), every pass, whatever set them above; with
+	// TX enable off even the hand mic's own PTT does not bring the baseband on the air
+	if (g_notx) {
+		x6100_ctl_set(ctl, X6100_REG_VFOA_BAND, 0);
+		x6100_ctl_set(ctl, X6100_REG_VFOB_BAND, 0);
+		x6100_set_txpwr(ctl, 0.1f);
+	}
 }
 
-static void apply_flags(x6100_ctl_t *ctl, const rx_t *rx)
+static void apply_flags_any(x6100_ctl_t *ctl, const rx_t *rx)
 {
 #ifdef X6100_REMOTE
 	if (g_remote_req) {
@@ -2892,6 +2902,16 @@ static void apply_flags(x6100_ctl_t *ctl, const rx_t *rx)
 	apply_flags_local(ctl, rx);
 }
 
+static void apply_flags(x6100_ctl_t *ctl, const rx_t *rx)
+{
+	apply_flags_any(ctl, rx);
+
+	// notx (2026-11-22): none of the bits that key the baseband, whatever set them
+	if (g_notx)
+		x6100_ctl_update(ctl, X6100_REG_FLAGS,
+			X6100_FLAG_IPTT | X6100_FLAG_CODEC_TX | X6100_FLAG_ATU_TUNE | X6100_FLAG_SWRSCAN, 0);
+}
+
 //
 // TX allowed here? Sets rx->warn when not
 //
@@ -2903,6 +2923,13 @@ static bool tx_allowed(rx_t *rx)
 	rx->warn = "RX ONLY";
 	return false;
 #endif
+
+	// notx (2026-11-22): every way to key ends here (PTT key, CAT PTT, tune, message, CW
+	// text, SWR scan); apply / apply_flags hold the baseband off on top of that
+	if (g_notx) {
+		rx->warn = "TX OFF (CONF)";
+		return false;
+	}
 
 #ifdef X6100_REMOTE
 	// Remote head: receive only, unless --remote-tx-dummy and the rig is there; then the
@@ -5181,10 +5208,12 @@ static bool on_key(rx_t *rx, int key)
 		rx->fil = (rx->fil + 1) % 3;
 		break;
 	case X6100_KEY_MFK_PUSH:
-		if (rx->mfk_pwr)
-			rx->txpwr = TXPWR_DEF;
-		else
+		if (rx->mfk_pwr) {
+			if (!g_notx)	/* notx: the power stays (2026-11-22) */
+				rx->txpwr = TXPWR_DEF;
+		} else {
 			rx->rfg = 100;
+		}
 		break;
 	default:
 		return false;
@@ -5820,7 +5849,8 @@ static bool on_knob(rx_t *rx, input_t in, int value)
 
 			rx->fedit_since = now_ms();
 		} else if (rx->mfk_pwr) {
-			rx->txpwr = clampi(rx->txpwr + value * X6100_DIR_MFK, 1, TXPWR_MAX);
+			if (!g_notx)	/* notx: no power setting (2026-11-22) */
+				rx->txpwr = clampi(rx->txpwr + value * X6100_DIR_MFK, 1, TXPWR_MAX);
 		} else {
 			rx->rfg = clampi(rx->rfg + value * X6100_DIR_MFK * 2, 0, 100);
 		}
@@ -10749,7 +10779,10 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 		//
 		// TX power setting under the box
 		//
-		snprintf(s, sizeof(s), "%d.%dW", rx->txpwr / 10, rx->txpwr % 10);
+		if (g_notx)
+			snprintf(s, sizeof(s), "NO TX");	/* notx (2026-11-22) */
+		else
+			snprintf(s, sizeof(s), "%d.%dW", rx->txpwr / 10, rx->txpwr % 10);
 #ifdef X6100_REMOTE
 		// Remote head: the rig's RF power setting in percent (Icom 0-255), the X6100's
 		// own setting is not used there
@@ -10827,7 +10860,10 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 	x6100_lcd_text(lcd, INFO_COL_VOL, INFO_Y, 2, s, g_vol_fn != 0 ? SCR_ACCENT : rx->mute ? SCR_WARN : SCR_DIM);
 
 	if (rx->mfk_pwr) {
-		snprintf(s, sizeof(s), "PWR %2d.%dW", rx->txpwr / 10, rx->txpwr % 10);
+		if (g_notx)
+			snprintf(s, sizeof(s), "PWR  NO TX");	/* notx (2026-11-22) */
+		else
+			snprintf(s, sizeof(s), "PWR %2d.%dW", rx->txpwr / 10, rx->txpwr % 10);
 		x6100_lcd_text(lcd, INFO_COL_RFG, INFO_Y, 2, s, SCR_ACCENT);
 	} else {
 		snprintf(s, sizeof(s), "RFG %3d", rx->rfg);
@@ -11795,6 +11831,15 @@ static bool console_token(rx_t *rx, const char *t)
 		return true;
 	}
 
+	// notx (2026-11-22): no TX at all. From x6100_trx.conf (read at every start, so a restart
+	// keeps it) or --notx; also from the console, for the rest of this run. One way: there is
+	// no token to undo it, and it is not written to the state; to transmit again take it out
+	// of the conf and restart
+	if (strcasecmp(t, "notx") == 0) {
+		g_notx = true;
+		return true;
+	}
+
 	// Safety checks off, as --oob / --no-limit (the operator's responsibility)
 	if (strcasecmp(t, "oob") == 0) {
 		g_allow_oob = true;
@@ -12021,7 +12066,9 @@ static bool console_line(rx_t *rx, char *line)
 
 			want_pwr = false;
 
-			if (w >= 0.1 && w <= TXPWR_MAX / 10.0) {
+			if (g_notx) {
+				fprintf(stderr, "\npwr: notx, no TX power setting\n");
+			} else if (w >= 0.1 && w <= TXPWR_MAX / 10.0) {
 				rx->txpwr = (int) lround(w * 10.0);
 				changed = true;
 			} else {
@@ -13928,6 +13975,8 @@ static bool cat_set(void *ctx, x6100_civ_item_t item, int vfo, int32_t v)
 		rx->rfg = v * 100 / 255;
 		break;
 	case X6100_CIV_LVL_PWR:
+		if (g_notx)	/* notx: no power setting, NG (2026-11-22) */
+			return false;
 		rx->txpwr = clampi((v * TXPWR_MAX + 127) / 255, 1, TXPWR_MAX);
 		break;
 	case X6100_CIV_PTT:
@@ -14963,6 +15012,11 @@ int main(int argc, char **argv)
 			continue;
 		}
 #endif
+
+		if (strcmp(argv[i], "--notx") == 0) {	/* no TX at all (as notx in the conf) */
+			g_notx = true;
+			continue;
+		}
 
 		if (strcmp(argv[i], "--oob") == 0) {
 			g_allow_oob = true;

@@ -42,6 +42,7 @@ x6100_trx --oob 5450000 usb slow
 | Option | Effect |
 |---|---|
 | `--oob` | no band check before TX, baseband TX enabled everywhere (transverter, tests; legal limits are yours) |
+| `--notx` | no TX at all (2026-11-22), as `notx` in x6100_trx.conf: PTT, tune, messages, CW text, SWR scan and CAT keying refused (TX OFF (CONF)); TX enable held off on both VFOs and the power at the baseband's floor (0.1 W, the register takes no 0) every pass, so even the hand mic PTT does not bring it on the air; the power setting is locked (MFK, `pwr`, CI-V 14 0A answers NG) and shown as NO TX. In the conf it holds over every restart; there is no command that undoes it at run time |
 | `--no-limit` | tune 10 kHz - 100 MHz instead of `freqmin` - `freqmax` (default 148.5 kHz - 75 MHz; baseband probe); put it before the frequency |
 | `--cat[=baud\|pty]` | CI-V as an IC-705 on /dev/ttyS2 (DEV USB-C, PC side the second CH342 port, e.g. ttyACM1), 4800-19200, default 19200 (the most the DEV port carries); `pty`: on a pseudo-terminal, /tmp/x6100-civ, any speed, for a client on the radio (wfserver, rigctld, socat). See `docs/x6100_civ.md` |
 | `--cat-log` | as `--cat`, and print CI-V commands (`>`) with our OK / NG reply (`<`); polls answered with data are not shown |

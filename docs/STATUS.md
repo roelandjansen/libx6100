@@ -992,6 +992,18 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     sub selected, AGC on the head changes the sub's AGC; switching to main shows the
     main's.
 
+70. notx (2026-11-22; not on the radio yet): `notx` in x6100_trx.conf (read at every start,
+    so a restart keeps it) or `--notx`. Every way to key is refused in tx_allowed (PTT
+    key, CAT PTT 1C 00 01, tune, messages, CW text from CAT, SWR scan): TX OFF (CONF).
+    On top of that, every pass: TX enable off on both VFOs (VFOA/B band registers 0), the
+    TX power at the floor (0.1 W: x6100_set_txpwr clamps 0 to 1), and none of the keying
+    bits in register 12 (IPTT, codec TX, ATU tune, SWR scan); so even the hand mic's own
+    PTT does not put the baseband on the air. The power setting is locked (MFK PWR row and
+    push, console pwr, CI-V 14 0A answers NG), shown as NO TX. One way: no command undoes
+    it at run time, and it is not written to the state. Test: notx in the conf, restart:
+    PTT and TUNE give TX OFF (CONF), the hand mic PTT gives no output into a dummy / power
+    meter, wfview PTT is refused.
+
 ## Next steps (suggested order)
 
 1. Radio checks above; the 2026-10-27 evening checklist (scope panel, fixed edges, wfview
