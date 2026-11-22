@@ -984,6 +984,14 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     `step 8333` (and 6250) by console; it shows the step as raw Hz (fixed-width fields),
     the app as 8.333k. For a remote head on a 705 (the X6100 itself is HF only).
 
+69. Remote AGC per receiver (2026-11-22, with the app): on a rig whose AGC Status is a
+    Command29 command (785x, 7610, 7760) the head's AGC goes to the selected receiver
+    (the sub when it is active), the selected receiver's AGC is asked once a second and
+    taken over; before, it always went to the main. The step: x6100_trx keeps it in its
+    state file already (and now takes 6250 / 8333 there too). Test: on the 7851 with the
+    sub selected, AGC on the head changes the sub's AGC; switching to main shows the
+    main's.
+
 ## Next steps (suggested order)
 
 1. Radio checks above; the 2026-10-27 evening checklist (scope panel, fixed edges, wfview

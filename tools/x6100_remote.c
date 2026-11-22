@@ -583,6 +583,16 @@ void x6100_remote_close(x6100_remote_t *r)
 	free(r);
 }
 
+// The receiver AGC goes to (2026-11-22): on a rig whose AGC Status is a Command29 command
+// (785x, 7610, 7760) the selected one (the sub when it is active), else 0, the rig's one AGC
+static uint8_t agc_receiver(x6100_remote_t *r)
+{
+	const struct rig_def *def = session_rig_def(r->s);
+	const struct rig_cmd *c = def != NULL ? rigfile_cmd(def, "AGC Status") : NULL;
+
+	return c != NULL && c->cmd29 && r->rx_sub == 1 ? 1 : 0;
+}
+
 void x6100_remote_apply(x6100_remote_t *r, const x6100_remote_rx_t *rx)
 {
 	const x6100_remote_rx_t *o = &r->sent;
@@ -619,7 +629,7 @@ void x6100_remote_apply(x6100_remote_t *r, const x6100_remote_rx_t *rx)
 
 	// The controls; each send noted for the echo guard in poll
 	if ((all || rx->agc != o->agc) && agc_to_icom(rx->agc) > 0) {
-		session_set_value(r->s, "AGC Status", 0, agc_to_icom(rx->agc));
+		session_set_value(r->s, "AGC Status", agc_receiver(r), agc_to_icom(rx->agc));
 		r->ctl_sent_ms[C_AGC] = t;
 	}
 
@@ -835,6 +845,10 @@ void x6100_remote_poll(x6100_remote_t *r, x6100_remote_status_t *st)
 	// app does (the rig files do not poll it); x6100_remote_vfo_name shows it
 	if (rs.rig_valid && x6100_remote_vfo_name(r) != NULL && t - r->rxsel_ask_ms >= 1000) {
 		session_get_value(r->s, "VFO Main/Sub Band", 0);
+		// ... and the selected receiver's AGC on a per-receiver AGC rig (2026-11-22: the rig
+		// files poll it for the main only, or both into one value)
+		if (agc_receiver(r) == 1)
+			session_get_value(r->s, "AGC Status", 1);
 		r->rxsel_ask_ms = t;
 	}
 	r->rx_sub = rs.rx_selected.valid ? (rs.rx_selected.value != 0) : -1;
@@ -947,7 +961,11 @@ void x6100_remote_poll(x6100_remote_t *r, x6100_remote_status_t *st)
 	{
 		static const unsigned bit[C_CTLS] = { X6100_REMOTE_C_AGC, X6100_REMOTE_C_ATT, X6100_REMOTE_C_PRE,
 			X6100_REMOTE_C_RFG, X6100_REMOTE_C_NR, X6100_REMOTE_C_NB, X6100_REMOTE_C_ATU, X6100_REMOTE_C_SPLIT };
-		const struct radio_value *val[C_CTLS] = { &rs.agc, &rs.attenuator, &rs.preamp, &rs.rf_gain,
+		// AGC of the selected receiver on a per-receiver AGC rig (2026-11-22; rs.agc is
+		// whichever receiver answered last)
+		const uint8_t arx = agc_receiver(r);
+		const struct radio_value *agc = arx < RADIO_MAX_RX && rs.agc_rx[arx].valid ? &rs.agc_rx[arx] : &rs.agc;
+		const struct radio_value *val[C_CTLS] = { agc, &rs.attenuator, &rs.preamp, &rs.rf_gain,
 			&rs.noise_reduction, &rs.noise_blanker, &rs.tuner, &rs.split };
 		static const char *const name[C_CTLS] = { "AGC", "ATT", "PRE", "RF gain", "NR", "NB", "ATU", "split" };
 
