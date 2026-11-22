@@ -992,7 +992,8 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     sub selected, AGC on the head changes the sub's AGC; switching to main shows the
     main's.
 
-70. notx (2026-11-22; not on the radio yet): `notx` in x6100_trx.conf (read at every start,
+70. notx (2026-11-22; verified on the radio the same day: refused everywhere, the hand mic PTT
+    gave no output): `notx` in x6100_trx.conf (read at every start,
     so a restart keeps it) or `--notx`. Every way to key is refused in tx_allowed (PTT
     key, CAT PTT 1C 00 01, tune, messages, CW text from CAT, SWR scan): TX OFF (CONF).
     On top of that, every pass: TX enable off on both VFOs (VFOA/B band registers 0), the
