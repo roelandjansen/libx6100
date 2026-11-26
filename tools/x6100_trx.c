@@ -1225,6 +1225,7 @@ static void fil_default(fgroup_t g, int n)
 
 static bool g_allow_oob;	/* --oob: skip the band check, enable TX in the baseband everywhere */
 static bool g_notx;		/* notx (conf) / --notx (2026-11-22): no TX at all, TX enable and power held at the floor; not undone at run time */
+static char g_base_ver[64];	/* the baseband's version string (status block), read at start; with each birdie scan (2026-11-26) */
 static const char *g_remote_note = "REMOTE RX";	/* remote head: the note that stands on the scope */
 
 #ifdef X6100_REMOTE
@@ -2494,6 +2495,16 @@ static void birdie_save(void)
 	}
 
 	fprintf(fp, "# x6100_trx birdies (receive-only scan): birdie <Hz> <dB over the noise>\n");
+	{
+		// Which baseband and when (2026-11-26): scans are compared across baseband versions
+		const time_t now = time(NULL);
+		struct tm tm;
+		char when[32] = "?";
+
+		if (gmtime_r(&now, &tm) != NULL)
+			strftime(when, sizeof(when), "%Y%m%d %H:%M:%SZ", &tm);
+		fprintf(fp, "# baseband %s, saved %s\n", g_base_ver[0] != '\0' ? g_base_ver : "unknown", when);
+	}
 
 	for (int i = 0; i < g_nbirdie; i++)
 		fprintf(fp, "birdie %u %d\n", (unsigned) g_birdie[i].hz, g_birdie[i].snr);
@@ -6424,8 +6435,8 @@ static bool bscan_start(rx_t *rx, int mode)
 	g_birdie_full = 0;
 	g_bs_ncand = 0;
 	g_bs_dropped = 0;
-	printf("\nbirdie scan: %s, antenna off or a dummy load; any key stops\n",
-		mode == BSCAN_BAND ? g_bands[g_bs.band].name : C_WHAT[mode]);
+	printf("\nbirdie scan: %s, antenna off or a dummy load; any key stops (baseband %s)\n",
+		mode == BSCAN_BAND ? g_bands[g_bs.band].name : C_WHAT[mode], g_base_ver[0] != '\0' ? g_base_ver : "unknown");
 	if (mode == BSCAN_FULL)
 		printf("birdie scan: %.4f - %.4f MHz, %d windows, about %d min\n", g_freq_min / 1e6, g_freq_max / 1e6,
 			g_bs.steps, (g_bs.steps * 14 / 10 + 59) / 60);
@@ -15192,6 +15203,12 @@ int main(int argc, char **argv)
 			strerror(-rc));
 		return 1;
 	}
+
+	// The baseband's version (2026-11-26): on the console, and with each birdie scan
+	if (x6100_base_version(&i2c, g_base_ver, sizeof(g_base_ver)) == 0 && g_base_ver[0] != '\0')
+		fprintf(stderr, "baseband: %s\n", g_base_ver);
+	else
+		fprintf(stderr, "baseband: version not read\n");
 
 	// The baseband answers now: the calibration once more when it was not read
 	if (!cal_ok) {

@@ -1005,6 +1005,13 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     PTT and TUNE give TX OFF (CONF), the hand mic PTT gives no output into a dummy / power
     meter, wfview PTT is refused.
 
+71. The baseband version recorded (2026-11-26): x6100_trx reads the BASE version string
+    from the status block at start (x6100_base_version, I2C 0x0000) and prints it
+    (`baseband: BASE 1.1.9`); each birdie scan names it on the console, and birdies.conf
+    gets a header line `# baseband <version>, saved <UTC>`. The scan of 2026-11-15
+    recorded none; by STATUS it ran on the stock BASE 1.1.9. The baseband runs whatever
+    was last flashed into the STM32, whichever Linux image is on top.
+
 ## Next steps (suggested order)
 
 1. Radio checks above; the 2026-10-27 evening checklist (scope panel, fixed edges, wfview

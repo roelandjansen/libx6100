@@ -357,7 +357,7 @@ Two files in `/etc/x6100`, both in console tokens (`#` = comment):
 | `x6100_trx.conf` | you, never x6100_trx | what must be the same at every start (example: `docs/x6100_trx.conf.example`) |
 | `filters.conf` | filter panel | filter widths and shifts per mode group |
 | `memories.conf` | memory panel / console | memory channels 1-99 |
-| `birdies.conf` | birdie scan / console | birdies: `birdie <Hz> <dB>` |
+| `birdies.conf` | birdie scan / console | birdies: `birdie <Hz> <dB>`; a header with the baseband version and the save time (UTC), so scans can be compared across baseband versions (2026-11-26) |
 
 At start: defaults, then `x6100_trx.state`, then `x6100_trx.conf`, then the command line;
 later wins. Command-line values apply to that run only (but end up in the state at exit).
