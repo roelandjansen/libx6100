@@ -1299,3 +1299,17 @@ int x6100_remote_vfo(x6100_remote_t *r, bool equal)
 			return 0;
 	return -1;
 }
+
+double x6100_remote_band_power(x6100_remote_t *r, uint32_t hz)
+{
+	const struct rig_def *def = session_rig_def(r->s);
+	double top = 0.0;
+	size_t i;
+
+	if (def == NULL)
+		return 0.0;
+	for (i = 0; i < def->n_bands && i < RIG_MAX_BANDS; i++)
+		if (hz >= def->bands[i].start && hz <= def->bands[i].end && def->bands[i].power > top)
+			top = def->bands[i].power;
+	return top;
+}

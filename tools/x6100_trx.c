@@ -10798,10 +10798,23 @@ static void draw_screen(screen_t *scr, const rx_t *rx, bool new_line)
 		// Remote head: the rig's RF power setting in percent (Icom 0-255), the X6100's
 		// own setting is not used there
 		if (g_remote_req) {
-			if (g_remote_pwr >= 0)
+			// In watts where the rig file gives the band's power (2026-11-27, as the app):
+			// the TX band's full power times the setting, a quarter of it in AM (the Icom
+			// AM carrier); else the percent. One value: the box has room for no more
+			const double full = g_remote != NULL ? x6100_remote_band_power(g_remote, tx_hz(rx)) : 0.0;
+
+			if (g_remote_pwr >= 0 && full > 0.0) {
+				const double w = full * (tx_mode(rx) == X6100_MODE_AM ? 0.25 : 1.0) * g_remote_pwr / 255.0;
+
+				if (w < 9.95)
+					snprintf(s, sizeof(s), "%.1fW", w);
+				else
+					snprintf(s, sizeof(s), "%.0fW", w);
+			} else if (g_remote_pwr >= 0) {
 				snprintf(s, sizeof(s), "%d%%", (g_remote_pwr * 100 + 127) / 255);
-			else
+			} else {
 				snprintf(s, sizeof(s), "--%%");
+			}
 		}
 #endif
 		x6100_lcd_text(lcd, bx + (bw - x6100_lcd_text_width(s, 2)) / 2, by + bh + 6, 2, s, SCR_FG);

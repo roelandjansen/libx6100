@@ -1012,6 +1012,12 @@ Built, not yet tried on the radio (2026-10-25 .. 28):
     recorded none; by STATUS it ran on the stock BASE 1.1.9. The baseband runs whatever
     was last flashed into the STM32, whichever Linux image is on top.
 
+72. Remote TX power in watts (2026-11-27, with the app): under the TX box the rig's RF
+    power setting as the watts it gives on the TX band (the rig file's band Power times
+    the setting, a quarter in AM), where the rig file gives it; else the percent as
+    before. IC-9700 at 100 %: 100 W on 2 m, 75 W on 70 cm, 10 W on 23 cm. The app shows
+    both, PWR n % with the watts under it; the head's box has room for one value.
+
 ## Next steps (suggested order)
 
 1. Radio checks above; the 2026-10-27 evening checklist (scope panel, fixed edges, wfview

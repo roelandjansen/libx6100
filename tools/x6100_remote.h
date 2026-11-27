@@ -224,6 +224,10 @@ int x6100_remote_power(x6100_remote_t *r, bool on);
 // or main / sub as the rig file has it. 0 sent, < 0 the rig has neither
 int x6100_remote_vfo(x6100_remote_t *r, bool equal);
 
+// The full TX power of the band hz is in, in W, from the rig file's Bands (2026-11-27,
+// as the app); 0 when the rig file does not give it
+double x6100_remote_band_power(x6100_remote_t *r, uint32_t hz);
+
 //
 // Bands
 //
