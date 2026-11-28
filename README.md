@@ -85,6 +85,12 @@ passband and the manual notch (render with synthetic speech and a CW tone).
 
 F3 long: RF scope on the left, audio scope on the right.
 
+![x6100_trx in CQ WW CW](docs/images/x6100_trx_cqww_cw.png)
+
+On the air in CQ WW CW (2026-11-28): 20 m at 14.040 MHz, 10 W, AGC FAST, the tuner in,
+FIL3 at 300 Hz. RF scope SCROLL-C over +-48 kHz full of contest stations, the audio scope
+(0-3 kHz) beside it with the one CW signal in the passband.
+
 ![x6100_trx split](docs/images/x6100_trx_splittx.png)
 
 Split (V/M long): receive on VFO A (green line), transmit on VFO B (red TX line);
